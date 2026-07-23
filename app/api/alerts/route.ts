@@ -3,22 +3,16 @@
 // POST { id, acknowledged }   -> marca/desmarca "ciente"
 
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { getServiceClient } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
-
-function getSupabase() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-}
+export const revalidate = 0;
 
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const scope = searchParams.get("scope") || "active";
-    const sb = getSupabase();
+    const sb = getServiceClient();
 
     if (scope === "history") {
       // Histórico = já resolvidos OU marcados como ciente.
@@ -48,7 +42,7 @@ export async function POST(req: Request) {
     const acknowledged = Boolean(body?.acknowledged);
     if (id == null) return NextResponse.json({ error: "id é obrigatório." }, { status: 400 });
 
-    const sb = getSupabase();
+    const sb = getServiceClient();
     const { data, error } = await sb
       .from("alerts")
       .update({ acknowledged, acknowledged_at: acknowledged ? new Date().toISOString() : null })

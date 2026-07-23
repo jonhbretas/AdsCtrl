@@ -2,28 +2,22 @@
 // Serve para o front: contas + último snapshot + grupos + alertas.
 
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { getServiceClient, supabaseEnvMissing } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
-
-function getSupabase() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-}
+export const revalidate = 0;
 
 export async function GET() {
   // Sempre respondemos JSON — mesmo em erro — para o front nunca quebrar no r.json().
   try {
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    if (supabaseEnvMissing()) {
       return NextResponse.json(
         { accounts: [], groups: [], alerts: [], error: "Supabase não configurado (variáveis de ambiente ausentes)." },
         { status: 200 }
       );
     }
 
-    const supabase = getSupabase();
+    const supabase = getServiceClient();
     const [{ data: accounts }, { data: groups }, { data: alerts }, { data: snaps }] =
       await Promise.all([
         supabase.from("ad_accounts").select("*").order("name"),

@@ -2,16 +2,10 @@
 // Atribui (ou remove) uma conta a um grupo. group_id = null desassocia.
 
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { getServiceClient } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
-
-function getSupabase() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-}
+export const revalidate = 0;
 
 export async function POST(req: Request) {
   try {
@@ -22,7 +16,7 @@ export async function POST(req: Request) {
     const group_id = rawGroup ? String(rawGroup) : null;
     if (!account_id) return NextResponse.json({ error: "account_id é obrigatório." }, { status: 400 });
 
-    const sb = getSupabase();
+    const sb = getServiceClient();
     const { data, error } = await sb
       .from("ad_accounts")
       .update({ group_id, updated_at: new Date().toISOString() })

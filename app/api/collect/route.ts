@@ -3,7 +3,6 @@
 // Percorre todas as contas do token, puxa insights, gera alertas e grava tudo.
 
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import {
   listAdAccounts,
   getAccountInsights,
@@ -12,16 +11,10 @@ import {
   centsToUnit,
 } from "@/lib/meta";
 import { buildAlertsForAccount, Alert } from "@/lib/alerts";
+import { getServiceClient } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60; // segundos (Vercel)
-
-function getSupabase() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY! // service role: só no servidor
-  );
-}
 
 // Datas: últimos 7 dias e os 7 anteriores (para comparar quedas)
 function dateRanges() {
@@ -44,7 +37,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const supabase = getSupabase();
+  const supabase = getServiceClient();
   const { last7, prev7 } = dateRanges();
   const started = Date.now();
 
