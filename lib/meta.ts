@@ -1,10 +1,33 @@
 // lib/meta.ts
 // Cliente da Meta Marketing API.
-// Um único token (System User) percorre todas as contas atribuídas.
+// Suporta VÁRIOS tokens (um System User por BM). Cada conta é consultada com o
+// token que a enxerga; contas duplicadas entre tokens são deduplicadas.
 
 const GRAPH = "https://graph.facebook.com/v25.0";
 
-const TOKEN = process.env.META_ACCESS_TOKEN as string;
+// Tokens: primário em META_ACCESS_TOKEN; extras em META_ACCESS_TOKENS
+// (separados por vírgula). Ex.: META_ACCESS_TOKENS="EAA...b,EAA...c".
+function getTokens(): string[] {
+  const list: string[] = [];
+  const primary = (process.env.META_ACCESS_TOKEN || "").trim();
+  if (primary) list.push(primary);
+  for (const t of (process.env.META_ACCESS_TOKENS || "").split(",")) {
+    const s = t.trim();
+    if (s) list.push(s);
+  }
+  return Array.from(new Set(list));
+}
+
+export const META_TOKENS = getTokens();
+export function tokenCount(): number {
+  return META_TOKENS.length;
+}
+// Token pelo índice (com fallback para o primário).
+export function tokenByIndex(i: number): string {
+  return META_TOKENS[i] ?? META_TOKENS[0] ?? "";
+}
+
+const TOKEN = META_TOKENS[0] || "";
 
 if (!TOKEN) {
   // Não derruba o build, mas avisa em runtime.
@@ -107,8 +130,8 @@ export function mapAccountStatus(code: number): AccountStatus {
 
 // ---------- Chamadas ----------
 
-// Lista todas as contas que o token enxerga, já com os campos de saldo/status.
-export async function listAdAccounts(): Promise<AdAccountRaw[]> {
+// Lista as contas que UM token enxerga, já com os campos de saldo/status.
+async function listAdAccountsForToken(token: string): Promise<AdAccountRaw[]> {
   const fields = [
     "account_id",
     "name",
@@ -120,8 +143,40 @@ export async function listAdAccounts(): Promise<AdAccountRaw[]> {
     "spend_cap",
     "funding_source_details",
   ].join(",");
-  const url = `${GRAPH}/me/adaccounts?fields=${fields}&limit=200&access_token=${TOKEN}`;
+  const url = `${GRAPH}/me/adaccounts?fields=${fields}&limit=200&access_token=${token}`;
   return fbGetAll<AdAccountRaw>(url);
+}
+
+export interface AccountWithToken {
+  acc: AdAccountRaw;
+  tokenIndex: number; // índice em META_TOKENS do token que enxerga a conta
+}
+
+// Percorre TODOS os tokens e deduplica as contas (primeiro token que vê, vence).
+export async function listAdAccountsAll(): Promise<AccountWithToken[]> {
+  const seen = new Set<string>();
+  const out: AccountWithToken[] = [];
+  for (let i = 0; i < META_TOKENS.length; i++) {
+    let accs: AdAccountRaw[] = [];
+    try {
+      accs = await listAdAccountsForToken(META_TOKENS[i]);
+    } catch (e: any) {
+      // Um token ruim não derruba os demais.
+      console.warn(`Token #${i} falhou ao listar contas: ${e?.message}`);
+      continue;
+    }
+    for (const a of accs)
+      if (!seen.has(a.account_id)) {
+        seen.add(a.account_id);
+        out.push({ acc: a, tokenIndex: i });
+      }
+  }
+  return out;
+}
+
+// Compat: lista só as contas (sem o índice do token).
+export async function listAdAccounts(): Promise<AdAccountRaw[]> {
+  return (await listAdAccountsAll()).map((x) => x.acc);
 }
 
 // "Conversões" do overview (agregado do topo). Agrupadas por FAMÍLIA: a Meta
@@ -155,7 +210,8 @@ function sumConversions(actions?: { action_type: string; value?: string }[]): nu
 // datePreset ex: "last_7d", ou passe since/until.
 export async function getAccountInsights(
   accountId: string,
-  opts: { datePreset?: string; since?: string; until?: string } = {}
+  opts: { datePreset?: string; since?: string; until?: string } = {},
+  token: string = TOKEN
 ): Promise<AccountInsight | null> {
   const fields = "spend,impressions,clicks,ctr,cpc,actions";
   let range = "date_preset=last_7d";
@@ -164,7 +220,7 @@ export async function getAccountInsights(
   } else if (opts.datePreset) {
     range = `date_preset=${opts.datePreset}`;
   }
-  const url = `${GRAPH}/${accountId}/insights?fields=${fields}&${range}&access_token=${TOKEN}`;
+  const url = `${GRAPH}/${accountId}/insights?fields=${fields}&${range}&access_token=${token}`;
   const rows = await fbGetAll<any>(url);
   if (rows.length === 0) return null;
   const r = rows[0];
@@ -182,7 +238,7 @@ export async function getAccountInsights(
 }
 
 // Busca anúncios com criativo rejeitado numa conta.
-export async function getRejectedAds(accountId: string): Promise<RejectedAd[]> {
+export async function getRejectedAds(accountId: string, token: string = TOKEN): Promise<RejectedAd[]> {
   // effective_status DISAPPROVED / WITH_ISSUES sinaliza reprovação.
   const filtering = encodeURIComponent(
     JSON.stringify([
@@ -190,7 +246,7 @@ export async function getRejectedAds(accountId: string): Promise<RejectedAd[]> {
     ])
   );
   const fields = "id,name,campaign{name},ad_review_feedback";
-  const url = `${GRAPH}/${accountId}/ads?fields=${fields}&filtering=${filtering}&limit=100&access_token=${TOKEN}`;
+  const url = `${GRAPH}/${accountId}/ads?fields=${fields}&filtering=${filtering}&limit=100&access_token=${token}`;
   const ads = await fbGetAll<any>(url);
   return ads.map((ad) => {
     const feedback = ad.ad_review_feedback?.global || {};
@@ -345,12 +401,12 @@ export interface AccountDetail {
 }
 
 // Série diária de uma conta.
-async function fetchDaily(actId: string, since: string, until: string): Promise<DailyPoint[]> {
+async function fetchDaily(actId: string, since: string, until: string, token: string): Promise<DailyPoint[]> {
   const fields = "spend,impressions,clicks,ctr,cpm,reach,actions,action_values";
   const url = `${GRAPH}/${actId}/insights?fields=${fields}&time_increment=1&${timeRange(
     since,
     until
-  )}&access_token=${TOKEN}`;
+  )}&access_token=${token}`;
   const rows = await fbGetAll<any>(url);
   return rows.map((r) => ({
     date: r.date_start,
@@ -370,7 +426,8 @@ async function fetchLevel(
   actId: string,
   level: "campaign" | "adset" | "ad",
   since: string,
-  until: string
+  until: string,
+  token: string
 ): Promise<RowInsight[]> {
   const nameField = level === "campaign" ? "campaign_name" : level === "adset" ? "adset_name" : "ad_name";
   const idField = level === "campaign" ? "campaign_id" : level === "adset" ? "adset_id" : "ad_id";
@@ -378,7 +435,7 @@ async function fetchLevel(
   const url = `${GRAPH}/${actId}/insights?level=${level}&fields=${fields}&limit=200&${timeRange(
     since,
     until
-  )}&access_token=${TOKEN}`;
+  )}&access_token=${token}`;
   const rows = await fbGetAll<any>(url);
   return rows.map((r) => ({
     id: r[idField],
@@ -400,13 +457,14 @@ async function fetchBreakdown(
   breakdowns: string,
   keyer: (r: any) => string,
   since: string,
-  until: string
+  until: string,
+  token: string
 ): Promise<BreakdownRow[]> {
   const fields = "spend,impressions,clicks,ctr,cpm,actions,action_values";
   const url = `${GRAPH}/${actId}/insights?fields=${fields}&breakdowns=${breakdowns}&limit=500&${timeRange(
     since,
     until
-  )}&access_token=${TOKEN}`;
+  )}&access_token=${token}`;
   const rows = await fbGetAll<any>(url);
   return rows.map((r) => ({
     key: keyer(r),
@@ -421,9 +479,9 @@ async function fetchBreakdown(
 }
 
 // Busca thumbnails dos anúncios (creative) e mapeia ad_id -> url.
-async function fetchAdThumbnails(actId: string): Promise<Record<string, string>> {
+async function fetchAdThumbnails(actId: string, token: string): Promise<Record<string, string>> {
   try {
-    const url = `${GRAPH}/${actId}/ads?fields=id,creative{thumbnail_url,image_url}&limit=200&access_token=${TOKEN}`;
+    const url = `${GRAPH}/${actId}/ads?fields=id,creative{thumbnail_url,image_url}&limit=200&access_token=${token}`;
     const ads = await fbGetAll<any>(url);
     const map: Record<string, string> = {};
     for (const ad of ads) {
@@ -437,9 +495,9 @@ async function fetchAdThumbnails(actId: string): Promise<Record<string, string>>
 }
 
 // KPI agregado da conta (sem time_increment, para reach correto).
-async function fetchAccountKpis(actId: string, since: string, until: string): Promise<Kpis> {
+async function fetchAccountKpis(actId: string, since: string, until: string, token: string): Promise<Kpis> {
   const fields = "spend,impressions,clicks,ctr,cpm,reach,actions,action_values";
-  const url = `${GRAPH}/${actId}/insights?fields=${fields}&${timeRange(since, until)}&access_token=${TOKEN}`;
+  const url = `${GRAPH}/${actId}/insights?fields=${fields}&${timeRange(since, until)}&access_token=${token}`;
   const rows = await fbGetAll<any>(url);
   const r = rows[0] || {};
   return {
@@ -473,13 +531,14 @@ function previousRange(since: string, until: string): { since: string; until: st
 export async function getDailySpend(
   actId: string,
   since: string,
-  until: string
+  until: string,
+  token: string = TOKEN
 ): Promise<{ date: string; spend: number }[]> {
   if (!actId.startsWith("act_")) actId = `act_${actId}`;
   const url = `${GRAPH}/${actId}/insights?fields=spend&time_increment=1&${timeRange(
     since,
     until
-  )}&access_token=${TOKEN}`;
+  )}&access_token=${token}`;
   const rows = await fbGetAll<any>(url);
   return rows.map((r) => ({ date: r.date_start, spend: Number(r.spend || 0) }));
 }
@@ -497,14 +556,15 @@ export interface DailyMetric {
 export async function getDailyMetrics(
   actId: string,
   since: string,
-  until: string
+  until: string,
+  token: string = TOKEN
 ): Promise<DailyMetric[]> {
   if (!actId.startsWith("act_")) actId = `act_${actId}`;
   const fields = "spend,impressions,clicks,actions";
   const url = `${GRAPH}/${actId}/insights?fields=${fields}&time_increment=1&${timeRange(
     since,
     until
-  )}&access_token=${TOKEN}`;
+  )}&access_token=${token}`;
   const rows = await fbGetAll<any>(url);
   return rows.map((r) => ({
     date: r.date_start,
@@ -517,7 +577,7 @@ export async function getDailyMetrics(
 
 // Diagnóstico: devolve o payload cru de UMA conta (todos os campos financeiros
 // que a Meta expõe). Usado para investigar o saldo pré-pago.
-export async function getAccountRaw(actId: string): Promise<any> {
+export async function getAccountRaw(actId: string, token: string = TOKEN): Promise<any> {
   if (!actId.startsWith("act_")) actId = `act_${actId}`;
   const fields = [
     "account_id",
@@ -531,7 +591,7 @@ export async function getAccountRaw(actId: string): Promise<any> {
     "funding_source_details",
     "min_daily_budget",
   ].join(",");
-  const url = `${GRAPH}/${actId}?fields=${fields}&access_token=${TOKEN}`;
+  const url = `${GRAPH}/${actId}?fields=${fields}&access_token=${token}`;
   const res = await fetch(url);
   const body = await res.text();
   if (!res.ok) throw new Error(`Meta API ${res.status}: ${body}`);
@@ -542,7 +602,8 @@ export async function getAccountRaw(actId: string): Promise<any> {
 export async function getAccountDetail(
   actId: string,
   since: string,
-  until: string
+  until: string,
+  token: string = TOKEN
 ): Promise<AccountDetail> {
   const prev = previousRange(since, until);
   const [
@@ -560,15 +621,15 @@ export async function getAccountDetail(
     hour,
     thumbs,
   ] = await Promise.all([
-    fetchAccountKpis(actId, since, until),
-    fetchAccountKpis(actId, prev.since, prev.until).catch(() => EMPTY_KPIS),
-    fetchDaily(actId, since, until).catch(() => []),
-    fetchLevel(actId, "campaign", since, until).catch(() => []),
-    fetchLevel(actId, "adset", since, until).catch(() => []),
-    fetchLevel(actId, "ad", since, until).catch(() => []),
-    fetchBreakdown(actId, "age,gender", (r) => `${r.age} · ${r.gender}`, since, until).catch(() => []),
-    fetchBreakdown(actId, "region", (r) => r.region || "—", since, until).catch(() => []),
-    fetchBreakdown(actId, "publisher_platform", (r) => r.publisher_platform || "—", since, until).catch(
+    fetchAccountKpis(actId, since, until, token),
+    fetchAccountKpis(actId, prev.since, prev.until, token).catch(() => EMPTY_KPIS),
+    fetchDaily(actId, since, until, token).catch(() => []),
+    fetchLevel(actId, "campaign", since, until, token).catch(() => []),
+    fetchLevel(actId, "adset", since, until, token).catch(() => []),
+    fetchLevel(actId, "ad", since, until, token).catch(() => []),
+    fetchBreakdown(actId, "age,gender", (r) => `${r.age} · ${r.gender}`, since, until, token).catch(() => []),
+    fetchBreakdown(actId, "region", (r) => r.region || "—", since, until, token).catch(() => []),
+    fetchBreakdown(actId, "publisher_platform", (r) => r.publisher_platform || "—", since, until, token).catch(
       () => []
     ),
     fetchBreakdown(
@@ -576,17 +637,19 @@ export async function getAccountDetail(
       "publisher_platform,platform_position",
       (r) => `${r.publisher_platform} · ${r.platform_position}`,
       since,
-      until
+      until,
+      token
     ).catch(() => []),
-    fetchBreakdown(actId, "device_platform", (r) => r.device_platform || "—", since, until).catch(() => []),
+    fetchBreakdown(actId, "device_platform", (r) => r.device_platform || "—", since, until, token).catch(() => []),
     fetchBreakdown(
       actId,
       "hourly_stats_aggregated_by_advertiser_time_zone",
       (r) => (r.hourly_stats_aggregated_by_advertiser_time_zone || "").slice(0, 5),
       since,
-      until
+      until,
+      token
     ).catch(() => []),
-    fetchAdThumbnails(actId).catch(() => ({} as Record<string, string>)),
+    fetchAdThumbnails(actId, token).catch(() => ({} as Record<string, string>)),
   ]);
 
   // Anexa thumbnails aos anúncios.

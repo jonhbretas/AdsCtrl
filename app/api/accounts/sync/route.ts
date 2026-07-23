@@ -5,19 +5,20 @@
 // Útil para ver contas recém-adicionadas na BM sem esperar a coleta diária.
 
 import { NextResponse } from "next/server";
-import { listAdAccounts, mapAccountStatus, availableBalance, centsToUnit } from "@/lib/meta";
+import { listAdAccountsAll, mapAccountStatus, availableBalance, centsToUnit } from "@/lib/meta";
 import { getServiceClient, supabaseEnvMissing } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
 async function fetchList() {
-  const accounts = await listAdAccounts();
-  return accounts.map((a) => ({
-    raw: a,
-    account_id: a.account_id,
-    name: a.name,
-    status: mapAccountStatus(a.account_status),
+  const accounts = await listAdAccountsAll();
+  return accounts.map(({ acc, tokenIndex }) => ({
+    raw: acc,
+    tokenIndex,
+    account_id: acc.account_id,
+    name: acc.name,
+    status: mapAccountStatus(acc.account_status),
   }));
 }
 
@@ -45,7 +46,7 @@ export async function POST() {
     const { data: existing } = await sb.from("ad_accounts").select("account_id");
     const known = new Set((existing || []).map((r: any) => r.account_id));
 
-    for (const { raw } of list) {
+    for (const { raw, tokenIndex } of list) {
       await sb.from("ad_accounts").upsert(
         {
           account_id: raw.account_id,
@@ -55,6 +56,7 @@ export async function POST() {
           status: mapAccountStatus(raw.account_status),
           balance: availableBalance(raw),
           spend_cap: centsToUnit(raw.spend_cap),
+          token_ref: tokenIndex,
           updated_at: new Date().toISOString(),
         },
         { onConflict: "account_id", ignoreDuplicates: false }

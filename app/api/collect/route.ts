@@ -4,7 +4,7 @@
 
 import { NextResponse } from "next/server";
 import {
-  listAdAccounts,
+  listAdAccountsAll,
   getRejectedAds,
   getDailyMetrics,
   DailyMetric,
@@ -12,6 +12,7 @@ import {
   mapAccountStatus,
   centsToUnit,
   availableBalance,
+  tokenByIndex,
 } from "@/lib/meta";
 import { buildAlertsForAccount, Alert } from "@/lib/alerts";
 import { getServiceClient } from "@/lib/supabase";
@@ -70,11 +71,12 @@ export async function GET(req: Request) {
   const windowUntil = daysAgo(1);
 
   try {
-    const accounts = await listAdAccounts();
+    const accounts = await listAdAccountsAll();
     const allAlerts: Alert[] = [];
     let processed = 0;
 
-    for (const acc of accounts) {
+    for (const { acc, tokenIndex } of accounts) {
+      const token = tokenByIndex(tokenIndex);
       const status = mapAccountStatus(acc.account_status);
       // Pré-pago: saldo disponível vem do display_string; senão, campo balance.
       const balance = availableBalance(acc);
@@ -90,6 +92,7 @@ export async function GET(req: Request) {
           status,
           balance,
           spend_cap: spendCap,
+          token_ref: tokenIndex,
           updated_at: new Date().toISOString(),
         },
         { onConflict: "account_id", ignoreDuplicates: false }
@@ -98,8 +101,8 @@ export async function GET(req: Request) {
       // UMA chamada de série diária (60d) + reprovados. Os agregados por
       // período saem de fatias dessa série — bem menos chamadas à Meta.
       const [daily, rejected] = await Promise.all([
-        getDailyMetrics(acc.id, windowSince, windowUntil).catch(() => [] as DailyMetric[]),
-        getRejectedAds(acc.id).catch(() => []),
+        getDailyMetrics(acc.id, windowSince, windowUntil, token).catch(() => [] as DailyMetric[]),
+        getRejectedAds(acc.id, token).catch(() => []),
       ]);
 
       // Insere um snapshot por período (last_7d/prev_7d/last_14d/...).

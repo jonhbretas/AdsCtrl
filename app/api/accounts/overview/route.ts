@@ -4,7 +4,7 @@
 // Ex: /api/accounts/overview?since=2026-07-23&until=2026-07-23
 
 import { NextResponse } from "next/server";
-import { getAccountInsights, getDailySpend } from "@/lib/meta";
+import { getAccountInsights, getDailySpend, tokenByIndex } from "@/lib/meta";
 import { getServiceClient, supabaseEnvMissing } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
@@ -45,19 +45,21 @@ export async function GET(req: Request) {
     const prev = previousRange(since, until);
 
     const supabase = getServiceClient();
-    const { data: accounts } = await supabase.from("ad_accounts").select("account_id, hidden");
+    const { data: accounts } = await supabase.from("ad_accounts").select("account_id, hidden, token_ref");
     // Não desperdiça chamada com contas ocultas.
-    const ids = (accounts || []).filter((a: any) => !a.hidden).map((a: any) => a.account_id as string);
+    const rows = (accounts || []).filter((a: any) => !a.hidden);
 
     const metrics: Record<string, { spend: number; conversions: number; daily: { date: string; spend: number }[] }> = {};
     const prevMetrics: Record<string, { spend: number; conversions: number }> = {};
 
-    await inBatches(ids, 8, async (id) => {
+    await inBatches(rows, 8, async (row: any) => {
+      const id = row.account_id as string;
+      const token = tokenByIndex(typeof row.token_ref === "number" ? row.token_ref : 0);
       const actId = id.startsWith("act_") ? id : `act_${id}`;
       const [cur, before, daily] = await Promise.all([
-        getAccountInsights(actId, { since, until }).catch(() => null),
-        getAccountInsights(actId, { since: prev.since, until: prev.until }).catch(() => null),
-        getDailySpend(actId, since, until).catch(() => []),
+        getAccountInsights(actId, { since, until }, token).catch(() => null),
+        getAccountInsights(actId, { since: prev.since, until: prev.until }, token).catch(() => null),
+        getDailySpend(actId, since, until, token).catch(() => []),
       ]);
       metrics[id] = { spend: cur?.spend || 0, conversions: cur?.conversions || 0, daily };
       prevMetrics[id] = { spend: before?.spend || 0, conversions: before?.conversions || 0 };
