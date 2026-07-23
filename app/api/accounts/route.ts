@@ -1,0 +1,62 @@
+// app/api/accounts/route.ts
+// Serve para o front: contas + último snapshot + grupos + alertas.
+
+import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+
+export const dynamic = "force-dynamic";
+
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
+
+export async function GET() {
+  // Sempre respondemos JSON — mesmo em erro — para o front nunca quebrar no r.json().
+  try {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      return NextResponse.json(
+        { accounts: [], groups: [], alerts: [], error: "Supabase não configurado (variáveis de ambiente ausentes)." },
+        { status: 200 }
+      );
+    }
+
+    const supabase = getSupabase();
+    const [{ data: accounts }, { data: groups }, { data: alerts }, { data: snaps }] =
+      await Promise.all([
+        supabase.from("ad_accounts").select("*").order("name"),
+        supabase.from("client_groups").select("*").order("name"),
+        supabase.from("alerts").select("*").eq("resolved", false),
+        supabase
+          .from("metric_snapshots")
+          .select("account_id, spend, conversions, cpc, captured_at, period")
+          .eq("period", "last_7d")
+          .order("captured_at", { ascending: false }),
+      ]);
+
+    // Pega o snapshot mais recente por conta
+    const latestByAccount: Record<string, any> = {};
+    for (const s of snaps || []) {
+      if (!latestByAccount[s.account_id]) latestByAccount[s.account_id] = s;
+    }
+
+    const enriched = (accounts || []).map((a) => ({
+      ...a,
+      metrics: latestByAccount[a.account_id] || null,
+      alerts: (alerts || []).filter((al) => al.account_id === a.account_id),
+    }));
+
+    return NextResponse.json({
+      accounts: enriched,
+      groups: groups || [],
+      alerts: alerts || [],
+    });
+  } catch (e: any) {
+    return NextResponse.json(
+      { accounts: [], groups: [], alerts: [], error: e?.message ?? "Erro ao consultar o Supabase." },
+      { status: 500 }
+    );
+  }
+}
