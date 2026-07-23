@@ -2,6 +2,10 @@
 
 // app/page.tsx — Visão geral (overview) das contas de anúncio Meta.
 // Topo: grupos + filtros + período. Esquerda: alertas. Centro: tabela expansível.
+//
+// Período: HOJE / 7D / 14D / 30D + personalizado.
+//  - 7D/14D/30D vêm do cache (snapshots do cron) e terminam ONTEM (dia atual não conta).
+//  - HOJE e personalizado são buscados AO VIVO na Meta (/api/accounts/overview).
 
 import { useEffect, useMemo, useState } from "react";
 import AccountDetail from "@/components/AccountDetail";
@@ -10,7 +14,7 @@ import { brl, num, delta } from "@/lib/format";
 interface Metrics {
   spend: number;
   conversions: number;
-  cpc: number;
+  cpc?: number;
   daily?: { date: string; spend: number }[] | null;
 }
 interface PrevMetrics {
@@ -37,15 +41,23 @@ interface Account {
   status: string;
   balance: number | null;
   group_id: string | null;
+  hidden?: boolean;
   updated_at?: string;
   metrics: Metrics | null;
   prevMetrics: PrevMetrics | null;
+  metricsByPeriod?: Record<string, Metrics>;
+  prevByPeriod?: Record<string, PrevMetrics>;
   alerts: AlertItem[];
 }
 interface Group {
   id: string;
   name: string;
   color: string;
+}
+interface LiveOverview {
+  range: { since: string; until: string };
+  metrics: Record<string, Metrics>;
+  prev: Record<string, PrevMetrics>;
 }
 
 const LEVEL_STYLE: Record<string, { bg: string; fg: string; dot: string; label: string }> = {
@@ -54,19 +66,34 @@ const LEVEL_STYLE: Record<string, { bg: string; fg: string; dot: string; label: 
   info: { bg: "#e6f1fb", fg: "#0c447c", dot: "#3987e5", label: "Info" },
 };
 
-const PRESETS: { label: string; days: number }[] = [
-  { label: "7 dias", days: 7 },
-  { label: "14 dias", days: 14 },
-  { label: "30 dias", days: 30 },
+type Period = "today" | "7d" | "14d" | "30d" | "custom";
+const PRESETS: { key: Period; label: string }[] = [
+  { key: "today", label: "Hoje" },
+  { key: "7d", label: "7D" },
+  { key: "14d", label: "14D" },
+  { key: "30d", label: "30D" },
 ];
 
-function rangeFor(days: number) {
-  const fmt = (d: Date) => d.toISOString().slice(0, 10);
-  const until = new Date();
-  const since = new Date();
-  since.setDate(until.getDate() - days);
-  return { since: fmt(since), until: fmt(until) };
+// Data (yyyy-mm-dd) "n" dias atrás, em UTC — igual ao cron, para casar com o cache.
+function isoDaysAgo(n: number) {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() - n);
+  return d.toISOString().slice(0, 10);
 }
+
+// Janela (since/until) de cada período. Presets terminam ONTEM.
+function rangeForPeriod(period: Period, customSince: string, customUntil: string) {
+  const today = isoDaysAgo(0);
+  switch (period) {
+    case "today": return { since: today, until: today };
+    case "7d": return { since: isoDaysAgo(7), until: isoDaysAgo(1) };
+    case "14d": return { since: isoDaysAgo(14), until: isoDaysAgo(1) };
+    case "30d": return { since: isoDaysAgo(30), until: isoDaysAgo(1) };
+    case "custom": return { since: customSince, until: customUntil };
+  }
+}
+
+const PERIOD_SHORT: Record<Period, string> = { today: "hoje", "7d": "7d", "14d": "14d", "30d": "30d", custom: "período" };
 
 function initials(name: string) {
   return name.trim().charAt(0).toUpperCase() || "?";
@@ -79,7 +106,11 @@ export default function Dashboard() {
   const [groupFilter, setGroupFilter] = useState<string>("all");
   const [onlyActive, setOnlyActive] = useState(true);
   const [search, setSearch] = useState("");
-  const [days, setDays] = useState(7);
+  const [period, setPeriod] = useState<Period>("7d");
+  const [customSince, setCustomSince] = useState(isoDaysAgo(7));
+  const [customUntil, setCustomUntil] = useState(isoDaysAgo(1));
+  const [showCustom, setShowCustom] = useState(false);
+  const [showHidden, setShowHidden] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -88,8 +119,31 @@ export default function Dashboard() {
   const [history, setHistory] = useState<AlertItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [acking, setAcking] = useState<number | null>(null);
+  const [live, setLive] = useState<LiveOverview | null>(null);
+  const [liveLoading, setLiveLoading] = useState(false);
 
-  const range = useMemo(() => rangeFor(days), [days]);
+  const range = useMemo(() => rangeForPeriod(period, customSince, customUntil), [period, customSince, customUntil]);
+  const isLive = period === "today" || period === "custom";
+  const periodKey = period === "7d" || period === "14d" || period === "30d" ? period : null;
+  const liveReady = !isLive || !!live;
+
+  // Métricas da conta no período selecionado (cache p/ presets, live p/ hoje/custom).
+  function accMetrics(a: Account): Metrics {
+    if (isLive) {
+      const m = live?.metrics?.[a.account_id];
+      return { spend: m?.spend || 0, conversions: m?.conversions || 0, daily: m?.daily || [] };
+    }
+    const m = (periodKey && a.metricsByPeriod?.[periodKey]) || a.metrics;
+    return { spend: m?.spend || 0, conversions: m?.conversions || 0, daily: m?.daily || [] };
+  }
+  function accPrev(a: Account): PrevMetrics {
+    if (isLive) {
+      const p = live?.prev?.[a.account_id];
+      return { spend: p?.spend || 0, conversions: p?.conversions || 0 };
+    }
+    const p = (periodKey && a.prevByPeriod?.[periodKey]) || a.prevMetrics;
+    return { spend: p?.spend || 0, conversions: p?.conversions || 0 };
+  }
 
   async function load() {
     setError(null);
@@ -112,9 +166,36 @@ export default function Dashboard() {
     load();
   }, []);
 
+  // Busca overview ao vivo quando o período é HOJE ou personalizado.
+  useEffect(() => {
+    if (!isLive) { setLive(null); return; }
+    if (period === "custom" && (!range.since || !range.until || range.since > range.until)) return;
+    let alive = true;
+    setLiveLoading(true);
+    fetch(`/api/accounts/overview?since=${range.since}&until=${range.until}`)
+      .then(async (r) => {
+        const t = await r.text();
+        const d = t ? JSON.parse(t) : {};
+        if (!r.ok || d.error) throw new Error(d.error || `Falha (HTTP ${r.status}).`);
+        return d as LiveOverview;
+      })
+      .then((d) => { if (alive) setLive(d); })
+      .catch(() => { if (alive) setLive({ range, metrics: {}, prev: {} }); })
+      .finally(() => { if (alive) setLiveLoading(false); });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [period, range.since, range.until]);
+
   async function refresh() {
     setRefreshing(true);
     await load();
+    if (isLive) {
+      try {
+        const r = await fetch(`/api/accounts/overview?since=${range.since}&until=${range.until}`);
+        const t = await r.text();
+        setLive(t ? JSON.parse(t) : null);
+      } catch { /* silencioso */ }
+    }
     if (alertTab === "history") await loadHistory();
     setRefreshing(false);
   }
@@ -156,27 +237,46 @@ export default function Dashboard() {
     }
   }
 
+  // Oculta/reexibe uma conta (persistido no Supabase).
+  async function toggleHidden(id: string, hidden: boolean) {
+    setAccounts((prev) => prev.map((a) => (a.account_id === id ? { ...a, hidden } : a)));
+    try {
+      await fetch("/api/accounts/hidden", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ account_id: id, hidden }),
+      });
+    } catch {
+      await load();
+    }
+  }
+
+  const hiddenCount = useMemo(() => accounts.filter((a) => a.hidden).length, [accounts]);
+
   const filtered = useMemo(() => {
     let list = accounts;
+    if (!showHidden) list = list.filter((a) => !a.hidden);
     if (groupFilter !== "all") list = list.filter((a) => a.group_id === groupFilter);
     if (onlyActive) list = list.filter((a) => a.status === "ACTIVE");
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       list = list.filter((a) => a.name.toLowerCase().includes(q));
     }
-    return [...list].sort((a, b) => (b.metrics?.spend || 0) - (a.metrics?.spend || 0));
-  }, [accounts, groupFilter, onlyActive, search]);
+    return [...list].sort((a, b) => accMetrics(b).spend - accMetrics(a).spend);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accounts, groupFilter, onlyActive, search, showHidden, period, live]);
 
   const totals = useMemo(() => {
-    const spend = filtered.reduce((s, a) => s + (a.metrics?.spend || 0), 0);
-    const conv = filtered.reduce((s, a) => s + (a.metrics?.conversions || 0), 0);
-    const prevSpend = filtered.reduce((s, a) => s + (a.prevMetrics?.spend || 0), 0);
-    const prevConv = filtered.reduce((s, a) => s + (a.prevMetrics?.conversions || 0), 0);
+    const spend = filtered.reduce((s, a) => s + accMetrics(a).spend, 0);
+    const conv = filtered.reduce((s, a) => s + accMetrics(a).conversions, 0);
+    const prevSpend = filtered.reduce((s, a) => s + accPrev(a).spend, 0);
+    const prevConv = filtered.reduce((s, a) => s + accPrev(a).conversions, 0);
     return {
       spend, conv, cpa: conv ? spend / conv : 0,
       prevSpend, prevConv, prevCpa: prevConv ? prevSpend / prevConv : 0,
     };
-  }, [filtered]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtered, period, live]);
 
   const visibleAlerts = useMemo(() => {
     const names = new Set(filtered.map((a) => a.name));
@@ -198,6 +298,7 @@ export default function Dashboard() {
   }, [accounts]);
 
   const groupById = (id: string | null) => groups.find((g) => g.id === id);
+  const short = PERIOD_SHORT[period];
 
   if (loading) return <Center>Carregando overview…</Center>;
   if (error)
@@ -234,42 +335,59 @@ export default function Dashboard() {
       </div>
 
       {/* FILTROS */}
-      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 20 }}>
+      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
         <select value={onlyActive ? "active" : "all"} onChange={(e) => setOnlyActive(e.target.value === "active")} style={selectStyle}>
           <option value="active">Somente ativas</option>
           <option value="all">Todas as contas</option>
         </select>
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Pesquisar conta…" style={{ ...selectStyle, minWidth: 220 }} />
+        {hiddenCount > 0 && (
+          <button
+            onClick={() => setShowHidden((v) => !v)}
+            style={{ ...selectStyle, cursor: "pointer", color: showHidden ? "#111" : "#888", fontWeight: 500 }}
+            title="Mostrar/ocultar as contas que você escondeu"
+          >
+            {showHidden ? "🙈 Ocultar escondidas" : `👁 Mostrar ocultas (${hiddenCount})`}
+          </button>
+        )}
         <span style={{ flex: 1 }} />
+
+        {/* PERÍODO */}
         <div style={{ display: "flex", gap: 4, background: "#f2f2f2", borderRadius: 10, padding: 3 }}>
           {PRESETS.map((p) => (
-            <button
-              key={p.days}
-              onClick={() => setDays(p.days)}
-              style={{
-                padding: "6px 12px",
-                borderRadius: 8,
-                border: "none",
-                background: days === p.days ? "#fff" : "transparent",
-                boxShadow: days === p.days ? "0 1px 2px rgba(0,0,0,.08)" : "none",
-                fontSize: 13,
-                fontWeight: 500,
-                color: days === p.days ? "#111" : "#777",
-                cursor: "pointer",
-              }}
-            >
-              {p.label}
-            </button>
+            <PeriodBtn key={p.key} active={period === p.key} onClick={() => { setPeriod(p.key); setShowCustom(false); }} label={p.label} />
           ))}
+          <PeriodBtn
+            active={period === "custom"}
+            onClick={() => { setPeriod("custom"); setShowCustom(true); }}
+            label="Personalizado"
+          />
         </div>
-        <span style={{ fontSize: 12, color: "#aaa" }}>{range.since} → {range.until}</span>
       </div>
 
-      {/* KPIs GERAIS (agregado 7d vs período anterior) */}
+      {/* LINHA DE PERÍODO (datas + estado ao vivo) */}
+      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 20, minHeight: 24 }}>
+        {(showCustom || period === "custom") && (
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <input type="date" value={customSince} max={customUntil} onChange={(e) => { setCustomSince(e.target.value); setPeriod("custom"); }} style={dateStyle} />
+            <span style={{ color: "#bbb" }}>→</span>
+            <input type="date" value={customUntil} min={customSince} max={isoDaysAgo(0)} onChange={(e) => { setCustomUntil(e.target.value); setPeriod("custom"); }} style={dateStyle} />
+          </div>
+        )}
+        <span style={{ fontSize: 12, color: "#aaa" }}>{range.since} → {range.until}</span>
+        {isLive && (
+          <span style={{ fontSize: 12, color: liveLoading ? "#f59e0b" : "#16a34a", fontWeight: 500 }}>
+            {liveLoading ? "● buscando ao vivo na Meta…" : "● dados ao vivo"}
+          </span>
+        )}
+        {!isLive && <span style={{ fontSize: 12, color: "#bbb" }}>cache (atualiza 1x/dia) · não inclui hoje</span>}
+      </div>
+
+      {/* KPIs GERAIS (agregado do período vs período anterior) */}
       <section style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 20 }}>
-        <Kpi label="Investimento (7d)" value={brl(totals.spend, 0)} cur={totals.spend} prev={totals.prevSpend} neutral />
-        <Kpi label="Conversões (7d)" value={num(totals.conv)} cur={totals.conv} prev={totals.prevConv} />
-        <Kpi label="CPA médio" value={brl(totals.cpa)} cur={totals.cpa} prev={totals.prevCpa} invert />
+        <Kpi label={`Investimento (${short})`} value={liveReady ? brl(totals.spend, 0) : "…"} cur={totals.spend} prev={totals.prevSpend} neutral />
+        <Kpi label={`Conversões (${short})`} value={liveReady ? num(totals.conv) : "…"} cur={totals.conv} prev={totals.prevConv} />
+        <Kpi label="CPA médio" value={liveReady ? brl(totals.cpa) : "…"} cur={totals.cpa} prev={totals.prevCpa} invert />
       </section>
 
       {/* LAYOUT: alertas (esq) + tabela (centro) */}
@@ -354,23 +472,26 @@ export default function Dashboard() {
 
         {/* TABELA */}
         <main style={{ border: "1px solid #eee", borderRadius: 14, overflow: "hidden", background: "#fff" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 64px 90px 150px 130px 36px", padding: "12px 16px", borderBottom: "1px solid #f0f0f0", fontSize: 12, color: "#999", fontWeight: 600, alignItems: "center" }}>
+          <div style={{ display: "grid", gridTemplateColumns: GRID, padding: "12px 16px", borderBottom: "1px solid #f0f0f0", fontSize: 12, color: "#999", fontWeight: 600, alignItems: "center" }}>
             <span>Cliente</span>
             <span>Canais</span>
-            <span style={{ textAlign: "center" }}>Tendência 7d</span>
-            <span style={{ textAlign: "right" }}>Investimento (7d)</span>
+            <span style={{ textAlign: "center" }}>Tendência</span>
+            <span style={{ textAlign: "right" }}>Investimento ({short})</span>
             <span style={{ textAlign: "right" }}>Saldo Meta</span>
             <span />
+            <span />
           </div>
-          {filtered.length === 0 && <div style={{ padding: 28, textAlign: "center", color: "#aaa" }}>Nenhuma conta com os filtros atuais.</div>}
-          {filtered.map((a) => {
+          {isLive && !liveReady && <div style={{ padding: 28, textAlign: "center", color: "#aaa" }}>Buscando dados ao vivo na Meta…</div>}
+          {liveReady && filtered.length === 0 && <div style={{ padding: 28, textAlign: "center", color: "#aaa" }}>Nenhuma conta com os filtros atuais.</div>}
+          {liveReady && filtered.map((a) => {
             const g = groupById(a.group_id);
             const open = expanded === a.account_id;
+            const m = accMetrics(a);
             return (
-              <div key={a.account_id} style={{ borderBottom: "1px solid #f4f4f4" }}>
+              <div key={a.account_id} style={{ borderBottom: "1px solid #f4f4f4", opacity: a.hidden ? 0.55 : 1 }}>
                 <div
                   onClick={() => setExpanded(open ? null : a.account_id)}
-                  style={{ display: "grid", gridTemplateColumns: "1fr 64px 90px 150px 130px 36px", padding: "12px 16px", alignItems: "center", cursor: "pointer", background: open ? "#fafafa" : "#fff" }}
+                  style={{ display: "grid", gridTemplateColumns: GRID, padding: "12px 16px", alignItems: "center", cursor: "pointer", background: open ? "#fafafa" : "#fff" }}
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
                     <span style={{ width: 30, height: 30, borderRadius: "50%", background: g?.color || "#cbd5e1", color: "#fff", display: "grid", placeItems: "center", fontSize: 13, fontWeight: 700, flexShrink: 0 }}>
@@ -381,6 +502,7 @@ export default function Dashboard() {
                       <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                         {g && <span style={{ fontSize: 10, padding: "0 6px", borderRadius: 8, background: g.color + "22", color: g.color }}>{g.name}</span>}
                         {a.status !== "ACTIVE" && <span style={{ fontSize: 10, color: "#a32d2d" }}>● {a.status}</span>}
+                        {a.hidden && <span style={{ fontSize: 10, color: "#999" }}>oculta</span>}
                       </div>
                     </div>
                   </div>
@@ -388,12 +510,19 @@ export default function Dashboard() {
                     <span title="Meta / Instagram" style={{ fontSize: 12, width: 22, height: 22, borderRadius: 6, background: "#e7f0fd", color: "#1877f2", display: "grid", placeItems: "center", fontWeight: 700 }}>f</span>
                   </div>
                   <div style={{ display: "flex", justifyContent: "center" }}>
-                    <Sparkline points={(a.metrics?.daily || []).map((d) => d.spend)} color={g?.color || "#3987e5"} />
+                    <Sparkline points={(m.daily || []).map((d) => d.spend)} color={g?.color || "#3987e5"} />
                   </div>
-                  <div style={{ textAlign: "right", fontSize: 14, fontWeight: 600 }}>{brl(a.metrics?.spend || 0)}</div>
+                  <div style={{ textAlign: "right", fontSize: 14, fontWeight: 600 }}>{brl(m.spend)}</div>
                   <div style={{ textAlign: "right", fontSize: 14, color: a.balance != null && a.balance > 0 ? "#111" : "#bbb" }}>
                     {a.balance != null && a.balance > 0 ? brl(a.balance) : "—"}
                   </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); toggleHidden(a.account_id, !a.hidden); }}
+                    title={a.hidden ? "Reexibir esta conta" : "Ocultar esta conta do dashboard"}
+                    style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14, color: "#bbb", padding: 0, lineHeight: 1 }}
+                  >
+                    {a.hidden ? "↩" : "🚫"}
+                  </button>
                   <div style={{ textAlign: "center", color: "#bbb", fontSize: 14 }}>{open ? "▲" : "▼"}</div>
                 </div>
                 {open && (
@@ -419,6 +548,8 @@ export default function Dashboard() {
 
 // ---------- subcomponentes ----------
 
+const GRID = "1fr 56px 84px 140px 120px 30px 28px";
+
 const btnStyle: React.CSSProperties = {
   padding: "8px 14px",
   borderRadius: 10,
@@ -436,6 +567,35 @@ const selectStyle: React.CSSProperties = {
   fontSize: 13,
   background: "#fff",
 };
+const dateStyle: React.CSSProperties = {
+  padding: "6px 10px",
+  borderRadius: 8,
+  border: "1px solid #e2e2e2",
+  fontSize: 13,
+  background: "#fff",
+  color: "#333",
+};
+
+function PeriodBtn({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        padding: "6px 12px",
+        borderRadius: 8,
+        border: "none",
+        background: active ? "#fff" : "transparent",
+        boxShadow: active ? "0 1px 2px rgba(0,0,0,.08)" : "none",
+        fontSize: 13,
+        fontWeight: 500,
+        color: active ? "#111" : "#777",
+        cursor: "pointer",
+      }}
+    >
+      {label}
+    </button>
+  );
+}
 
 function Chip({ active, onClick, label, color }: { active: boolean; onClick: () => void; label: string; color: string }) {
   return (
@@ -509,7 +669,7 @@ function Kpi({ label, value, cur, prev, invert, neutral }: { label: string; valu
   );
 }
 
-// Mini-gráfico de tendência (7 dias) em SVG.
+// Mini-gráfico de tendência em SVG.
 function Sparkline({ points, color = "#3987e5", width = 84, height = 26 }: { points: number[]; color?: string; width?: number; height?: number }) {
   if (!points || points.length < 2) return <div style={{ width, height }} />;
   const max = Math.max(...points, 1);

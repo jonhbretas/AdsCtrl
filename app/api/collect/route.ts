@@ -5,9 +5,10 @@
 import { NextResponse } from "next/server";
 import {
   listAdAccounts,
-  getAccountInsights,
   getRejectedAds,
-  getDailySpend,
+  getDailyMetrics,
+  DailyMetric,
+  AccountInsight,
   mapAccountStatus,
   centsToUnit,
 } from "@/lib/meta";
@@ -17,17 +18,39 @@ import { getServiceClient } from "@/lib/supabase";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60; // segundos (Vercel)
 
-// Datas: últimos 7 dias e os 7 anteriores (para comparar quedas)
-function dateRanges() {
-  const fmt = (d: Date) => d.toISOString().slice(0, 10);
-  const today = new Date();
-  const d7 = new Date(today);
-  d7.setDate(today.getDate() - 7);
-  const d14 = new Date(today);
-  d14.setDate(today.getDate() - 14);
+const fmtDate = (d: Date) => d.toISOString().slice(0, 10);
+
+// Retorna a data (yyyy-mm-dd) "n" dias atrás em relação a hoje (UTC).
+function daysAgo(n: number): string {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() - n);
+  return fmtDate(d);
+}
+
+// Janelas SEMPRE terminam ONTEM (dia atual não conta, pois ainda é parcial).
+// last_7d = [ontem-6 .. ontem], prev_7d = [ontem-13 .. ontem-7], e assim por diante.
+// O nome do período deve casar com o que o front consome (last_7d/prev_7d/...).
+const PERIODS: { period: string; startAgo: number; endAgo: number }[] = [
+  { period: "last_7d", startAgo: 7, endAgo: 1 },
+  { period: "prev_7d", startAgo: 14, endAgo: 8 },
+  { period: "last_14d", startAgo: 14, endAgo: 1 },
+  { period: "prev_14d", startAgo: 28, endAgo: 15 },
+  { period: "last_30d", startAgo: 30, endAgo: 1 },
+  { period: "prev_30d", startAgo: 60, endAgo: 31 },
+];
+
+// Agrega uma fatia da série diária dentro de [since, until] (inclusive).
+function aggregate(daily: DailyMetric[], since: string, until: string) {
+  let spend = 0, impressions = 0, clicks = 0, conversions = 0;
+  for (const d of daily) {
+    if (d.date >= since && d.date <= until) {
+      spend += d.spend; impressions += d.impressions; clicks += d.clicks; conversions += d.conversions;
+    }
+  }
   return {
-    last7: { since: fmt(d7), until: fmt(today) },
-    prev7: { since: fmt(d14), until: fmt(d7) },
+    spend, impressions, clicks, conversions,
+    ctr: impressions ? (clicks / impressions) * 100 : 0,
+    cpc: clicks ? spend / clicks : 0,
   };
 }
 
@@ -39,8 +62,11 @@ export async function GET(req: Request) {
   }
 
   const supabase = getServiceClient();
-  const { last7, prev7 } = dateRanges();
   const started = Date.now();
+
+  // Janela de coleta: 60 dias terminando ONTEM (cobre todos os períodos + os "anteriores").
+  const windowSince = daysAgo(60);
+  const windowUntil = daysAgo(1);
 
   try {
     const accounts = await listAdAccounts();
@@ -52,7 +78,7 @@ export async function GET(req: Request) {
       const balance = centsToUnit(acc.balance);
       const spendCap = centsToUnit(acc.spend_cap);
 
-      // Upsert da conta (preserva group_id existente via onConflict)
+      // Upsert da conta (preserva group_id/hidden existentes via onConflict)
       await supabase.from("ad_accounts").upsert(
         {
           account_id: acc.account_id,
@@ -67,54 +93,61 @@ export async function GET(req: Request) {
         { onConflict: "account_id", ignoreDuplicates: false }
       );
 
-      // Insights dos dois períodos + reprovados + série diária (em paralelo)
-      const [ins7, insPrev, rejected, daily] = await Promise.all([
-        getAccountInsights(acc.id, last7).catch(() => null),
-        getAccountInsights(acc.id, prev7).catch(() => null),
+      // UMA chamada de série diária (60d) + reprovados. Os agregados por
+      // período saem de fatias dessa série — bem menos chamadas à Meta.
+      const [daily, rejected] = await Promise.all([
+        getDailyMetrics(acc.id, windowSince, windowUntil).catch(() => [] as DailyMetric[]),
         getRejectedAds(acc.id).catch(() => []),
-        getDailySpend(acc.id, last7.since, last7.until).catch(() => []),
       ]);
 
-      if (ins7) {
-        // Insere só com colunas garantidas; "daily" vai num update best-effort
-        // para não quebrar caso a migração de métricas ainda não tenha rodado.
+      // Insere um snapshot por período (last_7d/prev_7d/last_14d/...).
+      // "daily" (para o sparkline) vai no last_30d e no last_7d, best-effort.
+      const aggByPeriod: Record<string, ReturnType<typeof aggregate>> = {};
+      for (const p of PERIODS) {
+        const since = daysAgo(p.startAgo);
+        const until = daysAgo(p.endAgo);
+        const a = aggregate(daily, since, until);
+        aggByPeriod[p.period] = a;
+
         const { data: snap } = await supabase
           .from("metric_snapshots")
           .insert({
             account_id: acc.account_id,
-            period: "last_7d",
-            spend: ins7.spend,
-            impressions: ins7.impressions,
-            clicks: ins7.clicks,
-            ctr: ins7.ctr,
-            cpc: ins7.cpc,
-            conversions: ins7.conversions,
+            period: p.period,
+            spend: a.spend,
+            impressions: a.impressions,
+            clicks: a.clicks,
+            ctr: a.ctr,
+            cpc: a.cpc,
+            conversions: a.conversions,
           })
           .select("id")
           .single();
-        if (snap?.id && daily.length > 0) {
-          await supabase.from("metric_snapshots").update({ daily }).eq("id", snap.id);
+
+        // Guarda a série diária (só spend) nas janelas "atuais" p/ o sparkline.
+        if (snap?.id && (p.period === "last_7d" || p.period === "last_14d" || p.period === "last_30d")) {
+          const series = daily
+            .filter((d) => d.date >= since && d.date <= until)
+            .map((d) => ({ date: d.date, spend: d.spend }));
+          if (series.length > 0) {
+            await supabase.from("metric_snapshots").update({ daily: series }).eq("id", snap.id);
+          }
         }
       }
 
-      // Snapshot do período anterior (para deltas agregados no topo).
-      if (insPrev) {
-        await supabase.from("metric_snapshots").insert({
-          account_id: acc.account_id,
-          period: "prev_7d",
-          spend: insPrev.spend,
-          impressions: insPrev.impressions,
-          clicks: insPrev.clicks,
-          ctr: insPrev.ctr,
-          cpc: insPrev.cpc,
-          conversions: insPrev.conversions,
-        });
-      }
+      // Alertas usam o agregado de 7d vs os 7 dias anteriores.
+      const a7 = aggByPeriod["last_7d"];
+      const aPrev7 = aggByPeriod["prev_7d"];
+      const toInsight = (a: typeof a7): AccountInsight => ({
+        account_id: acc.account_id,
+        spend: a.spend, impressions: a.impressions, clicks: a.clicks,
+        ctr: a.ctr, cpc: a.cpc, conversions: a.conversions,
+      });
 
       const accAlerts = buildAlertsForAccount({
         account: acc,
-        insight7d: ins7,
-        insightPrev7d: insPrev,
+        insight7d: a7 ? toInsight(a7) : null,
+        insightPrev7d: aPrev7 ? toInsight(aPrev7) : null,
         rejected,
       });
       allAlerts.push(...accAlerts);

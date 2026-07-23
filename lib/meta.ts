@@ -124,6 +124,33 @@ export async function listAdAccounts(): Promise<AdAccountRaw[]> {
   return fbGetAll<AdAccountRaw>(url);
 }
 
+// "Conversões" do overview (agregado do topo). Agrupadas por FAMÍLIA: a Meta
+// costuma reportar o mesmo resultado sob vários action_types (ex.: uma compra
+// aparece como "purchase" e "offsite_conversion.fb_pixel_purchase"). Somamos
+// UM valor por família (o maior) para não contar em dobro, e somamos entre
+// famílias distintas (compras + leads + conversas + agendamentos + cadastros).
+export const CONVERSION_FAMILIES: string[][] = [
+  ["purchase", "omni_purchase", "offsite_conversion.fb_pixel_purchase"],
+  ["lead", "offsite_conversion.fb_pixel_lead", "onsite_web_lead", "onsite_conversion.lead_grouped"],
+  ["complete_registration"],
+  ["onsite_conversion.messaging_conversation_started_7d", "onsite_conversion.messaging_first_reply"],
+  ["schedule", "offsite_conversion.fb_pixel_schedule"],
+  ["submit_application"],
+  ["subscribe", "start_trial"],
+];
+
+function sumConversions(actions?: { action_type: string; value?: string }[]): number {
+  const map: Record<string, number> = {};
+  for (const a of actions || []) map[a.action_type] = (map[a.action_type] || 0) + Number(a.value || 0);
+  let total = 0;
+  for (const family of CONVERSION_FAMILIES) {
+    let best = 0;
+    for (const k of family) if (map[k] != null) best = Math.max(best, map[k]);
+    total += best;
+  }
+  return total;
+}
+
 // Puxa insights de gasto de uma conta para um intervalo de datas.
 // datePreset ex: "last_7d", ou passe since/until.
 export async function getAccountInsights(
@@ -142,14 +169,7 @@ export async function getAccountInsights(
   if (rows.length === 0) return null;
   const r = rows[0];
   // "actions" traz um array; somamos as conversões relevantes.
-  const conversions =
-    (r.actions || [])
-      .filter((a: any) =>
-        ["purchase", "lead", "complete_registration", "offsite_conversion.fb_pixel_purchase"].includes(
-          a.action_type
-        )
-      )
-      .reduce((sum: number, a: any) => sum + Number(a.value || 0), 0) || 0;
+  const conversions = sumConversions(r.actions);
   return {
     account_id: accountId,
     spend: Number(r.spend || 0),
@@ -431,6 +451,62 @@ export async function getDailySpend(
   )}&access_token=${TOKEN}`;
   const rows = await fbGetAll<any>(url);
   return rows.map((r) => ({ date: r.date_start, spend: Number(r.spend || 0) }));
+}
+
+// Série diária rica (spend/impressões/cliques/conversões) — 1 chamada por conta
+// no collect, da qual derivamos os agregados 7d/14d/30d e os anteriores.
+export interface DailyMetric {
+  date: string;
+  spend: number;
+  impressions: number;
+  clicks: number;
+  conversions: number;
+}
+
+export async function getDailyMetrics(
+  actId: string,
+  since: string,
+  until: string
+): Promise<DailyMetric[]> {
+  if (!actId.startsWith("act_")) actId = `act_${actId}`;
+  const fields = "spend,impressions,clicks,actions";
+  const url = `${GRAPH}/${actId}/insights?fields=${fields}&time_increment=1&${timeRange(
+    since,
+    until
+  )}&access_token=${TOKEN}`;
+  const rows = await fbGetAll<any>(url);
+  return rows.map((r) => ({
+    date: r.date_start,
+    spend: Number(r.spend || 0),
+    impressions: Number(r.impressions || 0),
+    clicks: Number(r.clicks || 0),
+    conversions: sumConversions(r.actions),
+  }));
+}
+
+// Diagnóstico: devolve o payload cru de UMA conta (todos os campos financeiros
+// que a Meta expõe). Usado para investigar o saldo pré-pago.
+export async function getAccountRaw(actId: string): Promise<any> {
+  if (!actId.startsWith("act_")) actId = `act_${actId}`;
+  const fields = [
+    "account_id",
+    "name",
+    "account_status",
+    "currency",
+    "balance",
+    "amount_spent",
+    "spend_cap",
+    "funding_source",
+    "funding_source_details",
+    "is_prepay_account",
+    "min_daily_budget",
+    "adtrust_dsl",
+  ].join(",");
+  const url = `${GRAPH}/${actId}?fields=${fields}&access_token=${TOKEN}`;
+  const res = await fetch(url);
+  const body = await res.text();
+  if (!res.ok) throw new Error(`Meta API ${res.status}: ${body}`);
+  return JSON.parse(body);
 }
 
 // Compõe todo o detalhe de uma conta em paralelo.

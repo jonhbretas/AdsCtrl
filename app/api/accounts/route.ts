@@ -18,7 +18,13 @@ export async function GET() {
     }
 
     const supabase = getServiceClient();
-    const [{ data: accounts }, { data: groups }, { data: alerts }, { data: snaps }, { data: prevSnaps }] =
+    // Períodos "atuais" (com sparkline) e seus "anteriores" (para os deltas).
+    const CUR = ["last_7d", "last_14d", "last_30d"];
+    const PREV = ["prev_7d", "prev_14d", "prev_30d"];
+    const CUR_KEY: Record<string, string> = { last_7d: "7d", last_14d: "14d", last_30d: "30d" };
+    const PREV_KEY: Record<string, string> = { prev_7d: "7d", prev_14d: "14d", prev_30d: "30d" };
+
+    const [{ data: accounts }, { data: groups }, { data: alerts }, { data: snaps }] =
       await Promise.all([
         supabase.from("ad_accounts").select("*").order("name"),
         supabase.from("client_groups").select("*").order("name"),
@@ -26,37 +32,40 @@ export async function GET() {
         // da migração que adiciona a coluna.
         supabase.from("alerts").select("*").eq("resolved", false),
         // select("*") para não quebrar caso a coluna "daily" ainda não exista.
+        // Traz todos os períodos de uma vez; escolhemos o mais recente por conta+período.
         supabase
           .from("metric_snapshots")
           .select("*")
-          .eq("period", "last_7d")
-          .order("captured_at", { ascending: false }),
-        supabase
-          .from("metric_snapshots")
-          .select("account_id, spend, conversions, captured_at, period")
-          .eq("period", "prev_7d")
+          .in("period", [...CUR, ...PREV])
           .order("captured_at", { ascending: false }),
       ]);
 
-    // Pega o snapshot mais recente por conta (atual e anterior)
-    const latestByAccount: Record<string, any> = {};
+    // Mais recente por (conta, período).
+    const latest: Record<string, Record<string, any>> = {}; // account_id -> period -> snap
     for (const s of snaps || []) {
-      if (!latestByAccount[s.account_id]) latestByAccount[s.account_id] = s;
-    }
-    const prevByAccount: Record<string, any> = {};
-    for (const s of prevSnaps || []) {
-      if (!prevByAccount[s.account_id]) prevByAccount[s.account_id] = s;
+      const byPeriod = (latest[s.account_id] ||= {});
+      if (!byPeriod[s.period]) byPeriod[s.period] = s;
     }
 
     // Ativos = não resolvidos e não marcados como "ciente".
     const activeAlerts = (alerts || []).filter((a: any) => !a.acknowledged);
 
-    const enriched = (accounts || []).map((a) => ({
-      ...a,
-      metrics: latestByAccount[a.account_id] || null,
-      prevMetrics: prevByAccount[a.account_id] || null,
-      alerts: activeAlerts.filter((al) => al.account_id === a.account_id),
-    }));
+    const enriched = (accounts || []).map((a) => {
+      const byPeriod = latest[a.account_id] || {};
+      const metricsByPeriod: Record<string, any> = {};
+      const prevByPeriod: Record<string, any> = {};
+      for (const p of CUR) if (byPeriod[p]) metricsByPeriod[CUR_KEY[p]] = byPeriod[p];
+      for (const p of PREV) if (byPeriod[p]) prevByPeriod[PREV_KEY[p]] = byPeriod[p];
+      return {
+        ...a,
+        // compat: "metrics"/"prevMetrics" continuam sendo os 7 dias.
+        metrics: metricsByPeriod["7d"] || null,
+        prevMetrics: prevByPeriod["7d"] || null,
+        metricsByPeriod,
+        prevByPeriod,
+        alerts: activeAlerts.filter((al) => al.account_id === a.account_id),
+      };
+    });
 
     return NextResponse.json({
       accounts: enriched,
