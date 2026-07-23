@@ -9,7 +9,7 @@ Um único token de System User percorre todas as contas atribuídas ao seu BM.
 ## Stack
 - Next.js 14 (App Router, TypeScript) — deploy na Vercel
 - Supabase — banco + (futuro) auth
-- Vercel Cron — coleta automática a cada 30 min
+- Vercel Cron — coleta automática (1×/dia no plano Hobby; a cada 30 min requer Pro)
 
 ## Setup
 
@@ -41,8 +41,10 @@ npm i -g vercel
 vercel
 ```
 Adicione as mesmas variáveis de ambiente no painel da Vercel.
-O `vercel.json` já agenda a coleta a cada 30 min. Configure o `CRON_SECRET`
-também como variável para o cron autenticar.
+O `vercel.json` agenda a coleta 1×/dia (`0 10 * * *` = 07:00 BRT), compatível
+com o plano Hobby. No plano Pro dá para usar `*/30 * * * *` (a cada 30 min).
+Configure o `CRON_SECRET` também como variável para o cron autenticar.
+O detalhe por conta é buscado ao vivo na Meta API (não depende do cron).
 
 ## Estrutura
 - `lib/meta.ts` — cliente da Meta Marketing API (contas, insights, reprovados)
