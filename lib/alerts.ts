@@ -6,7 +6,8 @@ import {
   AccountInsight,
   RejectedAd,
   mapAccountStatus,
-  centsToUnit,
+  availableBalance,
+  isPrepaidAccount,
 } from "./meta";
 
 export type AlertLevel = "critical" | "warning" | "info";
@@ -67,18 +68,17 @@ export function buildAlertsForAccount(input: BuildAlertsInput): Alert[] {
     });
   }
 
-  // 3. Saldo baixo (só para contas pré-pagas que expõem balance)
-  const balance = centsToUnit(account.balance);
+  // 3. Saldo baixo (contas pré-pagas: saldo disponível abaixo do limiar)
+  const available = availableBalance(account);
   const threshold = input.lowBalanceThreshold ?? 50;
-  const isPrepaid = account.funding_source_details?.type === 1; // 1 costuma indicar prepaid/saldo
-  if (isPrepaid && balance > 0 && balance < threshold) {
+  if (isPrepaidAccount(account) && available != null && available > 0 && available < threshold) {
     alerts.push({
       account_id: id,
       account_name: name,
       level: "warning",
       type: "low_balance",
       title: "Saldo baixo",
-      detail: `Saldo restante: ${account.currency} ${balance.toFixed(2)}.`,
+      detail: `Saldo disponível: ${account.currency} ${available.toFixed(2)}.`,
     });
   }
 

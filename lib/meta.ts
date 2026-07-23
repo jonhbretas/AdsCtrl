@@ -211,6 +211,37 @@ export function centsToUnit(v?: string): number {
   return Number(v) / 100;
 }
 
+// Extrai um valor em R$ de um texto pt-BR: "R$1.234,56" -> 1234.56.
+function parseBrlFromString(s?: string): number | null {
+  if (!s) return null;
+  const m = s.match(/(\d[\d.]*,\d{2})/);
+  if (!m) return null;
+  const n = Number(m[1].replace(/\./g, "").replace(",", "."));
+  return Number.isFinite(n) ? n : null;
+}
+
+// Saldo disponível "de verdade". Para contas PRÉ-PAGAS a Meta não expõe o
+// valor num campo numérico — ele vem no funding_source_details.display_string
+// (ex.: "Saldo disponível (R$331,60 BRL)"). O campo `balance` é o valor em
+// aberto (não faturado), que NÃO é o saldo disponível.
+export function availableBalance(acc: AdAccountRaw): number | null {
+  const ds = acc.funding_source_details?.display_string || "";
+  if (/dispon[ií]vel|available/i.test(ds)) {
+    const v = parseBrlFromString(ds);
+    if (v != null) return v;
+  }
+  // Fallback: campo balance (contas que de fato expõem saldo ali).
+  const b = centsToUnit(acc.balance);
+  return b > 0 ? b : null;
+}
+
+// Heurística de conta pré-paga (para alertas de saldo baixo).
+export function isPrepaidAccount(acc: AdAccountRaw): boolean {
+  const ds = acc.funding_source_details?.display_string || "";
+  if (/dispon[ií]vel|available/i.test(ds)) return true;
+  return [1, 20].includes(acc.funding_source_details?.type ?? -1);
+}
+
 // ==========================================================================
 // DETALHE POR CONTA (busca ao vivo, on-demand quando a linha é expandida)
 // ==========================================================================

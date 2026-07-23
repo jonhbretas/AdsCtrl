@@ -11,6 +11,7 @@ import {
   AccountInsight,
   mapAccountStatus,
   centsToUnit,
+  availableBalance,
 } from "@/lib/meta";
 import { buildAlertsForAccount, Alert } from "@/lib/alerts";
 import { getServiceClient } from "@/lib/supabase";
@@ -75,7 +76,8 @@ export async function GET(req: Request) {
 
     for (const acc of accounts) {
       const status = mapAccountStatus(acc.account_status);
-      const balance = centsToUnit(acc.balance);
+      // Pré-pago: saldo disponível vem do display_string; senão, campo balance.
+      const balance = availableBalance(acc);
       const spendCap = centsToUnit(acc.spend_cap);
 
       // Upsert da conta (preserva group_id/hidden existentes via onConflict)
