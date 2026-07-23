@@ -28,6 +28,8 @@ export async function GET() {
       await Promise.all([
         supabase.from("ad_accounts").select("*").order("name"),
         supabase.from("client_groups").select("*").order("name"),
+        // Filtra "acknowledged" em JS (não em SQL) para funcionar mesmo antes
+        // da migração que adiciona a coluna.
         supabase.from("alerts").select("*").eq("resolved", false),
         supabase
           .from("metric_snapshots")
@@ -42,16 +44,19 @@ export async function GET() {
       if (!latestByAccount[s.account_id]) latestByAccount[s.account_id] = s;
     }
 
+    // Ativos = não resolvidos e não marcados como "ciente".
+    const activeAlerts = (alerts || []).filter((a: any) => !a.acknowledged);
+
     const enriched = (accounts || []).map((a) => ({
       ...a,
       metrics: latestByAccount[a.account_id] || null,
-      alerts: (alerts || []).filter((al) => al.account_id === a.account_id),
+      alerts: activeAlerts.filter((al) => al.account_id === a.account_id),
     }));
 
     return NextResponse.json({
       accounts: enriched,
       groups: groups || [],
-      alerts: alerts || [],
+      alerts: activeAlerts,
     });
   } catch (e: any) {
     return NextResponse.json(

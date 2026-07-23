@@ -53,9 +53,6 @@ export async function GET(req: Request) {
     const allAlerts: Alert[] = [];
     let processed = 0;
 
-    // Limpa alertas antigos (regeramos a cada coleta)
-    await supabase.from("alerts").delete().neq("id", 0);
-
     for (const acc of accounts) {
       const status = mapAccountStatus(acc.account_status);
       const balance = centsToUnit(acc.balance);
@@ -106,18 +103,46 @@ export async function GET(req: Request) {
       processed++;
     }
 
-    if (allAlerts.length > 0) {
-      await supabase.from("alerts").insert(
-        allAlerts.map((a) => ({
-          account_id: a.account_id,
-          account_name: a.account_name,
-          level: a.level,
-          type: a.type,
-          title: a.title,
-          detail: a.detail,
-        }))
-      );
+    // ----- Persistência de alertas: preserva "ciente" e mantém histórico -----
+    const now = new Date().toISOString();
+    const current = allAlerts.map((a) => ({
+      fingerprint: `${a.account_id}:${a.type}`,
+      account_id: a.account_id,
+      account_name: a.account_name,
+      level: a.level,
+      type: a.type,
+      title: a.title,
+      detail: a.detail,
+      resolved: false,
+      resolved_at: null as string | null,
+      last_seen_at: now,
+    }));
+    const fps = current.map((c) => c.fingerprint);
+
+    // 1) Alertas que estavam resolvidos e voltaram a ocorrer: limpa o "ciente".
+    if (fps.length > 0) {
+      await supabase
+        .from("alerts")
+        .update({ acknowledged: false, acknowledged_at: null })
+        .eq("resolved", true)
+        .in("fingerprint", fps);
     }
+
+    // 2) Upsert do estado atual. Não enviamos acknowledged/first_seen_at,
+    //    então o Postgres preserva esses valores nas linhas já existentes.
+    if (current.length > 0) {
+      await supabase.from("alerts").upsert(current, { onConflict: "fingerprint" });
+    }
+
+    // 3) Alertas ativos que não estão mais presentes -> resolvidos (histórico).
+    let resolveQuery = supabase
+      .from("alerts")
+      .update({ resolved: true, resolved_at: now })
+      .eq("resolved", false);
+    if (fps.length > 0) {
+      resolveQuery = resolveQuery.not("fingerprint", "in", `(${fps.map((f) => `"${f}"`).join(",")})`);
+    }
+    await resolveQuery;
 
     return NextResponse.json({
       ok: true,

@@ -13,10 +13,17 @@ interface Metrics {
   cpc: number;
 }
 interface AlertItem {
+  id: number;
   level: "critical" | "warning" | "info";
+  type?: string;
   title: string;
   detail: string;
   account_name: string;
+  acknowledged?: boolean;
+  resolved?: boolean;
+  acknowledged_at?: string | null;
+  resolved_at?: string | null;
+  last_seen_at?: string | null;
 }
 interface Account {
   account_id: string;
@@ -71,6 +78,10 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [alertTab, setAlertTab] = useState<"active" | "history">("active");
+  const [history, setHistory] = useState<AlertItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [acking, setAcking] = useState<number | null>(null);
 
   const range = useMemo(() => rangeFor(days), [days]);
 
@@ -98,7 +109,45 @@ export default function Dashboard() {
   async function refresh() {
     setRefreshing(true);
     await load();
+    if (alertTab === "history") await loadHistory();
     setRefreshing(false);
+  }
+
+  async function loadHistory() {
+    setHistoryLoading(true);
+    try {
+      const r = await fetch("/api/alerts?scope=history");
+      const d = await r.json();
+      setHistory(d.alerts || []);
+    } catch {
+      /* silencioso */
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (alertTab === "history") loadHistory();
+  }, [alertTab]);
+
+  // Marca/desmarca "ciente". Ao marcar, o alerta sai dos ativos e vai p/ histórico.
+  async function setAck(id: number, acknowledged: boolean) {
+    setAcking(id);
+    try {
+      await fetch("/api/alerts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, acknowledged }),
+      });
+      if (acknowledged) {
+        setAlerts((prev) => prev.filter((a) => a.id !== id));
+      } else {
+        setHistory((prev) => prev.filter((a) => a.id !== id));
+        await load();
+      }
+    } finally {
+      setAcking(null);
+    }
   }
 
   const filtered = useMemo(() => {
@@ -125,6 +174,12 @@ export default function Dashboard() {
       .filter((a) => names.has(a.account_name))
       .sort((a, b) => order[a.level] - order[b.level]);
   }, [alerts, filtered]);
+
+  const visibleHistory = useMemo(() => {
+    const names = new Set(filtered.map((a) => a.name));
+    // se um grupo específico está selecionado, filtra por contas visíveis
+    return groupFilter === "all" ? history : history.filter((a) => names.has(a.account_name));
+  }, [history, filtered, groupFilter]);
 
   const lastUpdated = useMemo(() => {
     const ts = accounts.map((a) => a.updated_at).filter(Boolean).sort().pop();
@@ -210,26 +265,79 @@ export default function Dashboard() {
       <div style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: 20, alignItems: "start" }}>
         {/* ALERTAS */}
         <aside style={{ position: "sticky", top: 16 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, display: "flex", justifyContent: "space-between" }}>
-            <span>Alertas</span>
-            <span style={{ color: "#aaa" }}>{visibleAlerts.length}</span>
+          <div style={{ display: "flex", gap: 4, background: "#f2f2f2", borderRadius: 10, padding: 3, marginBottom: 12 }}>
+            <TabBtn active={alertTab === "active"} onClick={() => setAlertTab("active")}>
+              Ativos {visibleAlerts.length > 0 && <b>({visibleAlerts.length})</b>}
+            </TabBtn>
+            <TabBtn active={alertTab === "history"} onClick={() => setAlertTab("history")}>
+              Histórico
+            </TabBtn>
           </div>
-          <div style={{ display: "grid", gap: 8, maxHeight: "72vh", overflowY: "auto", paddingRight: 2 }}>
-            {visibleAlerts.length === 0 && <div style={{ fontSize: 13, color: "#bbb" }}>Nenhum alerta.</div>}
-            {visibleAlerts.map((a, i) => {
-              const st = LEVEL_STYLE[a.level];
-              return (
-                <div key={i} style={{ background: st.bg, borderRadius: 10, padding: "10px 12px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
-                    <span style={{ width: 7, height: 7, borderRadius: "50%", background: st.dot }} />
-                    <span style={{ fontSize: 11, fontWeight: 700, color: st.fg }}>{st.label}</span>
-                  </div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: st.fg }}>{a.account_name}</div>
-                  <div style={{ fontSize: 12, color: "#666", marginTop: 2 }}>{a.title}</div>
-                  <div style={{ fontSize: 12, color: "#888", marginTop: 1 }}>{a.detail}</div>
-                </div>
-              );
-            })}
+
+          <div style={{ display: "grid", gap: 8, maxHeight: "74vh", overflowY: "auto", paddingRight: 2 }}>
+            {alertTab === "active" && (
+              <>
+                {visibleAlerts.length === 0 && <Empty>Nenhum alerta ativo. 🎉</Empty>}
+                {visibleAlerts.map((a) => {
+                  const st = LEVEL_STYLE[a.level];
+                  return (
+                    <div key={a.id} style={{ background: st.bg, borderRadius: 10, padding: "10px 12px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+                        <span style={{ width: 7, height: 7, borderRadius: "50%", background: st.dot }} />
+                        <span style={{ fontSize: 11, fontWeight: 700, color: st.fg }}>{st.label}</span>
+                      </div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: st.fg }}>{a.account_name}</div>
+                      <div style={{ fontSize: 12, color: "#666", marginTop: 2 }}>{a.title}</div>
+                      <div style={{ fontSize: 12, color: "#888", marginTop: 1 }}>{a.detail}</div>
+                      <label style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8, fontSize: 12, color: st.fg, cursor: "pointer", userSelect: "none" }}>
+                        <input
+                          type="checkbox"
+                          checked={false}
+                          disabled={acking === a.id}
+                          onChange={() => setAck(a.id, true)}
+                          style={{ accentColor: st.dot, width: 15, height: 15, cursor: "pointer" }}
+                        />
+                        Estou ciente
+                      </label>
+                    </div>
+                  );
+                })}
+              </>
+            )}
+
+            {alertTab === "history" && (
+              <>
+                {historyLoading && <Empty>Carregando histórico…</Empty>}
+                {!historyLoading && visibleHistory.length === 0 && <Empty>Sem histórico ainda.</Empty>}
+                {!historyLoading &&
+                  visibleHistory.map((a) => {
+                    const st = LEVEL_STYLE[a.level];
+                    const badge = a.resolved ? { t: "Resolvido", c: "#16a34a" } : { t: "Ciente", c: "#6b7280" };
+                    const when = a.resolved_at || a.acknowledged_at || a.last_seen_at;
+                    return (
+                      <div key={a.id} style={{ background: "#fafafa", border: "1px solid #eee", borderRadius: 10, padding: "10px 12px", opacity: 0.92 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+                          <span style={{ width: 7, height: 7, borderRadius: "50%", background: st.dot }} />
+                          <span style={{ fontSize: 11, fontWeight: 700, color: "#888" }}>{st.label}</span>
+                          <span style={{ marginLeft: "auto", fontSize: 10, fontWeight: 700, color: badge.c, background: badge.c + "18", padding: "1px 7px", borderRadius: 8 }}>
+                            {badge.t}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: "#444" }}>{a.account_name}</div>
+                        <div style={{ fontSize: 12, color: "#777", marginTop: 2 }}>{a.title}</div>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6 }}>
+                          <span style={{ fontSize: 11, color: "#aaa" }}>{when ? new Date(when).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : ""}</span>
+                          {a.acknowledged && !a.resolved && (
+                            <button onClick={() => setAck(a.id, false)} disabled={acking === a.id} style={{ fontSize: 11, color: "#3987e5", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                              reabrir
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+              </>
+            )}
           </div>
         </aside>
 
@@ -336,6 +444,32 @@ function Chip({ active, onClick, label, color }: { active: boolean; onClick: () 
       {label}
     </button>
   );
+}
+
+function TabBtn({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        flex: 1,
+        padding: "6px 10px",
+        borderRadius: 8,
+        border: "none",
+        background: active ? "#fff" : "transparent",
+        boxShadow: active ? "0 1px 2px rgba(0,0,0,.08)" : "none",
+        fontSize: 12.5,
+        fontWeight: 600,
+        color: active ? "#111" : "#777",
+        cursor: "pointer",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Empty({ children }: { children: React.ReactNode }) {
+  return <div style={{ fontSize: 13, color: "#bbb", padding: "8px 2px" }}>{children}</div>;
 }
 
 function Kpi({ label, value }: { label: string; value: string }) {

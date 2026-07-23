@@ -36,9 +36,10 @@ create table if not exists metric_snapshots (
   conversions numeric default 0
 );
 
--- Alertas gerados na última coleta
+-- Alertas (estado atual + histórico). Identidade estável por conta+tipo.
 create table if not exists alerts (
   id bigint generated always as identity primary key,
+  fingerprint text unique,               -- account_id:type (chave do upsert)
   account_id text references ad_accounts(account_id) on delete cascade,
   account_name text,
   level text,                            -- critical | warning | info
@@ -46,10 +47,16 @@ create table if not exists alerts (
   title text,
   detail text,
   created_at timestamptz default now(),
-  resolved boolean default false
+  first_seen_at timestamptz default now(),
+  last_seen_at timestamptz default now(),
+  acknowledged boolean not null default false,  -- "estou ciente"
+  acknowledged_at timestamptz,
+  resolved boolean default false,        -- condição deixou de existir -> histórico
+  resolved_at timestamptz
 );
 
 -- Índices úteis
 create index if not exists idx_snap_account on metric_snapshots(account_id, captured_at desc);
 create index if not exists idx_alerts_level on alerts(level, resolved);
+create index if not exists idx_alerts_state on alerts(resolved, acknowledged);
 create index if not exists idx_accounts_group on ad_accounts(group_id);
