@@ -498,9 +498,7 @@ export async function getAccountRaw(actId: string): Promise<any> {
     "spend_cap",
     "funding_source",
     "funding_source_details",
-    "is_prepay_account",
     "min_daily_budget",
-    "adtrust_dsl",
   ].join(",");
   const url = `${GRAPH}/${actId}?fields=${fields}&access_token=${TOKEN}`;
   const res = await fetch(url);
