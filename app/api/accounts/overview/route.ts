@@ -49,8 +49,8 @@ export async function GET(req: Request) {
     // Não desperdiça chamada com contas ocultas.
     const rows = (accounts || []).filter((a: any) => !a.hidden);
 
-    const metrics: Record<string, { spend: number; conversions: number; daily: { date: string; spend: number }[] }> = {};
-    const prevMetrics: Record<string, { spend: number; conversions: number }> = {};
+    const metrics: Record<string, { spend: number; conversions: number; purchases: number; value: number; daily: { date: string; spend: number }[] }> = {};
+    const prevMetrics: Record<string, { spend: number; conversions: number; purchases: number; value: number }> = {};
 
     await inBatches(rows, 8, async (row: any) => {
       const id = row.account_id as string;
@@ -61,8 +61,14 @@ export async function GET(req: Request) {
         getAccountInsights(actId, { since: prev.since, until: prev.until }, token).catch(() => null),
         getDailySpend(actId, since, until, token).catch(() => []),
       ]);
-      metrics[id] = { spend: cur?.spend || 0, conversions: cur?.conversions || 0, daily };
-      prevMetrics[id] = { spend: before?.spend || 0, conversions: before?.conversions || 0 };
+      metrics[id] = {
+        spend: cur?.spend || 0, conversions: cur?.conversions || 0,
+        purchases: cur?.purchases || 0, value: cur?.purchaseValue || 0, daily,
+      };
+      prevMetrics[id] = {
+        spend: before?.spend || 0, conversions: before?.conversions || 0,
+        purchases: before?.purchases || 0, value: before?.purchaseValue || 0,
+      };
     });
 
     return NextResponse.json({ range: { since, until }, prevRange: prev, metrics, prev: prevMetrics });

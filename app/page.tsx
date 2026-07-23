@@ -14,12 +14,18 @@ import { brl, num, delta } from "@/lib/format";
 interface Metrics {
   spend: number;
   conversions: number;
+  purchases?: number;
+  purchase_value?: number; // snapshot (cache)
+  value?: number; // overview ao vivo
   cpc?: number;
   daily?: { date: string; spend: number }[] | null;
 }
 interface PrevMetrics {
   spend: number;
   conversions: number;
+  purchases?: number;
+  purchase_value?: number;
+  value?: number;
 }
 interface AlertItem {
   id: number;
@@ -130,22 +136,24 @@ export default function Dashboard() {
   const periodKey = period === "7d" || period === "14d" || period === "30d" ? period : null;
   const liveReady = !isLive || !!live;
 
+  // Forma normalizada (cache usa purchase_value; live usa value).
+  type M = { spend: number; conversions: number; purchases: number; value: number; daily: { date: string; spend: number }[] };
+  const norm = (m?: Metrics | PrevMetrics | null): M => ({
+    spend: m?.spend || 0,
+    conversions: m?.conversions || 0,
+    purchases: m?.purchases || 0,
+    value: (m as Metrics)?.value ?? m?.purchase_value ?? 0,
+    daily: (m as Metrics)?.daily || [],
+  });
+
   // Métricas da conta no período selecionado (cache p/ presets, live p/ hoje/custom).
-  function accMetrics(a: Account): Metrics {
-    if (isLive) {
-      const m = live?.metrics?.[a.account_id];
-      return { spend: m?.spend || 0, conversions: m?.conversions || 0, daily: m?.daily || [] };
-    }
-    const m = (periodKey && a.metricsByPeriod?.[periodKey]) || a.metrics;
-    return { spend: m?.spend || 0, conversions: m?.conversions || 0, daily: m?.daily || [] };
+  function accMetrics(a: Account): M {
+    if (isLive) return norm(live?.metrics?.[a.account_id]);
+    return norm((periodKey && a.metricsByPeriod?.[periodKey]) || a.metrics);
   }
-  function accPrev(a: Account): PrevMetrics {
-    if (isLive) {
-      const p = live?.prev?.[a.account_id];
-      return { spend: p?.spend || 0, conversions: p?.conversions || 0 };
-    }
-    const p = (periodKey && a.prevByPeriod?.[periodKey]) || a.prevMetrics;
-    return { spend: p?.spend || 0, conversions: p?.conversions || 0 };
+  function accPrev(a: Account): M {
+    if (isLive) return norm(live?.prev?.[a.account_id]);
+    return norm((periodKey && a.prevByPeriod?.[periodKey]) || a.prevMetrics);
   }
 
   async function load() {
@@ -309,13 +317,18 @@ export default function Dashboard() {
   }, [accounts, groupFilter, onlyActive, search, showHidden, period, live]);
 
   const totals = useMemo(() => {
-    const spend = filtered.reduce((s, a) => s + accMetrics(a).spend, 0);
-    const conv = filtered.reduce((s, a) => s + accMetrics(a).conversions, 0);
-    const prevSpend = filtered.reduce((s, a) => s + accPrev(a).spend, 0);
-    const prevConv = filtered.reduce((s, a) => s + accPrev(a).conversions, 0);
+    let spend = 0, conv = 0, purch = 0, val = 0;
+    let prevSpend = 0, prevConv = 0, prevPurch = 0, prevVal = 0;
+    for (const a of filtered) {
+      const m = accMetrics(a), p = accPrev(a);
+      spend += m.spend; conv += m.conversions; purch += m.purchases; val += m.value;
+      prevSpend += p.spend; prevConv += p.conversions; prevPurch += p.purchases; prevVal += p.value;
+    }
     return {
       spend, conv, cpa: conv ? spend / conv : 0,
+      purch, val, roas: spend ? val / spend : 0,
       prevSpend, prevConv, prevCpa: prevConv ? prevSpend / prevConv : 0,
+      prevPurch, prevVal, prevRoas: prevSpend ? prevVal / prevSpend : 0,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtered, period, live]);
@@ -438,10 +451,13 @@ export default function Dashboard() {
       </div>
 
       {/* KPIs GERAIS (agregado do período vs período anterior) */}
-      <section style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 20 }}>
+      <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginBottom: 20 }}>
         <Kpi label={`Investimento (${short})`} value={liveReady ? brl(totals.spend, 0) : "…"} cur={totals.spend} prev={totals.prevSpend} neutral />
         <Kpi label={`Conversões (${short})`} value={liveReady ? num(totals.conv) : "…"} cur={totals.conv} prev={totals.prevConv} />
         <Kpi label="CPA médio" value={liveReady ? brl(totals.cpa) : "…"} cur={totals.cpa} prev={totals.prevCpa} invert />
+        <Kpi label={`Compras (${short})`} value={liveReady ? num(totals.purch) : "…"} cur={totals.purch} prev={totals.prevPurch} />
+        <Kpi label="Valor de compra" value={liveReady ? brl(totals.val, 0) : "…"} cur={totals.val} prev={totals.prevVal} />
+        <Kpi label="ROAS" value={liveReady ? `${totals.roas.toFixed(2)}x` : "…"} cur={totals.roas} prev={totals.prevRoas} />
       </section>
 
       {/* LAYOUT: alertas (esq) + tabela (centro) */}
@@ -531,6 +547,7 @@ export default function Dashboard() {
             <span>Canais</span>
             <span style={{ textAlign: "center" }}>Tendência</span>
             <span style={{ textAlign: "right" }}>Investimento ({short})</span>
+            <span style={{ textAlign: "right" }}>Compras</span>
             <span style={{ textAlign: "right" }}>Saldo Meta</span>
             <span />
             <span />
@@ -567,6 +584,14 @@ export default function Dashboard() {
                     <Sparkline points={(m.daily || []).map((d) => d.spend)} color={g?.color || "#3987e5"} />
                   </div>
                   <div style={{ textAlign: "right", fontSize: 14, fontWeight: 600 }}>{brl(m.spend)}</div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: m.purchases > 0 ? "#111" : "#bbb" }}>
+                      {m.purchases > 0 ? num(m.purchases) : "—"}
+                    </div>
+                    {m.value > 0 && m.spend > 0 && (
+                      <div style={{ fontSize: 10.5, color: "#16a34a" }}>{(m.value / m.spend).toFixed(1)}x ROAS</div>
+                    )}
+                  </div>
                   <div style={{ textAlign: "right", fontSize: 14, color: a.balance != null && a.balance > 0 ? "#111" : "#bbb" }}>
                     {a.balance != null && a.balance > 0 ? brl(a.balance) : "—"}
                   </div>
@@ -602,7 +627,7 @@ export default function Dashboard() {
 
 // ---------- subcomponentes ----------
 
-const GRID = "1fr 56px 84px 140px 120px 30px 28px";
+const GRID = "1fr 40px 68px 120px 96px 100px 26px 24px";
 
 const btnStyle: React.CSSProperties = {
   padding: "8px 14px",

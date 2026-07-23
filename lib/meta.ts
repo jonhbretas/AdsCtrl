@@ -92,6 +92,8 @@ export interface AccountInsight {
   ctr: number;
   cpc: number;
   conversions: number;
+  purchases: number;
+  purchaseValue: number; // receita das compras (R$)
 }
 
 export interface RejectedAd {
@@ -206,6 +208,17 @@ function sumConversions(actions?: { action_type: string; value?: string }[]): nu
   return total;
 }
 
+// Compras: a Meta reporta a mesma compra em várias chaves; pegamos o maior
+// (dedupe). Serve tanto para "actions" (quantidade) quanto "action_values" (R$).
+const PURCHASE_KEYS = ["purchase", "omni_purchase", "offsite_conversion.fb_pixel_purchase"];
+function sumPurchaseFamily(items?: { action_type: string; value?: string }[]): number {
+  const map: Record<string, number> = {};
+  for (const a of items || []) map[a.action_type] = (map[a.action_type] || 0) + Number(a.value || 0);
+  let best = 0;
+  for (const k of PURCHASE_KEYS) if (map[k] != null) best = Math.max(best, map[k]);
+  return best;
+}
+
 // Puxa insights de gasto de uma conta para um intervalo de datas.
 // datePreset ex: "last_7d", ou passe since/until.
 export async function getAccountInsights(
@@ -213,7 +226,7 @@ export async function getAccountInsights(
   opts: { datePreset?: string; since?: string; until?: string } = {},
   token: string = TOKEN
 ): Promise<AccountInsight | null> {
-  const fields = "spend,impressions,clicks,ctr,cpc,actions";
+  const fields = "spend,impressions,clicks,ctr,cpc,actions,action_values";
   let range = "date_preset=last_7d";
   if (opts.since && opts.until) {
     range = `time_range={'since':'${opts.since}','until':'${opts.until}'}`;
@@ -234,6 +247,8 @@ export async function getAccountInsights(
     ctr: Number(r.ctr || 0),
     cpc: Number(r.cpc || 0),
     conversions,
+    purchases: sumPurchaseFamily(r.actions),
+    purchaseValue: sumPurchaseFamily(r.action_values),
   };
 }
 
@@ -551,6 +566,8 @@ export interface DailyMetric {
   impressions: number;
   clicks: number;
   conversions: number;
+  purchases: number;
+  purchaseValue: number;
 }
 
 export async function getDailyMetrics(
@@ -560,7 +577,7 @@ export async function getDailyMetrics(
   token: string = TOKEN
 ): Promise<DailyMetric[]> {
   if (!actId.startsWith("act_")) actId = `act_${actId}`;
-  const fields = "spend,impressions,clicks,actions";
+  const fields = "spend,impressions,clicks,actions,action_values";
   const url = `${GRAPH}/${actId}/insights?fields=${fields}&time_increment=1&${timeRange(
     since,
     until
@@ -572,6 +589,8 @@ export async function getDailyMetrics(
     impressions: Number(r.impressions || 0),
     clicks: Number(r.clicks || 0),
     conversions: sumConversions(r.actions),
+    purchases: sumPurchaseFamily(r.actions),
+    purchaseValue: sumPurchaseFamily(r.action_values),
   }));
 }
 

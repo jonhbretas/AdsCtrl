@@ -43,14 +43,15 @@ const PERIODS: { period: string; startAgo: number; endAgo: number }[] = [
 
 // Agrega uma fatia da série diária dentro de [since, until] (inclusive).
 function aggregate(daily: DailyMetric[], since: string, until: string) {
-  let spend = 0, impressions = 0, clicks = 0, conversions = 0;
+  let spend = 0, impressions = 0, clicks = 0, conversions = 0, purchases = 0, purchaseValue = 0;
   for (const d of daily) {
     if (d.date >= since && d.date <= until) {
-      spend += d.spend; impressions += d.impressions; clicks += d.clicks; conversions += d.conversions;
+      spend += d.spend; impressions += d.impressions; clicks += d.clicks;
+      conversions += d.conversions; purchases += d.purchases; purchaseValue += d.purchaseValue;
     }
   }
   return {
-    spend, impressions, clicks, conversions,
+    spend, impressions, clicks, conversions, purchases, purchaseValue,
     ctr: impressions ? (clicks / impressions) * 100 : 0,
     cpc: clicks ? spend / clicks : 0,
   };
@@ -120,6 +121,8 @@ async function runCollect() {
             ctr: a.ctr,
             cpc: a.cpc,
             conversions: a.conversions,
+            purchases: a.purchases,
+            purchase_value: a.purchaseValue,
           })
           .select("id")
           .single();
@@ -142,6 +145,7 @@ async function runCollect() {
         account_id: acc.account_id,
         spend: a.spend, impressions: a.impressions, clicks: a.clicks,
         ctr: a.ctr, cpc: a.cpc, conversions: a.conversions,
+        purchases: a.purchases, purchaseValue: a.purchaseValue,
       });
 
       const accAlerts = buildAlertsForAccount({
