@@ -115,6 +115,8 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
   const [alertTab, setAlertTab] = useState<"active" | "history">("active");
   const [history, setHistory] = useState<AlertItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -198,6 +200,27 @@ export default function Dashboard() {
     }
     if (alertTab === "history") await loadHistory();
     setRefreshing(false);
+  }
+
+  // Puxa a lista de contas da Meta na hora (mostra contas recém-adicionadas na BM).
+  async function syncAccounts() {
+    setSyncing(true);
+    setSyncMsg(null);
+    try {
+      const r = await fetch("/api/accounts/sync", { method: "POST" });
+      const d = await r.json();
+      if (!r.ok || d.error) throw new Error(d.error || `Falha (HTTP ${r.status}).`);
+      await load();
+      setSyncMsg(
+        d.added > 0
+          ? `+${d.added} conta(s) nova(s): ${d.addedNames.join(", ")}`
+          : `Nenhuma conta nova. ${d.total} contas visíveis pelo token.`
+      );
+    } catch (e: any) {
+      setSyncMsg(e?.message ?? "Erro ao sincronizar.");
+    } finally {
+      setSyncing(false);
+    }
   }
 
   async function loadHistory() {
@@ -322,9 +345,18 @@ export default function Dashboard() {
           <button onClick={refresh} disabled={refreshing} style={btnStyle}>
             {refreshing ? "Atualizando…" : "↻ Atualizar"}
           </button>
+          <button onClick={syncAccounts} disabled={syncing} style={btnStyle} title="Buscar contas novas adicionadas na BM">
+            {syncing ? "Sincronizando…" : "⇅ Sincronizar contas"}
+          </button>
           <a href="/admin" style={{ ...btnStyle, textDecoration: "none", display: "inline-flex", alignItems: "center" }}>⚙ Grupos</a>
         </div>
       </header>
+
+      {syncMsg && (
+        <div style={{ background: "#e6f1fb", color: "#0c447c", padding: "8px 14px", borderRadius: 8, fontSize: 13, marginBottom: 14 }}>
+          {syncMsg}
+        </div>
+      )}
 
       {/* GRUPOS (chips) */}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
