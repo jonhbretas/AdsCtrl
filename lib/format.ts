@@ -67,6 +67,34 @@ export function resultLabel(actionType: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+// Chaves de action_type para métricas de e-commerce (a Meta usa variações).
+export const PURCHASE_KEYS = ["omni_purchase", "purchase", "offsite_conversion.fb_pixel_purchase"];
+export const ATC_KEYS = ["omni_add_to_cart", "add_to_cart", "offsite_conversion.fb_pixel_add_to_cart"];
+export const CHECKOUT_KEYS = [
+  "omni_initiated_checkout",
+  "initiate_checkout",
+  "offsite_conversion.fb_pixel_initiate_checkout",
+];
+export const LINKCLICK_KEYS = ["link_click"];
+
+// Pega o primeiro valor presente entre várias chaves possíveis.
+export function pickVal(map: Record<string, number> | undefined, keys: string[]): number {
+  if (!map) return 0;
+  for (const k of keys) if (map[k]) return map[k];
+  return 0;
+}
+
+// Variação percentual vs período anterior.
+export function delta(cur: number, prev: number): { pct: number; hasPrev: boolean } {
+  if (!prev || prev === 0) return { pct: 0, hasPrev: false };
+  return { pct: ((cur - prev) / prev) * 100, hasPrev: true };
+}
+
+export const roas = (value: number, spend: number) => (spend > 0 ? value / spend : 0);
+
+const WEEKDAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+export const weekdayLabel = (iso: string) => WEEKDAYS[new Date(iso + "T00:00:00").getDay()];
+
 export const dayLabel = (iso: string) => {
   const d = new Date(iso + "T00:00:00");
   return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }).replace(".", "");

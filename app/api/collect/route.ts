@@ -7,6 +7,7 @@ import {
   listAdAccounts,
   getAccountInsights,
   getRejectedAds,
+  getDailySpend,
   mapAccountStatus,
   centsToUnit,
 } from "@/lib/meta";
@@ -66,23 +67,47 @@ export async function GET(req: Request) {
         { onConflict: "account_id", ignoreDuplicates: false }
       );
 
-      // Insights dos dois períodos + reprovados (em paralelo)
-      const [ins7, insPrev, rejected] = await Promise.all([
+      // Insights dos dois períodos + reprovados + série diária (em paralelo)
+      const [ins7, insPrev, rejected, daily] = await Promise.all([
         getAccountInsights(acc.id, last7).catch(() => null),
         getAccountInsights(acc.id, prev7).catch(() => null),
         getRejectedAds(acc.id).catch(() => []),
+        getDailySpend(acc.id, last7.since, last7.until).catch(() => []),
       ]);
 
       if (ins7) {
+        // Insere só com colunas garantidas; "daily" vai num update best-effort
+        // para não quebrar caso a migração de métricas ainda não tenha rodado.
+        const { data: snap } = await supabase
+          .from("metric_snapshots")
+          .insert({
+            account_id: acc.account_id,
+            period: "last_7d",
+            spend: ins7.spend,
+            impressions: ins7.impressions,
+            clicks: ins7.clicks,
+            ctr: ins7.ctr,
+            cpc: ins7.cpc,
+            conversions: ins7.conversions,
+          })
+          .select("id")
+          .single();
+        if (snap?.id && daily.length > 0) {
+          await supabase.from("metric_snapshots").update({ daily }).eq("id", snap.id);
+        }
+      }
+
+      // Snapshot do período anterior (para deltas agregados no topo).
+      if (insPrev) {
         await supabase.from("metric_snapshots").insert({
           account_id: acc.account_id,
-          period: "last_7d",
-          spend: ins7.spend,
-          impressions: ins7.impressions,
-          clicks: ins7.clicks,
-          ctr: ins7.ctr,
-          cpc: ins7.cpc,
-          conversions: ins7.conversions,
+          period: "prev_7d",
+          spend: insPrev.spend,
+          impressions: insPrev.impressions,
+          clicks: insPrev.clicks,
+          ctr: insPrev.ctr,
+          cpc: insPrev.cpc,
+          conversions: insPrev.conversions,
         });
       }
 

@@ -33,7 +33,8 @@ create table if not exists metric_snapshots (
   clicks bigint default 0,
   ctr numeric default 0,
   cpc numeric default 0,
-  conversions numeric default 0
+  conversions numeric default 0,
+  daily jsonb                            -- [{date, spend}] p/ sparkline (period last_7d)
 );
 
 -- Alertas (estado atual + histórico). Identidade estável por conta+tipo.

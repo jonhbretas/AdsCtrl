@@ -18,24 +18,34 @@ export async function GET() {
     }
 
     const supabase = getServiceClient();
-    const [{ data: accounts }, { data: groups }, { data: alerts }, { data: snaps }] =
+    const [{ data: accounts }, { data: groups }, { data: alerts }, { data: snaps }, { data: prevSnaps }] =
       await Promise.all([
         supabase.from("ad_accounts").select("*").order("name"),
         supabase.from("client_groups").select("*").order("name"),
         // Filtra "acknowledged" em JS (não em SQL) para funcionar mesmo antes
         // da migração que adiciona a coluna.
         supabase.from("alerts").select("*").eq("resolved", false),
+        // select("*") para não quebrar caso a coluna "daily" ainda não exista.
         supabase
           .from("metric_snapshots")
-          .select("account_id, spend, conversions, cpc, captured_at, period")
+          .select("*")
           .eq("period", "last_7d")
+          .order("captured_at", { ascending: false }),
+        supabase
+          .from("metric_snapshots")
+          .select("account_id, spend, conversions, captured_at, period")
+          .eq("period", "prev_7d")
           .order("captured_at", { ascending: false }),
       ]);
 
-    // Pega o snapshot mais recente por conta
+    // Pega o snapshot mais recente por conta (atual e anterior)
     const latestByAccount: Record<string, any> = {};
     for (const s of snaps || []) {
       if (!latestByAccount[s.account_id]) latestByAccount[s.account_id] = s;
+    }
+    const prevByAccount: Record<string, any> = {};
+    for (const s of prevSnaps || []) {
+      if (!prevByAccount[s.account_id]) prevByAccount[s.account_id] = s;
     }
 
     // Ativos = não resolvidos e não marcados como "ciente".
@@ -44,6 +54,7 @@ export async function GET() {
     const enriched = (accounts || []).map((a) => ({
       ...a,
       metrics: latestByAccount[a.account_id] || null,
+      prevMetrics: prevByAccount[a.account_id] || null,
       alerts: activeAlerts.filter((al) => al.account_id === a.account_id),
     }));
 

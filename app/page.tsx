@@ -5,12 +5,17 @@
 
 import { useEffect, useMemo, useState } from "react";
 import AccountDetail from "@/components/AccountDetail";
-import { brl, num } from "@/lib/format";
+import { brl, num, delta } from "@/lib/format";
 
 interface Metrics {
   spend: number;
   conversions: number;
   cpc: number;
+  daily?: { date: string; spend: number }[] | null;
+}
+interface PrevMetrics {
+  spend: number;
+  conversions: number;
 }
 interface AlertItem {
   id: number;
@@ -34,6 +39,7 @@ interface Account {
   group_id: string | null;
   updated_at?: string;
   metrics: Metrics | null;
+  prevMetrics: PrevMetrics | null;
   alerts: AlertItem[];
 }
 interface Group {
@@ -164,7 +170,12 @@ export default function Dashboard() {
   const totals = useMemo(() => {
     const spend = filtered.reduce((s, a) => s + (a.metrics?.spend || 0), 0);
     const conv = filtered.reduce((s, a) => s + (a.metrics?.conversions || 0), 0);
-    return { spend, conv, cpa: conv ? spend / conv : 0 };
+    const prevSpend = filtered.reduce((s, a) => s + (a.prevMetrics?.spend || 0), 0);
+    const prevConv = filtered.reduce((s, a) => s + (a.prevMetrics?.conversions || 0), 0);
+    return {
+      spend, conv, cpa: conv ? spend / conv : 0,
+      prevSpend, prevConv, prevCpa: prevConv ? prevSpend / prevConv : 0,
+    };
   }, [filtered]);
 
   const visibleAlerts = useMemo(() => {
@@ -254,11 +265,11 @@ export default function Dashboard() {
         <span style={{ fontSize: 12, color: "#aaa" }}>{range.since} → {range.until}</span>
       </div>
 
-      {/* KPIs GERAIS */}
+      {/* KPIs GERAIS (agregado 7d vs período anterior) */}
       <section style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 20 }}>
-        <Kpi label={`Investimento (${days}d)`} value={brl(totals.spend, 0)} />
-        <Kpi label="Conversões" value={num(totals.conv)} />
-        <Kpi label="CPA médio" value={brl(totals.cpa)} />
+        <Kpi label="Investimento (7d)" value={brl(totals.spend, 0)} cur={totals.spend} prev={totals.prevSpend} neutral />
+        <Kpi label="Conversões (7d)" value={num(totals.conv)} cur={totals.conv} prev={totals.prevConv} />
+        <Kpi label="CPA médio" value={brl(totals.cpa)} cur={totals.cpa} prev={totals.prevCpa} invert />
       </section>
 
       {/* LAYOUT: alertas (esq) + tabela (centro) */}
@@ -343,10 +354,11 @@ export default function Dashboard() {
 
         {/* TABELA */}
         <main style={{ border: "1px solid #eee", borderRadius: 14, overflow: "hidden", background: "#fff" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 90px 160px 150px 40px", padding: "12px 16px", borderBottom: "1px solid #f0f0f0", fontSize: 12, color: "#999", fontWeight: 600 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 64px 90px 150px 130px 36px", padding: "12px 16px", borderBottom: "1px solid #f0f0f0", fontSize: 12, color: "#999", fontWeight: 600, alignItems: "center" }}>
             <span>Cliente</span>
             <span>Canais</span>
-            <span style={{ textAlign: "right" }}>Investimento ({days}d)</span>
+            <span style={{ textAlign: "center" }}>Tendência 7d</span>
+            <span style={{ textAlign: "right" }}>Investimento (7d)</span>
             <span style={{ textAlign: "right" }}>Saldo Meta</span>
             <span />
           </div>
@@ -358,7 +370,7 @@ export default function Dashboard() {
               <div key={a.account_id} style={{ borderBottom: "1px solid #f4f4f4" }}>
                 <div
                   onClick={() => setExpanded(open ? null : a.account_id)}
-                  style={{ display: "grid", gridTemplateColumns: "1fr 90px 160px 150px 40px", padding: "12px 16px", alignItems: "center", cursor: "pointer", background: open ? "#fafafa" : "#fff" }}
+                  style={{ display: "grid", gridTemplateColumns: "1fr 64px 90px 150px 130px 36px", padding: "12px 16px", alignItems: "center", cursor: "pointer", background: open ? "#fafafa" : "#fff" }}
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
                     <span style={{ width: 30, height: 30, borderRadius: "50%", background: g?.color || "#cbd5e1", color: "#fff", display: "grid", placeItems: "center", fontSize: 13, fontWeight: 700, flexShrink: 0 }}>
@@ -374,6 +386,9 @@ export default function Dashboard() {
                   </div>
                   <div style={{ display: "flex", gap: 4 }}>
                     <span title="Meta / Instagram" style={{ fontSize: 12, width: 22, height: 22, borderRadius: 6, background: "#e7f0fd", color: "#1877f2", display: "grid", placeItems: "center", fontWeight: 700 }}>f</span>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "center" }}>
+                    <Sparkline points={(a.metrics?.daily || []).map((d) => d.spend)} color={g?.color || "#3987e5"} />
                   </div>
                   <div style={{ textAlign: "right", fontSize: 14, fontWeight: 600 }}>{brl(a.metrics?.spend || 0)}</div>
                   <div style={{ textAlign: "right", fontSize: 14, color: a.balance != null && a.balance > 0 ? "#111" : "#bbb" }}>
@@ -472,12 +487,43 @@ function Empty({ children }: { children: React.ReactNode }) {
   return <div style={{ fontSize: 13, color: "#bbb", padding: "8px 2px" }}>{children}</div>;
 }
 
-function Kpi({ label, value }: { label: string; value: string }) {
+function Kpi({ label, value, cur, prev, invert, neutral }: { label: string; value: string; cur?: number; prev?: number; invert?: boolean; neutral?: boolean }) {
+  const d = cur != null && prev != null ? delta(cur, prev) : null;
+  let badge = null;
+  if (d && d.hasPrev) {
+    const up = d.pct >= 0;
+    const good = invert ? !up : up;
+    const color = neutral || Math.abs(d.pct) < 0.05 ? "#999" : good ? "#16a34a" : "#dc2626";
+    badge = (
+      <span style={{ fontSize: 12, fontWeight: 600, color }}>
+        {up ? "▲" : "▼"} {Math.abs(d.pct).toFixed(1)}% <span style={{ color: "#aaa", fontWeight: 400 }}>vs. ant.</span>
+      </span>
+    );
+  }
   return (
     <div style={{ background: "#f7f7f5", borderRadius: 12, padding: "16px 18px" }}>
       <div style={{ fontSize: 13, color: "#888" }}>{label}</div>
       <div style={{ fontSize: 26, fontWeight: 700, marginTop: 4 }}>{value}</div>
+      <div style={{ marginTop: 4, minHeight: 16 }}>{badge}</div>
     </div>
+  );
+}
+
+// Mini-gráfico de tendência (7 dias) em SVG.
+function Sparkline({ points, color = "#3987e5", width = 84, height = 26 }: { points: number[]; color?: string; width?: number; height?: number }) {
+  if (!points || points.length < 2) return <div style={{ width, height }} />;
+  const max = Math.max(...points, 1);
+  const min = Math.min(...points, 0);
+  const span = max - min || 1;
+  const step = width / (points.length - 1);
+  const coords = points.map((v, i) => [i * step, height - ((v - min) / span) * (height - 4) - 2]);
+  const path = coords.map(([x, y], i) => `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+  const area = `${path} L${width},${height} L0,${height} Z`;
+  return (
+    <svg width={width} height={height} style={{ display: "block" }}>
+      <path d={area} fill={color + "18"} />
+      <path d={path} fill="none" stroke={color} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
   );
 }
 

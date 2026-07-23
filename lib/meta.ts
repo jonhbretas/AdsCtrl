@@ -233,6 +233,7 @@ export interface DailyPoint {
   cpm: number;
   reach: number;
   results: Record<string, number>;
+  values: Record<string, number>; // action_values (valor de conversão)
 }
 
 export interface RowInsight {
@@ -244,6 +245,7 @@ export interface RowInsight {
   ctr: number;
   cpm: number;
   results: Record<string, number>;
+  values: Record<string, number>;
   objective?: string;
   thumbnail?: string;
 }
@@ -256,20 +258,26 @@ export interface BreakdownRow {
   ctr: number;
   cpm: number;
   results: Record<string, number>;
+  values: Record<string, number>;
+}
+
+export interface Kpis {
+  spend: number;
+  reach: number;
+  impressions: number;
+  clicks: number;
+  ctr: number;
+  cpm: number;
+  results: Record<string, number>;
+  values: Record<string, number>;
 }
 
 export interface AccountDetail {
   account_id: string;
   range: { since: string; until: string };
-  kpis: {
-    spend: number;
-    reach: number;
-    impressions: number;
-    clicks: number;
-    ctr: number;
-    cpm: number;
-    results: Record<string, number>;
-  };
+  prevRange: { since: string; until: string };
+  kpis: Kpis;
+  prevKpis: Kpis;
   daily: DailyPoint[];
   campaigns: RowInsight[];
   adsets: RowInsight[];
@@ -279,13 +287,15 @@ export interface AccountDetail {
     region: BreakdownRow[];
     platform: BreakdownRow[];
     position: BreakdownRow[];
+    device: BreakdownRow[];
+    hour: BreakdownRow[];
   };
   availableResults: string[]; // action_types presentes no período
 }
 
 // Série diária de uma conta.
 async function fetchDaily(actId: string, since: string, until: string): Promise<DailyPoint[]> {
-  const fields = "spend,impressions,clicks,ctr,cpm,reach,actions";
+  const fields = "spend,impressions,clicks,ctr,cpm,reach,actions,action_values";
   const url = `${GRAPH}/${actId}/insights?fields=${fields}&time_increment=1&${timeRange(
     since,
     until
@@ -300,6 +310,7 @@ async function fetchDaily(actId: string, since: string, until: string): Promise<
     cpm: Number(r.cpm || 0),
     reach: Number(r.reach || 0),
     results: actionsToMap(r.actions),
+    values: actionsToMap(r.action_values),
   }));
 }
 
@@ -312,7 +323,7 @@ async function fetchLevel(
 ): Promise<RowInsight[]> {
   const nameField = level === "campaign" ? "campaign_name" : level === "adset" ? "adset_name" : "ad_name";
   const idField = level === "campaign" ? "campaign_id" : level === "adset" ? "adset_id" : "ad_id";
-  const fields = `${nameField},${idField},spend,impressions,clicks,ctr,cpm,actions,objective`;
+  const fields = `${nameField},${idField},spend,impressions,clicks,ctr,cpm,actions,action_values,objective`;
   const url = `${GRAPH}/${actId}/insights?level=${level}&fields=${fields}&limit=200&${timeRange(
     since,
     until
@@ -327,6 +338,7 @@ async function fetchLevel(
     ctr: Number(r.ctr || 0),
     cpm: Number(r.cpm || 0),
     results: actionsToMap(r.actions),
+    values: actionsToMap(r.action_values),
     objective: r.objective,
   }));
 }
@@ -339,7 +351,7 @@ async function fetchBreakdown(
   since: string,
   until: string
 ): Promise<BreakdownRow[]> {
-  const fields = "spend,impressions,clicks,ctr,cpm,actions";
+  const fields = "spend,impressions,clicks,ctr,cpm,actions,action_values";
   const url = `${GRAPH}/${actId}/insights?fields=${fields}&breakdowns=${breakdowns}&limit=500&${timeRange(
     since,
     until
@@ -353,6 +365,7 @@ async function fetchBreakdown(
     ctr: Number(r.ctr || 0),
     cpm: Number(r.cpm || 0),
     results: actionsToMap(r.actions),
+    values: actionsToMap(r.action_values),
   }));
 }
 
@@ -373,8 +386,8 @@ async function fetchAdThumbnails(actId: string): Promise<Record<string, string>>
 }
 
 // KPI agregado da conta (sem time_increment, para reach correto).
-async function fetchAccountKpis(actId: string, since: string, until: string) {
-  const fields = "spend,impressions,clicks,ctr,cpm,reach,actions";
+async function fetchAccountKpis(actId: string, since: string, until: string): Promise<Kpis> {
+  const fields = "spend,impressions,clicks,ctr,cpm,reach,actions,action_values";
   const url = `${GRAPH}/${actId}/insights?fields=${fields}&${timeRange(since, until)}&access_token=${TOKEN}`;
   const rows = await fbGetAll<any>(url);
   const r = rows[0] || {};
@@ -386,7 +399,38 @@ async function fetchAccountKpis(actId: string, since: string, until: string) {
     cpm: Number(r.cpm || 0),
     reach: Number(r.reach || 0),
     results: actionsToMap(r.actions),
+    values: actionsToMap(r.action_values),
   };
+}
+
+const EMPTY_KPIS: Kpis = {
+  spend: 0, reach: 0, impressions: 0, clicks: 0, ctr: 0, cpm: 0, results: {}, values: {},
+};
+
+// Calcula o período imediatamente anterior, de mesma duração.
+function previousRange(since: string, until: string): { since: string; until: string } {
+  const s = new Date(since + "T00:00:00Z");
+  const u = new Date(until + "T00:00:00Z");
+  const days = Math.max(1, Math.round((u.getTime() - s.getTime()) / 86400000) + 1);
+  const prevUntil = new Date(s.getTime() - 86400000);
+  const prevSince = new Date(prevUntil.getTime() - (days - 1) * 86400000);
+  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+  return { since: fmt(prevSince), until: fmt(prevUntil) };
+}
+
+// Série diária leve (só spend) — usada no collect para os sparklines.
+export async function getDailySpend(
+  actId: string,
+  since: string,
+  until: string
+): Promise<{ date: string; spend: number }[]> {
+  if (!actId.startsWith("act_")) actId = `act_${actId}`;
+  const url = `${GRAPH}/${actId}/insights?fields=spend&time_increment=1&${timeRange(
+    since,
+    until
+  )}&access_token=${TOKEN}`;
+  const rows = await fbGetAll<any>(url);
+  return rows.map((r) => ({ date: r.date_start, spend: Number(r.spend || 0) }));
 }
 
 // Compõe todo o detalhe de uma conta em paralelo.
@@ -395,27 +439,50 @@ export async function getAccountDetail(
   since: string,
   until: string
 ): Promise<AccountDetail> {
-  const [kpis, daily, campaigns, adsets, ads, ageGender, region, platform, position, thumbs] =
-    await Promise.all([
-      fetchAccountKpis(actId, since, until),
-      fetchDaily(actId, since, until).catch(() => []),
-      fetchLevel(actId, "campaign", since, until).catch(() => []),
-      fetchLevel(actId, "adset", since, until).catch(() => []),
-      fetchLevel(actId, "ad", since, until).catch(() => []),
-      fetchBreakdown(actId, "age,gender", (r) => `${r.age} · ${r.gender}`, since, until).catch(() => []),
-      fetchBreakdown(actId, "region", (r) => r.region || "—", since, until).catch(() => []),
-      fetchBreakdown(actId, "publisher_platform", (r) => r.publisher_platform || "—", since, until).catch(
-        () => []
-      ),
-      fetchBreakdown(
-        actId,
-        "publisher_platform,platform_position",
-        (r) => `${r.publisher_platform} · ${r.platform_position}`,
-        since,
-        until
-      ).catch(() => []),
-      fetchAdThumbnails(actId).catch(() => ({} as Record<string, string>)),
-    ]);
+  const prev = previousRange(since, until);
+  const [
+    kpis,
+    prevKpis,
+    daily,
+    campaigns,
+    adsets,
+    ads,
+    ageGender,
+    region,
+    platform,
+    position,
+    device,
+    hour,
+    thumbs,
+  ] = await Promise.all([
+    fetchAccountKpis(actId, since, until),
+    fetchAccountKpis(actId, prev.since, prev.until).catch(() => EMPTY_KPIS),
+    fetchDaily(actId, since, until).catch(() => []),
+    fetchLevel(actId, "campaign", since, until).catch(() => []),
+    fetchLevel(actId, "adset", since, until).catch(() => []),
+    fetchLevel(actId, "ad", since, until).catch(() => []),
+    fetchBreakdown(actId, "age,gender", (r) => `${r.age} · ${r.gender}`, since, until).catch(() => []),
+    fetchBreakdown(actId, "region", (r) => r.region || "—", since, until).catch(() => []),
+    fetchBreakdown(actId, "publisher_platform", (r) => r.publisher_platform || "—", since, until).catch(
+      () => []
+    ),
+    fetchBreakdown(
+      actId,
+      "publisher_platform,platform_position",
+      (r) => `${r.publisher_platform} · ${r.platform_position}`,
+      since,
+      until
+    ).catch(() => []),
+    fetchBreakdown(actId, "device_platform", (r) => r.device_platform || "—", since, until).catch(() => []),
+    fetchBreakdown(
+      actId,
+      "hourly_stats_aggregated_by_advertiser_time_zone",
+      (r) => (r.hourly_stats_aggregated_by_advertiser_time_zone || "").slice(0, 5),
+      since,
+      until
+    ).catch(() => []),
+    fetchAdThumbnails(actId).catch(() => ({} as Record<string, string>)),
+  ]);
 
   // Anexa thumbnails aos anúncios.
   for (const ad of ads) ad.thumbnail = thumbs[ad.id];
@@ -428,7 +495,9 @@ export async function getAccountDetail(
   return {
     account_id: actId,
     range: { since, until },
+    prevRange: prev,
     kpis,
+    prevKpis,
     daily,
     campaigns: campaigns.sort((a, b) => b.spend - a.spend),
     adsets: adsets.sort((a, b) => b.spend - a.spend),
@@ -438,6 +507,8 @@ export async function getAccountDetail(
       region: region.sort((a, b) => b.spend - a.spend),
       platform: platform.sort((a, b) => b.spend - a.spend),
       position: position.sort((a, b) => b.spend - a.spend),
+      device: device.sort((a, b) => b.spend - a.spend),
+      hour: hour.sort((a, b) => a.key.localeCompare(b.key)),
     },
     availableResults: [...resultSet],
   };
