@@ -9,7 +9,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import AccountDetail from "@/components/AccountDetail";
-import { brl, num, delta } from "@/lib/format";
+import { brl, num, delta, RESULT_FAMILIES, RESULT_FAMILY_BY_SLUG } from "@/lib/format";
 
 interface Metrics {
   spend: number;
@@ -17,6 +17,7 @@ interface Metrics {
   purchases?: number;
   purchase_value?: number; // snapshot (cache)
   value?: number; // overview ao vivo
+  results?: Record<string, number> | null; // por família (vendas/mensagens/...)
   cpc?: number;
   daily?: { date: string; spend: number }[] | null;
 }
@@ -26,6 +27,7 @@ interface PrevMetrics {
   purchases?: number;
   purchase_value?: number;
   value?: number;
+  results?: Record<string, number> | null;
 }
 interface AlertItem {
   id: number;
@@ -113,6 +115,7 @@ export default function Dashboard() {
   const [onlyActive, setOnlyActive] = useState(true);
   const [search, setSearch] = useState("");
   const [period, setPeriod] = useState<Period>("7d");
+  const [focus, setFocus] = useState<string>("vendas");
   const [customSince, setCustomSince] = useState(isoDaysAgo(7));
   const [customUntil, setCustomUntil] = useState(isoDaysAgo(1));
   const [showCustom, setShowCustom] = useState(false);
@@ -137,14 +140,18 @@ export default function Dashboard() {
   const liveReady = !isLive || !!live;
 
   // Forma normalizada (cache usa purchase_value; live usa value).
-  type M = { spend: number; conversions: number; purchases: number; value: number; daily: { date: string; spend: number }[] };
-  const norm = (m?: Metrics | PrevMetrics | null): M => ({
-    spend: m?.spend || 0,
-    conversions: m?.conversions || 0,
-    purchases: m?.purchases || 0,
-    value: (m as Metrics)?.value ?? m?.purchase_value ?? 0,
-    daily: (m as Metrics)?.daily || [],
-  });
+  type M = { spend: number; conversions: number; value: number; results: Record<string, number>; result: number; daily: { date: string; spend: number }[] };
+  const norm = (m?: Metrics | PrevMetrics | null): M => {
+    const results = m?.results || {};
+    return {
+      spend: m?.spend || 0,
+      conversions: m?.conversions || 0,
+      value: (m as Metrics)?.value ?? m?.purchase_value ?? 0,
+      results,
+      result: results[focus] || 0, // resultado do foco selecionado
+      daily: (m as Metrics)?.daily || [],
+    };
+  };
 
   // Métricas da conta no período selecionado (cache p/ presets, live p/ hoje/custom).
   function accMetrics(a: Account): M {
@@ -317,21 +324,23 @@ export default function Dashboard() {
   }, [accounts, groupFilter, onlyActive, search, showHidden, period, live]);
 
   const totals = useMemo(() => {
-    let spend = 0, conv = 0, purch = 0, val = 0;
-    let prevSpend = 0, prevConv = 0, prevPurch = 0, prevVal = 0;
+    let spend = 0, res = 0, val = 0;
+    let prevSpend = 0, prevRes = 0, prevVal = 0;
     for (const a of filtered) {
       const m = accMetrics(a), p = accPrev(a);
-      spend += m.spend; conv += m.conversions; purch += m.purchases; val += m.value;
-      prevSpend += p.spend; prevConv += p.conversions; prevPurch += p.purchases; prevVal += p.value;
+      spend += m.spend; res += m.result; val += m.value;
+      prevSpend += p.spend; prevRes += p.result; prevVal += p.value;
     }
     return {
-      spend, conv, cpa: conv ? spend / conv : 0,
-      purch, val, roas: spend ? val / spend : 0,
-      prevSpend, prevConv, prevCpa: prevConv ? prevSpend / prevConv : 0,
-      prevPurch, prevVal, prevRoas: prevSpend ? prevVal / prevSpend : 0,
+      spend, res, val,
+      cpr: res ? spend / res : 0,
+      roas: spend ? val / spend : 0,
+      prevSpend, prevRes, prevVal,
+      prevCpr: prevRes ? prevSpend / prevRes : 0,
+      prevRoas: prevSpend ? prevVal / prevSpend : 0,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtered, period, live]);
+  }, [filtered, period, live, focus]);
 
   const visibleAlerts = useMemo(() => {
     const names = new Set(filtered.map((a) => a.name));
@@ -354,6 +363,7 @@ export default function Dashboard() {
 
   const groupById = (id: string | null) => groups.find((g) => g.id === id);
   const short = PERIOD_SHORT[period];
+  const fam = RESULT_FAMILY_BY_SLUG[focus] || RESULT_FAMILIES[0];
 
   if (loading) return <Center>Carregando overview…</Center>;
   if (error)
@@ -407,7 +417,15 @@ export default function Dashboard() {
           <option value="active">Somente ativas</option>
           <option value="all">Todas as contas</option>
         </select>
-        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Pesquisar conta…" style={{ ...selectStyle, minWidth: 220 }} />
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Pesquisar conta…" style={{ ...selectStyle, minWidth: 200 }} />
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: "#888" }}>
+          Foco:
+          <select value={focus} onChange={(e) => setFocus(e.target.value)} style={selectStyle} title="Resultado principal do negócio (vendas, mensagens, leads…)">
+            {RESULT_FAMILIES.map((f) => (
+              <option key={f.slug} value={f.slug}>{f.label}</option>
+            ))}
+          </select>
+        </label>
         {hiddenCount > 0 && (
           <button
             onClick={() => setShowHidden((v) => !v)}
@@ -450,14 +468,17 @@ export default function Dashboard() {
         {!isLive && <span style={{ fontSize: 12, color: "#bbb" }}>cache (atualiza 1x/dia) · não inclui hoje</span>}
       </div>
 
-      {/* KPIs GERAIS (agregado do período vs período anterior) */}
+      {/* KPIs GERAIS (agregado do período vs período anterior, guiado pelo foco) */}
       <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginBottom: 20 }}>
         <Kpi label={`Investimento (${short})`} value={liveReady ? brl(totals.spend, 0) : "…"} cur={totals.spend} prev={totals.prevSpend} neutral />
-        <Kpi label={`Conversões (${short})`} value={liveReady ? num(totals.conv) : "…"} cur={totals.conv} prev={totals.prevConv} />
-        <Kpi label="CPA médio" value={liveReady ? brl(totals.cpa) : "…"} cur={totals.cpa} prev={totals.prevCpa} invert />
-        <Kpi label={`Compras (${short})`} value={liveReady ? num(totals.purch) : "…"} cur={totals.purch} prev={totals.prevPurch} />
-        <Kpi label="Valor de compra" value={liveReady ? brl(totals.val, 0) : "…"} cur={totals.val} prev={totals.prevVal} />
-        <Kpi label="ROAS" value={liveReady ? `${totals.roas.toFixed(2)}x` : "…"} cur={totals.roas} prev={totals.prevRoas} />
+        <Kpi label={`${fam.label} (${short})`} value={liveReady ? num(totals.res) : "…"} cur={totals.res} prev={totals.prevRes} />
+        <Kpi label={`Custo por resultado`} value={liveReady ? brl(totals.cpr) : "…"} cur={totals.cpr} prev={totals.prevCpr} invert />
+        {fam.sales && (
+          <>
+            <Kpi label="Valor de compra" value={liveReady ? brl(totals.val, 0) : "…"} cur={totals.val} prev={totals.prevVal} />
+            <Kpi label="ROAS" value={liveReady ? `${totals.roas.toFixed(2)}x` : "…"} cur={totals.roas} prev={totals.prevRoas} />
+          </>
+        )}
       </section>
 
       {/* LAYOUT: alertas (esq) + tabela (centro) */}
@@ -547,7 +568,7 @@ export default function Dashboard() {
             <span>Canais</span>
             <span style={{ textAlign: "center" }}>Tendência</span>
             <span style={{ textAlign: "right" }}>Investimento ({short})</span>
-            <span style={{ textAlign: "right" }}>Compras</span>
+            <span style={{ textAlign: "right" }}>{fam.label.split(" ")[0]}</span>
             <span style={{ textAlign: "right" }}>Saldo Meta</span>
             <span />
             <span />
@@ -585,10 +606,10 @@ export default function Dashboard() {
                   </div>
                   <div style={{ textAlign: "right", fontSize: 14, fontWeight: 600 }}>{brl(m.spend)}</div>
                   <div style={{ textAlign: "right" }}>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: m.purchases > 0 ? "#111" : "#bbb" }}>
-                      {m.purchases > 0 ? num(m.purchases) : "—"}
+                    <div style={{ fontSize: 14, fontWeight: 600, color: m.result > 0 ? "#111" : "#bbb" }}>
+                      {m.result > 0 ? num(m.result) : "—"}
                     </div>
-                    {m.value > 0 && m.spend > 0 && (
+                    {fam.sales && m.value > 0 && m.spend > 0 && (
                       <div style={{ fontSize: 10.5, color: "#16a34a" }}>{(m.value / m.spend).toFixed(1)}x ROAS</div>
                     )}
                   </div>

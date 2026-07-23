@@ -43,15 +43,18 @@ const PERIODS: { period: string; startAgo: number; endAgo: number }[] = [
 
 // Agrega uma fatia da série diária dentro de [since, until] (inclusive).
 function aggregate(daily: DailyMetric[], since: string, until: string) {
-  let spend = 0, impressions = 0, clicks = 0, conversions = 0, purchases = 0, purchaseValue = 0;
+  let spend = 0, impressions = 0, clicks = 0, conversions = 0, purchaseValue = 0;
+  const results: Record<string, number> = {};
   for (const d of daily) {
     if (d.date >= since && d.date <= until) {
       spend += d.spend; impressions += d.impressions; clicks += d.clicks;
-      conversions += d.conversions; purchases += d.purchases; purchaseValue += d.purchaseValue;
+      conversions += d.conversions; purchaseValue += d.purchaseValue;
+      for (const [slug, n] of Object.entries(d.results)) results[slug] = (results[slug] || 0) + n;
     }
   }
   return {
-    spend, impressions, clicks, conversions, purchases, purchaseValue,
+    spend, impressions, clicks, conversions, purchaseValue, results,
+    purchases: results["vendas"] || 0,
     ctr: impressions ? (clicks / impressions) * 100 : 0,
     cpc: clicks ? spend / clicks : 0,
   };
@@ -123,6 +126,7 @@ async function runCollect() {
             conversions: a.conversions,
             purchases: a.purchases,
             purchase_value: a.purchaseValue,
+            results: a.results,
           })
           .select("id")
           .single();
@@ -145,7 +149,7 @@ async function runCollect() {
         account_id: acc.account_id,
         spend: a.spend, impressions: a.impressions, clicks: a.clicks,
         ctr: a.ctr, cpc: a.cpc, conversions: a.conversions,
-        purchases: a.purchases, purchaseValue: a.purchaseValue,
+        purchases: a.purchases, purchaseValue: a.purchaseValue, results: a.results,
       });
 
       const accAlerts = buildAlertsForAccount({

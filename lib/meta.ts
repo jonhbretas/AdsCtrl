@@ -3,6 +3,8 @@
 // Suporta VÁRIOS tokens (um System User por BM). Cada conta é consultada com o
 // token que a enxerga; contas duplicadas entre tokens são deduplicadas.
 
+import { RESULT_FAMILIES } from "./format";
+
 const GRAPH = "https://graph.facebook.com/v25.0";
 
 // Tokens: primário em META_ACCESS_TOKEN; extras em META_ACCESS_TOKENS
@@ -94,6 +96,7 @@ export interface AccountInsight {
   conversions: number;
   purchases: number;
   purchaseValue: number; // receita das compras (R$)
+  results: Record<string, number>; // por família (vendas/mensagens/leads/...)
 }
 
 export interface RejectedAd {
@@ -219,6 +222,20 @@ function sumPurchaseFamily(items?: { action_type: string; value?: string }[]): n
   return best;
 }
 
+// Conta cada FAMÍLIA de resultado (vendas/mensagens/leads/...) fazendo dedupe
+// (maior valor entre as chaves da família). Retorna um mapa slug -> quantidade.
+function familyCounts(actions?: { action_type: string; value?: string }[]): Record<string, number> {
+  const map: Record<string, number> = {};
+  for (const a of actions || []) map[a.action_type] = (map[a.action_type] || 0) + Number(a.value || 0);
+  const out: Record<string, number> = {};
+  for (const f of RESULT_FAMILIES) {
+    let best = 0;
+    for (const k of f.keys) if (map[k] != null) best = Math.max(best, map[k]);
+    out[f.slug] = best;
+  }
+  return out;
+}
+
 // Puxa insights de gasto de uma conta para um intervalo de datas.
 // datePreset ex: "last_7d", ou passe since/until.
 export async function getAccountInsights(
@@ -249,6 +266,7 @@ export async function getAccountInsights(
     conversions,
     purchases: sumPurchaseFamily(r.actions),
     purchaseValue: sumPurchaseFamily(r.action_values),
+    results: familyCounts(r.actions),
   };
 }
 
@@ -566,8 +584,8 @@ export interface DailyMetric {
   impressions: number;
   clicks: number;
   conversions: number;
-  purchases: number;
   purchaseValue: number;
+  results: Record<string, number>; // por família (vendas/mensagens/leads/...)
 }
 
 export async function getDailyMetrics(
@@ -589,8 +607,8 @@ export async function getDailyMetrics(
     impressions: Number(r.impressions || 0),
     clicks: Number(r.clicks || 0),
     conversions: sumConversions(r.actions),
-    purchases: sumPurchaseFamily(r.actions),
     purchaseValue: sumPurchaseFamily(r.action_values),
+    results: familyCounts(r.actions),
   }));
 }
 

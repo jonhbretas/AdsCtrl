@@ -67,6 +67,28 @@ export function resultLabel(actionType: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+// "Foco" do negócio para os KPIs/coluna principal do overview. Cada família
+// agrupa as variações de action_type da Meta que representam o mesmo resultado.
+// (compartilhado entre servidor — coleta/overview — e cliente — labels/seletor).
+export interface ResultFamily {
+  slug: string;
+  label: string;
+  keys: string[];
+  sales?: boolean; // habilita valor de compra + ROAS
+}
+export const RESULT_FAMILIES: ResultFamily[] = [
+  { slug: "vendas", label: "Vendas / Compras", sales: true, keys: ["purchase", "omni_purchase", "offsite_conversion.fb_pixel_purchase"] },
+  { slug: "mensagens", label: "Mensagens (conversas)", keys: ["onsite_conversion.messaging_conversation_started_7d", "onsite_conversion.total_messaging_connection", "onsite_conversion.messaging_first_reply"] },
+  { slug: "leads", label: "Leads", keys: ["lead", "offsite_conversion.fb_pixel_lead", "onsite_web_lead", "onsite_conversion.lead_grouped", "leadgen_grouped"] },
+  { slug: "cadastros", label: "Cadastros", keys: ["complete_registration", "offsite_conversion.fb_pixel_complete_registration"] },
+  { slug: "cliques", label: "Cliques no link", keys: ["link_click"] },
+  { slug: "lpv", label: "Views de página de destino", keys: ["landing_page_view"] },
+  { slug: "engajamento", label: "Engajamento", keys: ["post_engagement", "page_engagement"] },
+];
+export const RESULT_FAMILY_BY_SLUG: Record<string, ResultFamily> = Object.fromEntries(
+  RESULT_FAMILIES.map((f) => [f.slug, f])
+);
+
 // Chaves de action_type para métricas de e-commerce (a Meta usa variações).
 export const PURCHASE_KEYS = ["omni_purchase", "purchase", "offsite_conversion.fb_pixel_purchase"];
 export const ATC_KEYS = ["omni_add_to_cart", "add_to_cart", "offsite_conversion.fb_pixel_add_to_cart"];

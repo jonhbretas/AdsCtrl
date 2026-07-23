@@ -19,3 +19,6 @@ create index if not exists idx_snap_account_period on metric_snapshots(account_i
 -- Compras (quantidade) e valor de compra (receita) por snapshot, p/ ROAS.
 alter table metric_snapshots add column if not exists purchases numeric default 0;
 alter table metric_snapshots add column if not exists purchase_value numeric default 0;
+
+-- Resultados por família (vendas/mensagens/leads/...) p/ o seletor de "foco".
+alter table metric_snapshots add column if not exists results jsonb;
