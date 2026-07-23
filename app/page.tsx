@@ -117,6 +117,7 @@ export default function Dashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
+  const [collecting, setCollecting] = useState(false);
   const [alertTab, setAlertTab] = useState<"active" | "history">("active");
   const [history, setHistory] = useState<AlertItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -200,6 +201,24 @@ export default function Dashboard() {
     }
     if (alertTab === "history") await loadHistory();
     setRefreshing(false);
+  }
+
+  // Dispara a coleta completa (insights + alertas) na hora, sem esperar o cron.
+  async function collectNow() {
+    if (collecting) return;
+    setCollecting(true);
+    setSyncMsg("Coletando dados da Meta… (pode levar até 1 min)");
+    try {
+      const r = await fetch("/api/collect", { method: "POST" });
+      const d = await r.json();
+      if (!r.ok || d.error) throw new Error(d.error || `Falha (HTTP ${r.status}).`);
+      await load();
+      setSyncMsg(`Coleta concluída: ${d.accounts} conta(s), ${d.alerts} alerta(s) em ${(d.took_ms / 1000).toFixed(0)}s.`);
+    } catch (e: any) {
+      setSyncMsg(e?.message ?? "Erro na coleta.");
+    } finally {
+      setCollecting(false);
+    }
   }
 
   // Puxa a lista de contas da Meta na hora (mostra contas recém-adicionadas na BM).
@@ -347,6 +366,9 @@ export default function Dashboard() {
           </button>
           <button onClick={syncAccounts} disabled={syncing} style={btnStyle} title="Buscar contas novas adicionadas na BM">
             {syncing ? "Sincronizando…" : "⇅ Sincronizar contas"}
+          </button>
+          <button onClick={collectNow} disabled={collecting} style={{ ...btnStyle, background: collecting ? "#eee" : "#111", color: collecting ? "#999" : "#fff", borderColor: "#111" }} title="Buscar métricas e alertas de todas as contas agora">
+            {collecting ? "Coletando…" : "⟳ Coletar agora"}
           </button>
           <a href="/admin" style={{ ...btnStyle, textDecoration: "none", display: "inline-flex", alignItems: "center" }}>⚙ Grupos</a>
         </div>

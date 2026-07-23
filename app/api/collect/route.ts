@@ -56,13 +56,8 @@ function aggregate(daily: DailyMetric[], since: string, until: string) {
   };
 }
 
-export async function GET(req: Request) {
-  // Proteção simples por secret (Vercel Cron manda esse header).
-  const auth = req.headers.get("authorization");
-  if (process.env.CRON_SECRET && auth !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
-
+// Executa a coleta inteira. Chamada pelo cron (GET c/ secret) e pelo botão (POST).
+async function runCollect() {
   const supabase = getServiceClient();
   const started = Date.now();
 
@@ -200,13 +195,29 @@ export async function GET(req: Request) {
     }
     await resolveQuery;
 
-    return NextResponse.json({
-      ok: true,
+    return {
+      ok: true as const,
       accounts: processed,
       alerts: allAlerts.length,
       took_ms: Date.now() - started,
-    });
+    };
   } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e.message }, { status: 500 });
+    return { ok: false as const, error: e.message };
   }
+}
+
+// Cron (Vercel manda o header Authorization com o CRON_SECRET).
+export async function GET(req: Request) {
+  const auth = req.headers.get("authorization");
+  if (process.env.CRON_SECRET && auth !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+  const res = await runCollect();
+  return NextResponse.json(res, { status: res.ok ? 200 : 500 });
+}
+
+// Botão "Coletar agora" no dashboard — roda no servidor, não precisa do secret.
+export async function POST() {
+  const res = await runCollect();
+  return NextResponse.json(res, { status: res.ok ? 200 : 500 });
 }
