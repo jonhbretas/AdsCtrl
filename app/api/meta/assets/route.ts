@@ -6,6 +6,7 @@ import {
   isPrepaidAccount,
   listAdAccountsForToken,
   mapAccountStatus,
+  META_AD_ACCOUNT_FIELDS,
   tokenByIndex,
   tokenCount,
 } from "@/lib/meta";
@@ -34,10 +35,37 @@ type ConnectionResult = {
   businesses: MetaBusiness[];
 };
 
-function isoDaysAgo(days: number): string {
-  const date = new Date();
-  date.setUTCDate(date.getUTCDate() - days);
+type DateRange = { since: string; until: string };
+
+function dateInTimeZone(timeZone: string | undefined, daysAgo: number): string {
+  const formatter = (zone: string) =>
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: zone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+  let parts: Intl.DateTimeFormatPart[];
+  try {
+    parts = formatter(timeZone || "America/Sao_Paulo").formatToParts(new Date());
+  } catch {
+    parts = formatter("America/Sao_Paulo").formatToParts(new Date());
+  }
+  const values = Object.fromEntries(
+    parts
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, Number(part.value)])
+  );
+  const date = new Date(Date.UTC(values.year, values.month - 1, values.day));
+  date.setUTCDate(date.getUTCDate() - daysAgo);
   return date.toISOString().slice(0, 10);
+}
+
+function rangeForTimeZone(timeZone?: string): DateRange {
+  return {
+    since: dateInTimeZone(timeZone, 6),
+    until: dateInTimeZone(timeZone, 0),
+  };
 }
 
 function safeMetaError(status: number, payload: any): string {
@@ -132,23 +160,70 @@ async function loadConnection(index: number): Promise<ConnectionResult> {
   };
 }
 
-type SpendRollup = { today: number; last7: number; available: boolean };
+async function loadSpecificConnection(
+  index: number,
+  accountId: string
+): Promise<ConnectionResult> {
+  const token = tokenByIndex(index);
+  const [profile, account] = await Promise.allSettled([
+    graphObject<{ id?: string; name?: string }>("me", "id,name", token),
+    graphObject<AdAccountRaw>(
+      `act_${accountId}`,
+      META_AD_ACCOUNT_FIELDS.join(","),
+      token
+    ),
+  ]);
+  const errors = [profile, account]
+    .filter((item): item is PromiseRejectedResult => item.status === "rejected")
+    .map((item) => item.reason?.message || "Falha desconhecida");
+  const accountResult = account.status === "fulfilled" ? account.value : null;
+  const accounts = accountResult ? [accountResult] : [];
+  const business = accountResult?.business;
+  return {
+    index,
+    user_id: profile.status === "fulfilled" ? profile.value.id || null : null,
+    name:
+      profile.status === "fulfilled"
+        ? profile.value.name || `Conexão Meta ${index + 1}`
+        : `Conexão Meta ${index + 1}`,
+    status:
+      account.status === "rejected"
+        ? "error"
+        : errors.length
+          ? "partial"
+          : "ok",
+    error: errors.length ? errors.join(" · ") : null,
+    accounts,
+    businesses:
+      business?.id
+        ? [{
+            id: business.id,
+            name: business.name || accountResult?.business_name || `BM ${business.id}`,
+          }]
+        : [],
+  };
+}
+
+type SpendTarget = { accountId: string; range: DateRange };
+type SpendRollup = {
+  today: number;
+  last7: number;
+  available: boolean;
+  range: DateRange;
+};
 
 async function batchSpend(
-  accountIds: string[],
-  token: string,
-  since: string,
-  until: string
+  targets: SpendTarget[],
+  token: string
 ): Promise<Map<string, SpendRollup>> {
   const output = new Map<string, SpendRollup>();
-  for (let start = 0; start < accountIds.length; start += 45) {
-    const ids = accountIds.slice(start, start + 45);
-    const timeRange = JSON.stringify({ since, until });
-    const batch = ids.map((accountId) => ({
+  for (let start = 0; start < targets.length; start += 45) {
+    const chunk = targets.slice(start, start + 45);
+    const batch = chunk.map(({ accountId, range }) => ({
       method: "GET",
       relative_url:
         `act_${accountId}/insights?fields=spend,date_start&time_increment=1&time_range=` +
-        encodeURIComponent(timeRange),
+        encodeURIComponent(JSON.stringify(range)),
     }));
     const body = new URLSearchParams({
       access_token: token,
@@ -162,34 +237,63 @@ async function batchSpend(
       cache: "no-store",
     });
     const payload: any[] = await response.json().catch(() => []);
-    ids.forEach((accountId, index) => {
+    chunk.forEach(({ accountId, range }, index) => {
       const item = payload[index];
       if (!item || item.code < 200 || item.code >= 300) {
-        output.set(accountId, { today: 0, last7: 0, available: false });
+        output.set(accountId, {
+          today: 0,
+          last7: 0,
+          available: false,
+          range,
+        });
         return;
       }
       const parsed = JSON.parse(item.body || "{}");
       const rows = parsed?.data || [];
       output.set(accountId, {
-        today: rows.find((row: any) => row.date_start === until)?.spend
-          ? Number(rows.find((row: any) => row.date_start === until).spend)
+        today: rows.find((row: any) => row.date_start === range.until)?.spend
+          ? Number(
+              rows.find((row: any) => row.date_start === range.until).spend
+            )
           : 0,
         last7: rows.reduce(
           (sum: number, row: any) => sum + Number(row.spend || 0),
           0
         ),
         available: true,
+        range,
       });
     });
   }
   return output;
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     if (supabaseEnvMissing()) {
       return NextResponse.json({ error: "Supabase não configurado." }, { status: 503 });
     }
+    const params = new URL(req.url).searchParams;
+    const mode = params.get("mode");
+    const requestedAccount = (params.get("account_id") || "")
+      .trim()
+      .replace(/^act_/, "");
+    const supabase = getServiceClient();
+
+    if (mode === "catalog") {
+      const { data: rows, error } = await supabase
+        .from("ad_accounts")
+        .select("account_id,name,status,hidden,currency")
+        .eq("platform", "meta")
+        .eq("hidden", false)
+        .order("name");
+      if (error) throw error;
+      return NextResponse.json({
+        mode: "catalog",
+        accounts: rows || [],
+      });
+    }
+
     const count = tokenCount();
     if (!count) {
       return NextResponse.json(
@@ -198,9 +302,82 @@ export async function GET() {
       );
     }
 
-    const connections = await Promise.all(
-      Array.from({ length: count }, (_, index) => loadConnection(index))
+    const { data: hiddenRows, error: hiddenError } = await supabase
+      .from("ad_accounts")
+      .select("account_id")
+      .eq("platform", "meta")
+      .eq("hidden", true);
+    if (hiddenError) throw hiddenError;
+    const hiddenAccountIds = new Set(
+      (hiddenRows || []).map((row: any) => String(row.account_id))
     );
+
+    let connections: ConnectionResult[];
+    if (requestedAccount) {
+      const { data: selected, error } = await supabase
+        .from("ad_accounts")
+        .select("account_id,platform,token_ref,hidden")
+        .eq("account_id", requestedAccount)
+        .maybeSingle();
+      if (error) throw error;
+      if (!selected || selected.platform !== "meta") {
+        return NextResponse.json(
+          { error: "Conta Meta não encontrada no catálogo." },
+          { status: 404 }
+        );
+      }
+      if (selected.hidden) {
+        return NextResponse.json(
+          {
+            error: "Esta conta está oculta. Desoculte-a para consultar a Meta.",
+          },
+          { status: 409 }
+        );
+      }
+      const storedIndex =
+        typeof selected.token_ref === "number" &&
+        selected.token_ref >= 0 &&
+        selected.token_ref < count
+          ? selected.token_ref
+          : 0;
+      const candidateIndexes = [
+        storedIndex,
+        ...Array.from({ length: count }, (_, index) => index).filter(
+          (index) => index !== storedIndex
+        ),
+      ];
+      let selectedConnection: ConnectionResult | null = null;
+      const attemptErrors: string[] = [];
+      for (const tokenIndex of candidateIndexes) {
+        const attempt = await loadSpecificConnection(tokenIndex, requestedAccount);
+        if (attempt.accounts.length) {
+          selectedConnection = attempt;
+          break;
+        }
+        if (attempt.error) attemptErrors.push(attempt.error);
+      }
+      if (!selectedConnection) {
+        return NextResponse.json(
+          {
+            error:
+              attemptErrors[0] ||
+              "As conexões Meta não conseguiram acessar a conta selecionada.",
+          },
+          { status: 502 }
+        );
+      }
+      connections = [selectedConnection];
+    } else {
+      connections = await Promise.all(
+        Array.from({ length: count }, (_, index) => loadConnection(index))
+      );
+      connections = connections.map((connection) => ({
+        ...connection,
+        accounts: connection.accounts.filter(
+          (account) => !hiddenAccountIds.has(account.account_id)
+        ),
+      }));
+    }
     const accountMap = new Map<
       string,
       { raw: AdAccountRaw; connection_indexes: number[] }
@@ -223,7 +400,7 @@ export async function GET() {
 
     const accountIds = [...accountMap.keys()];
     const { data: catalogRows } = accountIds.length
-      ? await getServiceClient()
+      ? await supabase
           .from("ad_accounts")
           .select("account_id,hidden,status")
           .in("account_id", accountIds)
@@ -231,24 +408,23 @@ export async function GET() {
     const catalog = new Map(
       (catalogRows || []).map((row: any) => [row.account_id, row])
     );
-    const since = isoDaysAgo(6);
-    const until = isoDaysAgo(0);
     const items = [...accountMap.entries()];
-    const idsByConnection = new Map<number, string[]>();
+    const targetsByConnection = new Map<number, SpendTarget[]>();
     for (const [accountId, entry] of items) {
       const tokenIndex = entry.connection_indexes[0] || 0;
-      const ids = idsByConnection.get(tokenIndex) || [];
-      ids.push(accountId);
-      idsByConnection.set(tokenIndex, ids);
+      const targets = targetsByConnection.get(tokenIndex) || [];
+      targets.push({
+        accountId,
+        range: rangeForTimeZone(entry.raw.timezone_name),
+      });
+      targetsByConnection.set(tokenIndex, targets);
     }
     const spendByAccount = new Map<string, SpendRollup>();
     await Promise.all(
-      [...idsByConnection.entries()].map(async ([tokenIndex, ids]) => {
+      [...targetsByConnection.entries()].map(async ([tokenIndex, targets]) => {
         const metrics = await batchSpend(
-          ids,
-          tokenByIndex(tokenIndex),
-          since,
-          until
+          targets,
+          tokenByIndex(tokenIndex)
         ).catch(() => new Map<string, SpendRollup>());
         for (const [accountId, values] of metrics) {
           spendByAccount.set(accountId, values);
@@ -260,6 +436,7 @@ export async function GET() {
         today: 0,
         last7: 0,
         available: false,
+        range: rangeForTimeZone(entry.raw.timezone_name),
       };
       const raw = entry.raw;
       const spendCap = centsToUnit(raw.spend_cap);
@@ -289,6 +466,7 @@ export async function GET() {
         spend_today: spend.today,
         spend_7d: spend.last7,
         metrics_available: spend.available,
+        metric_range: spend.range,
         amount_spent: amountSpent,
         spend_cap: spendCap > 0 ? spendCap : null,
         spend_cap_remaining:
@@ -324,9 +502,17 @@ export async function GET() {
       }
     }
 
+    const responseRange =
+      requestedAccount && accounts[0]
+        ? accounts[0].metric_range
+        : rangeForTimeZone("America/Sao_Paulo");
+
     return NextResponse.json({
       generated_at: new Date().toISOString(),
-      range: { since, until },
+      scope: requestedAccount ? "account" : "all",
+      requested_account_id: requestedAccount || null,
+      range: responseRange,
+      range_uses_account_timezone: true,
       limitations: {
         daily_spend_limit:
           "O limite diário imposto internamente pela Meta não é exposto pela API oficial. spend_cap é o limite total da conta.",

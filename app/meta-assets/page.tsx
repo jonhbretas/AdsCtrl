@@ -37,6 +37,7 @@ type MetaAccount = {
   spend_today: number;
   spend_7d: number;
   metrics_available: boolean;
+  metric_range: { since: string; until: string };
   amount_spent: number;
   spend_cap: number | null;
   spend_cap_remaining: number | null;
@@ -47,12 +48,23 @@ type MetaAccount = {
 
 type Payload = {
   generated_at: string;
+  scope: "account" | "all";
+  requested_account_id: string | null;
   range: { since: string; until: string };
+  range_uses_account_timezone: boolean;
   limitations: { daily_spend_limit: string; secrets: string };
   connections: Connection[];
   businesses: Business[];
   accounts: MetaAccount[];
   error?: string;
+};
+
+type CatalogAccount = {
+  account_id: string;
+  name: string;
+  status: string;
+  hidden: boolean;
+  currency: string;
 };
 
 const statusLabel: Record<string, string> = {
@@ -81,38 +93,81 @@ const number = (value: number) =>
 
 export default function MetaAssetsPage() {
   const [data, setData] = useState<Payload | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [catalog, setCatalog] = useState<CatalogAccount[]>([]);
+  const [selectedAccount, setSelectedAccount] = useState("");
+  const [loadedTarget, setLoadedTarget] = useState<string | "all" | null>(null);
+  const [pendingTarget, setPendingTarget] = useState<string | "all" | null>(null);
+  const [catalogLoading, setCatalogLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"all" | "active" | "issues">("all");
   const [connection, setConnection] = useState("all");
-  const [includeHidden, setIncludeHidden] = useState(true);
   const [copied, setCopied] = useState<string | null>(null);
 
-  async function load() {
+  async function load(target?: string | "all") {
+    const requested = target || loadedTarget || selectedAccount;
+    if (!requested) return;
     setLoading(true);
+    setPendingTarget(requested);
     setError(null);
+    setData(null);
+    if (requested !== loadedTarget) {
+      setSearch("");
+      setStatus("all");
+      setConnection("all");
+    }
+    setLoadedTarget(null);
     try {
-      const response = await fetch("/api/meta/assets", { cache: "no-store" });
+      const url =
+        requested === "all"
+          ? "/api/meta/assets"
+          : `/api/meta/assets?account_id=${encodeURIComponent(requested)}`;
+      const response = await fetch(url, { cache: "no-store" });
       const payload = await response.json();
       if (!response.ok || payload.error) {
         throw new Error(payload.error || "Falha ao carregar ativos Meta.");
       }
       setData(payload);
+      setLoadedTarget(requested);
     } catch (loadError: any) {
       setError(loadError?.message || "Falha ao carregar ativos Meta.");
     } finally {
       setLoading(false);
+      setPendingTarget(null);
     }
   }
 
   useEffect(() => {
-    load();
+    let alive = true;
+    setCatalogLoading(true);
+    fetch("/api/meta/assets?mode=catalog", { cache: "no-store" })
+      .then(async (response) => {
+        const payload = await response.json();
+        if (!response.ok || payload.error) {
+          throw new Error(payload.error || "Falha ao carregar catálogo Meta.");
+        }
+        return payload.accounts || [];
+      })
+      .then((rows: CatalogAccount[]) => {
+        if (!alive) return;
+        setCatalog(rows);
+        const preferred =
+          rows.find((account) => !account.hidden && account.status === "ACTIVE") ||
+          rows[0];
+        if (preferred) setSelectedAccount(preferred.account_id);
+      })
+      .catch((catalogError: any) => {
+        if (alive) setError(catalogError?.message || "Falha ao carregar catálogo Meta.");
+      })
+      .finally(() => {
+        if (alive) setCatalogLoading(false);
+      });
+    return () => { alive = false; };
   }, []);
 
   const accounts = useMemo(() => {
     let rows = [...(data?.accounts || [])];
-    if (!includeHidden) rows = rows.filter((account) => !account.catalog.hidden);
     if (status === "active") rows = rows.filter((account) => account.status === "ACTIVE");
     if (status === "issues") rows = rows.filter((account) => account.status !== "ACTIVE");
     if (connection !== "all") {
@@ -129,7 +184,7 @@ export default function MetaAssetsPage() {
       );
     }
     return rows;
-  }, [data, includeHidden, status, connection, search]);
+  }, [data, status, connection, search]);
 
   const totals = useMemo(() => {
     const rows = data?.accounts || [];
@@ -176,7 +231,14 @@ export default function MetaAssetsPage() {
       "Forma de pagamento",
       "Conexões",
     ];
-    const escape = (value: unknown) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+    const escape = (value: unknown) => {
+      const raw = String(value ?? "");
+      const safe =
+        typeof value === "string" && /^[=+\-@]/.test(raw.trimStart())
+          ? `'${raw}`
+          : raw;
+      return `"${safe.replace(/"/g, '""')}"`;
+    };
     const lines = accounts.map((account) =>
       [
         account.name,
@@ -220,19 +282,50 @@ export default function MetaAssetsPage() {
             Perfis conectados, BMs, contas, cobrança e performance operacional em uma tela.
           </p>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={exportCsv} disabled={!accounts.length} style={buttonStyle}>Exportar CSV</button>
-          <button onClick={load} disabled={loading} style={{ ...buttonStyle, background: "#111", color: "#fff", borderColor: "#111" }}>
-            {loading ? "Atualizando…" : "↻ Atualizar"}
+        <div style={{ display: "flex", gap: 8, alignItems: "end", flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <label style={{ display: "grid", gap: 4 }}>
+            <span style={{ fontSize: 9.5, fontWeight: 750, color: "#888", textTransform: "uppercase" }}>Conta Meta</span>
+            <select
+              value={selectedAccount}
+              onChange={(event) => setSelectedAccount(event.target.value)}
+              disabled={catalogLoading || !catalog.length}
+              style={{ ...inputStyle, minWidth: 245 }}
+            >
+              {catalogLoading && <option>Carregando catálogo…</option>}
+              {!catalogLoading && !catalog.length && <option>Nenhuma conta visível sincronizada</option>}
+              {catalog.map((account) => (
+                <option key={account.account_id} value={account.account_id}>
+                  {account.name} · {statusLabel[account.status] || account.status} · {account.account_id}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button onClick={() => load(selectedAccount)} disabled={loading || !selectedAccount} style={{ ...buttonStyle, background: "#111", color: "#fff", borderColor: "#111" }}>
+            {loading && pendingTarget !== "all" ? "Consultando…" : "Consultar conta"}
           </button>
+          <button onClick={() => load("all")} disabled={loading} style={buttonStyle}>
+            {loading && pendingTarget === "all" ? "Consultando todas…" : "Consultar todas"}
+          </button>
+          <button onClick={exportCsv} disabled={!accounts.length} style={buttonStyle}>Exportar CSV</button>
+          {loadedTarget && <button onClick={() => load(loadedTarget)} disabled={loading} style={buttonStyle}>↻ Atualizar resultado</button>}
         </div>
       </header>
 
       {error && <div style={{ padding: "12px 14px", background: "#fff4f2", color: "#a33f37", border: "1px solid #efcbc6", borderRadius: 11, marginBottom: 14 }}>{error}</div>}
-      {loading && !data && <div style={{ padding: 70, color: "#999", textAlign: "center" }}>Consultando conexões, BMs e contas pela API oficial da Meta…</div>}
+      {loading && !data && <div style={{ padding: 70, color: "#999", textAlign: "center" }}>Consultando conexões, BM e dados da conta pela API oficial da Meta…</div>}
+      {!loading && !data && !error && (
+        <div style={{ padding: "70px 24px", border: "1px dashed #dededb", borderRadius: 14, color: "#777", textAlign: "center", background: "#fbfbfa" }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: "#333" }}>Escolha como consultar</div>
+          <div style={{ fontSize: 12, marginTop: 6 }}>Selecione uma conta para um diagnóstico rápido ou use “Consultar todas” para uma auditoria geral.</div>
+        </div>
+      )}
 
       {data && (
         <>
+          <div style={{ padding: "9px 12px", borderRadius: 10, background: "#f7f7f5", border: "1px solid #e8e8e5", color: "#666", fontSize: 11, marginBottom: 12 }}>
+            Resultado atual: <strong style={{ color: "#333" }}>{data.scope === "all" ? "todas as contas visíveis" : data.accounts[0]?.name || "conta selecionada"}</strong>
+            {" · "}atualizado em {new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(data.generated_at))}
+          </div>
           <section style={{ display: "grid", gridTemplateColumns: "repeat(6,minmax(0,1fr))", gap: 9, marginBottom: 14 }}>
             <Summary label="Conexões" value={String(data.connections.length)} />
             <Summary label="Business Managers" value={String(data.businesses.length)} />
@@ -288,7 +381,7 @@ export default function MetaAssetsPage() {
 
           <section style={{ ...panelStyle, padding: 0, overflow: "hidden" }}>
             <div style={{ padding: "12px 14px", display: "flex", alignItems: "end", gap: 8, flexWrap: "wrap", borderBottom: "1px solid #ececea" }}>
-              <div style={{ marginRight: 6 }}><PanelTitle title="Contas de anúncios" subtitle={`${accounts.length} contas no filtro · período ${data.range.since} → ${data.range.until}`} /></div>
+              <div style={{ marginRight: 6 }}><PanelTitle title="Contas de anúncios" subtitle={`${accounts.length} contas no filtro · ${data.scope === "account" ? "consulta específica" : "auditoria geral"} · ${data.scope === "account" ? `${data.range.since} → ${data.range.until}` : "últimos 7 dias no fuso de cada conta"}`} /></div>
               <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Conta, ID ou BM…" style={{ ...inputStyle, minWidth: 200 }} />
               <select value={status} onChange={(event) => setStatus(event.target.value as any)} style={inputStyle}>
                 <option value="all">Todos os status</option><option value="active">Somente ativas</option><option value="issues">Com problema</option>
@@ -297,9 +390,6 @@ export default function MetaAssetsPage() {
                 <option value="all">Todas as conexões</option>
                 {data.connections.map((item) => <option key={item.index} value={item.index}>Conexão {item.index + 1} · {item.name}</option>)}
               </select>
-              <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#777" }}>
-                <input type="checkbox" checked={includeHidden} onChange={(event) => setIncludeHidden(event.target.checked)} /> incluir ocultas
-              </label>
             </div>
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1460 }}>

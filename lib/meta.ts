@@ -143,26 +143,29 @@ export function mapAccountStatus(code: number): AccountStatus {
 
 // ---------- Chamadas ----------
 
+// Campos oficiais usados tanto no catálogo quanto no Raio-X de uma conta.
+export const META_AD_ACCOUNT_FIELDS = [
+  "account_id",
+  "name",
+  "account_status",
+  "disable_reason",
+  "currency",
+  "balance",
+  "amount_spent",
+  "spend_cap",
+  "business",
+  "business_name",
+  "is_prepay_account",
+  "min_daily_budget",
+  "timezone_name",
+  "timezone_offset_hours_utc",
+  "user_tasks",
+  "funding_source_details",
+];
+
 // Lista as contas que UM token enxerga, já com os campos de saldo/status.
 export async function listAdAccountsForToken(token: string): Promise<AdAccountRaw[]> {
-  const fields = [
-    "account_id",
-    "name",
-    "account_status",
-    "disable_reason",
-    "currency",
-    "balance",
-    "amount_spent",
-    "spend_cap",
-    "business",
-    "business_name",
-    "is_prepay_account",
-    "min_daily_budget",
-    "timezone_name",
-    "timezone_offset_hours_utc",
-    "user_tasks",
-    "funding_source_details",
-  ].join(",");
+  const fields = META_AD_ACCOUNT_FIELDS.join(",");
   const url = `${GRAPH}/me/adaccounts?fields=${fields}&limit=200&access_token=${token}`;
   return fbGetAll<AdAccountRaw>(url);
 }
