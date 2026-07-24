@@ -1,11 +1,24 @@
 import { NextResponse } from "next/server";
-import { tokenByIndex } from "@/lib/meta";
+import {
+  AdAccountRaw,
+  availableBalance,
+  getDailySpend,
+  isPrepaidAccount,
+  tokenByIndex,
+} from "@/lib/meta";
 import { getServiceClient, supabaseEnvMissing } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 const GRAPH = "https://graph.facebook.com/v25.0";
+const DAY_MS = 86_400_000;
+
+function isoDaysAgo(days: number): string {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() - days);
+  return date.toISOString().slice(0, 10);
+}
 
 export async function GET(req: Request) {
   try {
@@ -36,15 +49,50 @@ export async function GET(req: Request) {
 
     const token = tokenByIndex(typeof account.token_ref === "number" ? account.token_ref : 0);
     const url = new URL(`${GRAPH}/act_${accountId}`);
-    url.searchParams.set("fields", "business{id,name}");
+    url.searchParams.set(
+      "fields",
+      "account_id,name,account_status,currency,balance,funding_source_details,business{id,name}"
+    );
     url.searchParams.set("access_token", token);
-    const response = await fetch(url, { cache: "no-store" });
+    const [response, daily] = await Promise.all([
+      fetch(url, { cache: "no-store" }),
+      getDailySpend(
+        `act_${accountId}`,
+        isoDaysAgo(7),
+        isoDaysAgo(1),
+        token
+      ).catch(() => []),
+    ]);
     const payload = await response.json().catch(() => ({}));
+    const raw = response.ok ? (payload as AdAccountRaw) : null;
+    const prepaid = raw ? isPrepaidAccount(raw) : false;
+    const currentBalance = raw && prepaid ? availableBalance(raw) : null;
+    const spend7d = daily.reduce((sum, row) => sum + row.spend, 0);
+    const averageDailySpend = spend7d / 7;
+    const runwayDays =
+      currentBalance != null && averageDailySpend > 0
+        ? currentBalance / averageDailySpend
+        : null;
+    const depletionDate =
+      runwayDays != null
+        ? new Date(Date.now() + runwayDays * DAY_MS).toISOString().slice(0, 10)
+        : null;
 
     return NextResponse.json({
       account_id: accountId,
       business_id: response.ok ? payload?.business?.id || null : null,
       business_name: response.ok ? payload?.business?.name || null : null,
+      finance: response.ok
+        ? {
+            is_prepaid: prepaid,
+            balance: currentBalance,
+            spend_7d: spend7d,
+            average_daily_spend: averageDailySpend,
+            runway_days: runwayDays,
+            estimated_depletion_date: depletionDate,
+            range: { since: isoDaysAgo(7), until: isoDaysAgo(1) },
+          }
+        : null,
     });
   } catch (error: any) {
     return NextResponse.json(

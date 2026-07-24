@@ -71,14 +71,30 @@ export function buildAlertsForAccount(input: BuildAlertsInput): Alert[] {
   // 3. Saldo baixo (contas pré-pagas: saldo disponível abaixo do limiar)
   const available = availableBalance(account);
   const threshold = input.lowBalanceThreshold ?? 50;
-  if (isPrepaidAccount(account) && available != null && available > 0 && available < threshold) {
+  const averageDailySpend = (insight7d?.spend || 0) / 7;
+  const runwayDays =
+    available != null && averageDailySpend > 0
+      ? available / averageDailySpend
+      : null;
+  const lowByRunway = runwayDays != null && runwayDays <= 5;
+  const lowByAmount = available != null && available < threshold;
+  if (isPrepaidAccount(account) && available != null && (lowByRunway || lowByAmount)) {
+    const urgent = runwayDays != null && runwayDays <= 1;
     alerts.push({
       account_id: id,
       account_name: name,
-      level: "warning",
+      level: urgent ? "critical" : "warning",
       type: "low_balance",
-      title: "Saldo baixo",
-      detail: `Saldo disponível: ${account.currency} ${available.toFixed(2)}.`,
+      title: urgent
+        ? "Saldo pode acabar em menos de 1 dia"
+        : runwayDays != null
+          ? `Saldo para aproximadamente ${runwayDays.toFixed(1)} dias`
+          : "Saldo baixo",
+      detail:
+        `Saldo disponível: ${account.currency} ${available.toFixed(2)}.` +
+        (runwayDays != null
+          ? ` Média diária dos últimos 7 dias: ${account.currency} ${averageDailySpend.toFixed(2)}.`
+          : ""),
     });
   }
 

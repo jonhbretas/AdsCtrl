@@ -831,6 +831,14 @@ function OperationalLinks({
 }) {
   const [copied, setCopied] = useState<string | null>(null);
   const [business, setBusiness] = useState<{ id: string; name: string | null } | null>(null);
+  const [finance, setFinance] = useState<{
+    is_prepaid: boolean;
+    balance: number | null;
+    spend_7d: number;
+    average_daily_spend: number;
+    runway_days: number | null;
+    estimated_depletion_date: string | null;
+  } | null>(null);
   const bareId = accountId.replace(/^act_/, "").replace(/^google:/, "");
   const isMeta = platform === "meta";
   useEffect(() => {
@@ -842,6 +850,7 @@ function OperationalLinks({
         if (alive && payload?.business_id) {
           setBusiness({ id: payload.business_id, name: payload.business_name || null });
         }
+        if (alive && payload?.finance) setFinance(payload.finance);
       })
       .catch(() => {});
     return () => { alive = false; };
@@ -918,12 +927,30 @@ function OperationalLinks({
       window.prompt("Copie este link:", value);
     }
   }
-  const balanceText = balance == null
+  const effectiveBalance = finance ? finance.balance : balance;
+  const runwayDays = finance?.runway_days ?? null;
+  const formatCurrency = (value: number) =>
+    new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: currency || "BRL",
+    }).format(value);
+  const runwayText =
+    runwayDays == null
+      ? null
+      : runwayDays < 1
+        ? `${Math.max(1, Math.round(runwayDays * 24))}h`
+        : runwayDays < 10
+          ? `${runwayDays.toFixed(1)} dias`
+          : `${Math.round(runwayDays)} dias`;
+  const depletionText = finance?.estimated_depletion_date
+    ? new Date(`${finance.estimated_depletion_date}T12:00:00`).toLocaleDateString("pt-BR")
+    : null;
+  const balanceText = effectiveBalance == null
     ? ""
-    : `\nSaldo disponível exibido no AdsCtrl: ${new Intl.NumberFormat("pt-BR", {
-        style: "currency",
-        currency: currency || "BRL",
-      }).format(balance)}.`;
+    : `\nSaldo disponível: ${formatCurrency(effectiveBalance)}.` +
+      (runwayText
+        ? ` No ritmo médio dos últimos 7 dias, a previsão é durar ${runwayText}${depletionText ? ` (até aproximadamente ${depletionText})` : ""}.`
+        : "");
   const clientMessage =
     `Olá! Para manter as campanhas da conta "${accountName}" (ID ${bareId}) ativas, ` +
     `acesse o link abaixo para conferir o faturamento e adicionar saldo.${balanceText}\n\n${billingUrl}\n\n` +
@@ -946,6 +973,28 @@ function OperationalLinks({
       <span style={{ fontSize: 10, color: "#888", fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.35, marginRight: 3 }}>
         Acesso rápido{business?.name ? ` · ${business.name}` : ""}
       </span>
+      {isMeta && finance?.is_prepaid && effectiveBalance != null && (
+        <span
+          title={
+            finance.average_daily_spend > 0
+              ? `Média diária (7d): ${formatCurrency(finance.average_daily_spend)}`
+              : "Sem gasto nos últimos 7 dias"
+          }
+          style={{
+            padding: "6px 9px",
+            borderRadius: 8,
+            border: `1px solid ${runwayDays != null && runwayDays <= 1 ? "#efc0bb" : runwayDays != null && runwayDays <= 5 ? "#edd49f" : "#c9dfcf"}`,
+            background: runwayDays != null && runwayDays <= 1 ? "#fff1ef" : runwayDays != null && runwayDays <= 5 ? "#fff8e9" : "#f1f8f3",
+            color: runwayDays != null && runwayDays <= 1 ? "#ad3d36" : runwayDays != null && runwayDays <= 5 ? "#8a6117" : "#2b7143",
+            fontSize: 11,
+            fontWeight: 750,
+          }}
+        >
+          Saldo {formatCurrency(effectiveBalance)}
+          {runwayText ? ` · dura ${runwayText}` : " · sem gasto 7d"}
+          {depletionText && runwayText ? ` · até ${depletionText}` : ""}
+        </span>
+      )}
       {links.map((link) => (
         <a
           key={link.label}
@@ -984,22 +1033,42 @@ function OperationalLinks({
         {copied === "billing" ? "Link copiado ✓" : "Copiar link de saldo"}
       </button>
       {isMeta && (
-        <button
-          onClick={() => copy(clientMessage, "message")}
-          title="Copiar uma mensagem pronta com conta, saldo e link para enviar ao cliente"
-          style={{
-            padding: "6px 9px",
-            borderRadius: 8,
-            border: "1px dashed #bfe0c8",
-            background: "#f6fbf7",
-            color: "#267a45",
-            fontSize: 11,
-            fontWeight: 650,
-            cursor: "pointer",
-          }}
-        >
-          {copied === "message" ? "Mensagem copiada ✓" : "Copiar aviso ao cliente"}
-        </button>
+        <>
+          <a
+            href={`https://wa.me/?text=${encodeURIComponent(clientMessage)}`}
+            target="_blank"
+            rel="noreferrer"
+            title="Abrir o WhatsApp com o aviso de saldo pronto para enviar"
+            style={{
+              padding: "6px 9px",
+              borderRadius: 8,
+              border: "1px solid #bfe0c8",
+              background: "#edf9f0",
+              color: "#20713a",
+              fontSize: 11,
+              fontWeight: 700,
+              textDecoration: "none",
+            }}
+          >
+            Enviar no WhatsApp ↗
+          </a>
+          <button
+            onClick={() => copy(clientMessage, "message")}
+            title="Copiar uma mensagem pronta com conta, saldo e link para enviar ao cliente"
+            style={{
+              padding: "6px 9px",
+              borderRadius: 8,
+              border: "1px dashed #bfe0c8",
+              background: "#f6fbf7",
+              color: "#267a45",
+              fontSize: 11,
+              fontWeight: 650,
+              cursor: "pointer",
+            }}
+          >
+            {copied === "message" ? "Mensagem copiada ✓" : "Copiar aviso"}
+          </button>
+        </>
       )}
       <button
         onClick={() => copy(bareId, "id")}
