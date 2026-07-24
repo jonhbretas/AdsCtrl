@@ -73,6 +73,7 @@ export default function AccountDetail({
   const [result, setResult] = useState<string | null>(null);
   const [tab, setTab] = useState<"campaigns" | "adsets" | "ads">("campaigns");
   const [demoMetric, setDemoMetric] = useState<MetricKey>("spend");
+  const platformLabel = platform === "google" ? "Google Ads" : "Meta Ads";
 
   useEffect(() => {
     let alive = true;
@@ -87,7 +88,7 @@ export default function AccountDetail({
       .catch((e) => alive && setError(e?.message ?? "Erro ao carregar detalhe."))
       .finally(() => alive && setLoading(false));
     return () => { alive = false; };
-  }, [accountId, since, until]);
+  }, [accountId, platform, since, until]);
 
   const metricOf = (o: Breakdown | Kpis | Daily, m: MetricKey) => {
     const res = result ? o.results[result] || 0 : 0;
@@ -133,7 +134,7 @@ export default function AccountDetail({
     }));
   }, [data]);
 
-  if (loading) return <div style={{ padding: 32, color: "#888", fontSize: 14 }}>Carregando dados da Meta…</div>;
+  if (loading) return <div style={{ padding: 32, color: "#888", fontSize: 14 }}>Carregando dados do {platformLabel}…</div>;
   if (error)
     return <div style={{ padding: 24 }}><div style={{ background: "#fceceb", color: "#a32d2d", padding: "10px 14px", borderRadius: 8, fontSize: 14 }}>{error}</div></div>;
   if (!data) return null;
@@ -170,7 +171,7 @@ export default function AccountDetail({
   return (
     <div style={{ padding: "8px 4px 24px", background: "#fafafa" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-        <strong style={{ fontSize: 15 }}>Meta Ads</strong>
+        <strong style={{ fontSize: 15 }}>{platformLabel}</strong>
         <span style={{ fontSize: 12, color: "#aaa" }}>vs. período anterior ({data.prevRange.since} → {data.prevRange.until})</span>
         <span style={{ flex: 1 }} />
         <a href={`/report/${accountId}?since=${since}&until=${until}`} target="_blank" rel="noreferrer"

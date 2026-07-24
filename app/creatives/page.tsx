@@ -38,6 +38,72 @@ const money = (v: number | null | undefined, currency = "BRL") =>
   v == null ? "—" : new Intl.NumberFormat("pt-BR", { style: "currency", currency, maximumFractionDigits: 2 }).format(v);
 const pct = (v: number | null | undefined, digits = 1) => v == null ? "—" : `${v.toFixed(digits)}%`;
 const number = (v: number | null | undefined) => v == null ? "—" : v.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
+const METRIC_GUIDE = [
+  {
+    stage: "1 · Atenção",
+    metric: "Hook rate",
+    reference: "≥ 25% saudável · ≥ 35% forte",
+    formula: "Visualizações de 3s ÷ impressões",
+    bottleneck: "< 20%: a abertura não interrompe o scroll.",
+    action: "Troque os 3 primeiros segundos, promessa, cena inicial ou texto na tela.",
+  },
+  {
+    stage: "2 · Retenção",
+    metric: "Hold rate",
+    reference: "≥ 25% saudável · ≥ 35% forte",
+    formula: "ThruPlays ÷ visualizações de 3s",
+    bottleneck: "< 15%: o hook chama atenção, mas o conteúdo não sustenta.",
+    action: "Encurte, acelere cortes e antecipe prova, benefício e demonstração.",
+  },
+  {
+    stage: "3 · Intenção",
+    metric: "Outbound CTR",
+    reference: "≥ 1,0% saudável · ≥ 1,5% forte",
+    formula: "Cliques de saída ÷ impressões",
+    bottleneck: "< 0,8%: oferta, mensagem ou CTA pouco convincentes.",
+    action: "Teste ângulo, oferta, headline, prova social e CTA mais específico.",
+  },
+  {
+    stage: "4 · Pós-clique",
+    metric: "LPV rate",
+    reference: "≥ 70% saudável · ≥ 85% forte",
+    formula: "Visualizações da página ÷ cliques no link",
+    bottleneck: "< 60%: clique não está virando visita real.",
+    action: "Revise velocidade, redirecionamento, tracking e experiência mobile.",
+  },
+  {
+    stage: "5 · Conversão",
+    metric: "CVR",
+    reference: "Leads: 5–15% · E-commerce: 1–3%",
+    formula: "Conversões ÷ LPV (ou clique de saída)",
+    bottleneck: "CTR e LPV bons com CVR baixo: gargalo após a chegada.",
+    action: "Revise aderência anúncio–página, oferta, formulário, preço e confiança.",
+  },
+  {
+    stage: "6 · Saturação",
+    metric: "Frequência",
+    reference: "1,5–3x costuma ser saudável no recorte",
+    formula: "Impressões ÷ alcance",
+    bottleneck: "> 4x com CTR caindo e CPM/CPA subindo sugere fadiga.",
+    action: "Renove criativos, amplie público ou redistribua orçamento.",
+  },
+  {
+    stage: "7 · Custo",
+    metric: "CPM",
+    reference: "Saudável: até ±15% da mediana da conta",
+    formula: "Investimento ÷ impressões × 1.000",
+    bottleneck: "CPM alto isoladamente não condena o criativo; avalie CTR e CPA.",
+    action: "Cheque público, posicionamento, leilão e qualidade percebida.",
+  },
+  {
+    stage: "8 · Negócio",
+    metric: "CPA / ROAS",
+    reference: "CPA ≤ meta · ROAS ≥ ponto de equilíbrio",
+    formula: "Gasto ÷ conversões · receita atribuída ÷ gasto",
+    bottleneck: "Boa atenção sem resultado indica problema de oferta ou conversão.",
+    action: "Decida pela meta econômica, com volume mínimo antes de escalar ou pausar.",
+  },
+] as const;
 
 export default function CreativesPage() {
   const [accounts, setAccounts] = useState<AccountOption[]>([]);
@@ -124,6 +190,7 @@ export default function CreativesPage() {
       {lab && (
         <>
           <Summary account={lab} />
+          <MetricGuide />
           <div style={{ display: "grid", gridTemplateColumns: "1.15fr .85fr", gap: 14, marginBottom: 16 }}>
             <VideoFunnel account={lab} />
             <div style={panelStyle}>
@@ -179,6 +246,38 @@ function Summary({ account }: { account: LabAccount }) {
       <Metric label="Outbound CTR" value={pct(s.outboundCtr, 2)} />
       <Metric label="CPA / ROAS" value={`${money(s.costPerConversion, account.currency)} · ${s.roas == null ? "—" : `${s.roas.toFixed(2)}x`}`} />
     </section>
+  );
+}
+
+function MetricGuide() {
+  return (
+    <details open style={{ ...panelStyle, marginBottom: 14, padding: 0, overflow: "hidden" }}>
+      <summary style={{ cursor: "pointer", listStyle: "none", padding: "14px 16px", display: "flex", alignItems: "center", gap: 12, background: "#fbfbfa" }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 13, fontWeight: 750 }}>Mapa de leitura das métricas</div>
+          <div style={{ fontSize: 10.5, color: "#888", marginTop: 3 }}>Referências iniciais para localizar o gargalo do criativo e escolher a próxima ação</div>
+        </div>
+        <span style={{ fontSize: 10, fontWeight: 750, color: "#35734b", background: "#eaf7ee", borderRadius: 999, padding: "5px 9px" }}>GUIA PPC</span>
+      </summary>
+      <div style={{ borderTop: "1px solid #ececea", padding: 14 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(235px,1fr))", gap: 9 }}>
+          {METRIC_GUIDE.map((item) => (
+            <article key={item.metric} style={{ border: "1px solid #e9e9e6", borderRadius: 11, padding: 12, background: "#fff" }}>
+              <div style={{ fontSize: 9.5, color: "#777", fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.35 }}>{item.stage}</div>
+              <div style={{ fontSize: 14, fontWeight: 760, marginTop: 4 }}>{item.metric}</div>
+              <div style={{ marginTop: 7, color: "#267a45", background: "#eef8f1", borderRadius: 7, padding: "6px 8px", fontSize: 11, fontWeight: 700 }}>{item.reference}</div>
+              <div style={{ fontSize: 10, color: "#999", marginTop: 6 }}>{item.formula}</div>
+              <div style={{ fontSize: 11, color: "#7a4f13", lineHeight: 1.4, marginTop: 8 }}><strong>Gargalo:</strong> {item.bottleneck}</div>
+              <div style={{ fontSize: 11, color: "#555", lineHeight: 1.4, marginTop: 5 }}><strong>Ação:</strong> {item.action}</div>
+            </article>
+          ))}
+        </div>
+        <p style={{ margin: "11px 2px 0", fontSize: 10.5, color: "#888", lineHeight: 1.45 }}>
+          As faixas são pontos de partida para Meta Ads, não metas universais. Objetivo, país, ticket, público, posicionamento e janela alteram o benchmark.
+          Para decidir, priorize a meta econômica do cliente e a comparação com a mediana da própria conta exibida no heatmap.
+        </p>
+      </div>
+    </details>
   );
 }
 
