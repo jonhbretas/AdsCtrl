@@ -7,6 +7,7 @@ const ITEMS = [
   { href: "/today", label: "Hoje", icon: "✦" },
   { href: "/", label: "Clientes", icon: "◫" },
   { href: "/creatives", label: "Criativos", icon: "◉" },
+  { href: "/meta-assets", label: "Raio-X", icon: "⌁" },
   { href: "/alerts", label: "Alertas", icon: "△" },
   { href: "/admin", label: "Configurações", icon: "⚙" },
 ];

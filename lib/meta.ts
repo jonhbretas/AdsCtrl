@@ -80,6 +80,14 @@ export interface AdAccountRaw {
   balance?: string; // em centavos, string
   amount_spent?: string; // gasto acumulado do ciclo, centavos
   spend_cap?: string; // limite de gasto, centavos
+  business?: { id?: string; name?: string };
+  owner_business?: { id?: string; name?: string };
+  business_name?: string;
+  is_prepay_account?: boolean;
+  min_daily_budget?: number | string;
+  timezone_name?: string;
+  timezone_offset_hours_utc?: number;
+  user_tasks?: string[];
   funding_source_details?: {
     type?: number;
     display_string?: string;
@@ -136,7 +144,7 @@ export function mapAccountStatus(code: number): AccountStatus {
 // ---------- Chamadas ----------
 
 // Lista as contas que UM token enxerga, já com os campos de saldo/status.
-async function listAdAccountsForToken(token: string): Promise<AdAccountRaw[]> {
+export async function listAdAccountsForToken(token: string): Promise<AdAccountRaw[]> {
   const fields = [
     "account_id",
     "name",
@@ -146,6 +154,13 @@ async function listAdAccountsForToken(token: string): Promise<AdAccountRaw[]> {
     "balance",
     "amount_spent",
     "spend_cap",
+    "business",
+    "business_name",
+    "is_prepay_account",
+    "min_daily_budget",
+    "timezone_name",
+    "timezone_offset_hours_utc",
+    "user_tasks",
     "funding_source_details",
   ].join(",");
   const url = `${GRAPH}/me/adaccounts?fields=${fields}&limit=200&access_token=${token}`;
