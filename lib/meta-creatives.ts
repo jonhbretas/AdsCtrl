@@ -579,12 +579,26 @@ function normalizeCreative(
   const watched75 = actionArrayTotal(row.video_p75_watched_actions);
   const watched95 = actionArrayTotal(row.video_p95_watched_actions);
   const watched100 = actionArrayTotal(row.video_p100_watched_actions);
-  const mediaType = String(row.creative_media_type || "UNKNOWN").toUpperCase();
-  const isVideo =
-    mediaType.includes("VIDEO") ||
-    plays > 0 ||
-    threeSecondViews > 0 ||
-    watched25 > 0;
+  const mediaTypeRaw = String(row.creative_media_type || "").toUpperCase();
+  const hasVideoSignal = plays > 0 || threeSecondViews > 0 || watched25 > 0;
+  // O tipo informado pela Meta é a fonte de verdade do FORMATO do anúncio.
+  // Sinais de vídeo (plays, views) só decidem o formato quando a Meta não
+  // informa um tipo — sem isso, um carrossel com um card em vídeo era
+  // classificado como "vídeo" e reaparecia no filtro de Vídeos.
+  const format: "VIDEO" | "IMAGE" | "CAROUSEL" | "OTHER" = mediaTypeRaw.includes(
+    "CAROUSEL"
+  )
+    ? "CAROUSEL"
+    : mediaTypeRaw.includes("VIDEO")
+      ? "VIDEO"
+      : mediaTypeRaw.includes("IMAGE") || mediaTypeRaw.includes("PHOTO")
+        ? "IMAGE"
+        : hasVideoSignal
+          ? "VIDEO"
+          : mediaTypeRaw && mediaTypeRaw !== "UNKNOWN"
+            ? "OTHER"
+            : "IMAGE";
+  const isVideo = format === "VIDEO";
   const conversionDenominator =
     landingPageViews > 0 ? landingPageViews : outboundClicks;
 
@@ -659,7 +673,7 @@ function normalizeCreative(
     objective: row.objective || null,
     goal: inferGoal(row, actions),
     goalLabel: "",
-    mediaType: isVideo ? "VIDEO" : mediaType,
+    mediaType: format,
     asset,
     metrics,
     sampleStatus: sample.status,

@@ -13,8 +13,9 @@ import {
 
 type AccountOption = { account_id: string; name: string; platform: string; hidden?: boolean; status: string };
 type Diagnostic = { code: string; tone: "positive" | "warning" | "critical" | "neutral"; title: string; detail: string; evidence: string[] };
+type CreativeFormat = "VIDEO" | "IMAGE" | "CAROUSEL" | "OTHER";
 type Creative = {
-  adId: string; adName: string; campaignName: string | null; adsetName: string | null; mediaType: string;
+  adId: string; adName: string; campaignName: string | null; adsetName: string | null; mediaType: CreativeFormat;
   goal: "messages" | "sales" | "leads" | "traffic" | "engagement" | "awareness" | "app" | "other";
   goalLabel: string;
   asset: { thumbnail: string | null };
@@ -112,6 +113,19 @@ const SORT_LABELS: Record<CreativeSortKey, string> = {
   costPerResult: "Custo por resultado",
   roas: "ROAS",
   diagnosis: "Leitura",
+};
+// Vídeo e carrossel têm bucket próprio; qualquer outro formato (imagem, DPA,
+// coleção, slideshow…) entra em "estático" — não há sinal de vídeo/arrasto.
+function formatBucket(mediaType: CreativeFormat): "video" | "image" | "carousel" {
+  if (mediaType === "VIDEO") return "video";
+  if (mediaType === "CAROUSEL") return "carousel";
+  return "image";
+}
+const FORMAT_LABELS: Record<CreativeFormat, string> = {
+  VIDEO: "Vídeo",
+  IMAGE: "Estático",
+  CAROUSEL: "Carrossel",
+  OTHER: "Estático",
 };
 const hasApplicableRoas = (creative: Creative) =>
   creative.goal === "sales" || creative.metrics.conversionValue > 0;
@@ -283,7 +297,7 @@ export default function CreativesPage() {
   const [lab, setLab] = useState<LabAccount | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [format, setFormat] = useState<"all" | "video" | "static">("all");
+  const [format, setFormat] = useState<"all" | "video" | "image" | "carousel">("all");
   const [goalFilter, setGoalFilter] = useState<GoalFilter>("all");
   const [sort, setSort] = usePersistentSort<CreativeSortKey>(
     "adsctrl:sort:creatives",
@@ -358,8 +372,7 @@ export default function CreativesPage() {
 
   const creatives = useMemo(() => {
     let rows = [...benchmarkCohort];
-    if (format === "video") rows = rows.filter((c) => c.metrics.video.isVideo);
-    if (format === "static") rows = rows.filter((c) => !c.metrics.video.isVideo);
+    if (format !== "all") rows = rows.filter((c) => formatBucket(c.mediaType) === format);
     if (search.trim()) {
       const q = search.toLowerCase();
       rows = rows.filter((c) => `${c.adName} ${c.campaignName || ""} ${c.adsetName || ""}`.toLowerCase().includes(q));
@@ -517,7 +530,11 @@ export default function CreativesPage() {
             <div style={{ padding: "14px 15px", display: "flex", alignItems: "end", gap: 9, borderBottom: "1px solid #ececea", flexWrap: "wrap" }}>
               <div style={{ marginRight: 8 }}><PanelTitle title="Heatmap de criativos" subtitle={`${creatives.length} anúncios · cores vs. mediana do mesmo objetivo`} /></div>
               <div style={{ display: "flex", gap: 3, background: "#f2f2f0", padding: 3, borderRadius: 9 }}>
-                {(["all", "video", "static"] as const).map((key) => <Toggle key={key} active={format === key} onClick={() => setFormat(key)}>{key === "all" ? "Todos" : key === "video" ? "Vídeos" : "Estáticos"}</Toggle>)}
+                {(["all", "video", "image", "carousel"] as const).map((key) => (
+                  <Toggle key={key} active={format === key} onClick={() => setFormat(key)}>
+                    {key === "all" ? "Todos" : key === "video" ? "Vídeos" : key === "image" ? "Estáticos" : "Carrossel"}
+                  </Toggle>
+                ))}
               </div>
               <Field label="Objetivo">
                 <select
@@ -817,7 +834,7 @@ function CreativeTable({
               <td style={{ padding: "9px 12px", minWidth: 265 }}>
                 <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                   {c.asset.thumbnail ? <img src={c.asset.thumbnail} alt="" width={52} height={52} style={{ width: 52, height: 52, borderRadius: 8, objectFit: "cover", background: "#eee" }} /> : <div style={{ width: 52, height: 52, borderRadius: 8, background: "#eee", display: "grid", placeItems: "center", color: "#aaa", fontSize: 18 }}>◫</div>}
-                  <div style={{ minWidth: 0 }}><div title={c.adName} style={{ maxWidth: 250, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontSize: 12.5, fontWeight: 650 }}>{c.adName}</div><div style={{ fontSize: 10, color: "#999", marginTop: 3 }}>{c.campaignName || "—"} · <span style={{ color: "#3970b7", fontWeight: 700 }}>{c.goalLabel}</span> · {c.sample.label}</div></div>
+                  <div style={{ minWidth: 0 }}><div title={c.adName} style={{ maxWidth: 250, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontSize: 12.5, fontWeight: 650 }}>{c.adName}</div><div style={{ fontSize: 10, color: "#999", marginTop: 3 }}>{c.campaignName || "—"} · <span style={{ color: "#3970b7", fontWeight: 700 }}>{c.goalLabel}</span> · {FORMAT_LABELS[c.mediaType]} · {c.sample.label}</div></div>
                 </div>
               </td>
               <Td>{money(m.spend, account.currency)}</Td><Td>{number(m.impressions)}</Td><Td>{number(m.frequency)}</Td><Td>{money(m.cpm, account.currency)}</Td>
