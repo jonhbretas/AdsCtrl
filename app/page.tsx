@@ -691,6 +691,13 @@ export default function Dashboard() {
                 </div>
                 {open && (
                   <div style={{ borderTop: "1px solid #f0f0f0", padding: "0 16px" }}>
+                    <OperationalLinks
+                      accountId={a.account_id}
+                      accountName={a.name}
+                      platform={a.platform}
+                      balance={a.balance}
+                      currency={a.currency}
+                    />
                     <AccountDetail
                       accountId={a.account_id}
                       platform={a.platform}
@@ -722,6 +729,14 @@ export default function Dashboard() {
                                 <strong style={{ fontSize: 14 }}>{num(gm.results.conversoes || gm.result || 0)}</strong>
                               </summary>
                               <div style={{ borderTop: "1px solid #e5eaf1", padding: "0 16px" }}>
+                                <OperationalLinks
+                                  accountId={google.account_id}
+                                  accountName={google.name}
+                                  platform="google"
+                                  balance={null}
+                                  currency={google.currency}
+                                  compact
+                                />
                                 <AccountDetail
                                   accountId={google.account_id}
                                   platform="google"
@@ -796,6 +811,212 @@ function PeriodBtn({ active, onClick, label }: { active: boolean; onClick: () =>
     >
       {label}
     </button>
+  );
+}
+
+function OperationalLinks({
+  accountId,
+  accountName,
+  platform,
+  balance,
+  currency,
+  compact = false,
+}: {
+  accountId: string;
+  accountName: string;
+  platform: "meta" | "google";
+  balance: number | null;
+  currency: string;
+  compact?: boolean;
+}) {
+  const [copied, setCopied] = useState<string | null>(null);
+  const [business, setBusiness] = useState<{ id: string; name: string | null } | null>(null);
+  const bareId = accountId.replace(/^act_/, "").replace(/^google:/, "");
+  const isMeta = platform === "meta";
+  useEffect(() => {
+    if (!isMeta) return;
+    let alive = true;
+    fetch(`/api/account/links?account_id=${encodeURIComponent(accountId)}`, { cache: "no-store" })
+      .then((response) => response.json())
+      .then((payload) => {
+        if (alive && payload?.business_id) {
+          setBusiness({ id: payload.business_id, name: payload.business_name || null });
+        }
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [accountId, isMeta]);
+  const businessParam = business?.id
+    ? `&business_id=${encodeURIComponent(business.id)}`
+    : "";
+  const billingUrl = isMeta
+    ? `https://business.facebook.com/billing_hub/payment_settings?asset_id=${encodeURIComponent(bareId)}${businessParam}&placement=standalone`
+    : `https://ads.google.com/aw/billing/summary?ocid=${encodeURIComponent(bareId)}`;
+  const links = isMeta
+    ? [
+        {
+          label: "Ads Manager",
+          title: "Abrir campanhas desta conta no Meta Ads Manager",
+          url: `https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=${encodeURIComponent(bareId)}`,
+        },
+        {
+          label: "Saldo / pagamento",
+          title: "Abrir formas de pagamento ou adicionar fundos nesta conta",
+          url: billingUrl,
+          accent: true,
+        },
+        {
+          label: "Faturas",
+          title: "Abrir o faturamento desta conta",
+          url: `https://business.facebook.com/billing_hub/accounts/details?asset_id=${encodeURIComponent(bareId)}${businessParam}&placement=standalone`,
+        },
+        {
+          label: "Conta e acessos",
+          title: "Abrir a conta de anúncios nas configurações da BM",
+          url: `https://business.facebook.com/settings/ad-accounts/${encodeURIComponent(bareId)}${business?.id ? `?business_id=${encodeURIComponent(business.id)}` : ""}`,
+        },
+        {
+          label: "Business Manager",
+          title: business?.name
+            ? `Abrir a BM ${business.name}`
+            : "Abrir as configurações do Meta Business",
+          url: business?.id
+            ? `https://business.facebook.com/settings?business_id=${encodeURIComponent(business.id)}`
+            : "https://business.facebook.com/settings",
+        },
+      ]
+    : [
+        {
+          label: "Google Ads",
+          title: "Abrir a visão geral deste cliente Google Ads",
+          url: `https://ads.google.com/aw/overview?ocid=${encodeURIComponent(bareId)}`,
+        },
+        {
+          label: "Campanhas",
+          title: "Abrir as campanhas deste cliente Google Ads",
+          url: `https://ads.google.com/aw/campaigns?ocid=${encodeURIComponent(bareId)}`,
+        },
+        {
+          label: "Faturamento",
+          title: "Abrir o resumo de faturamento ou adicionar fundos",
+          url: billingUrl,
+          accent: true,
+        },
+        {
+          label: "Acessos",
+          title: "Abrir usuários, acessos e segurança deste cliente",
+          url: `https://ads.google.com/aw/accountaccess/users?ocid=${encodeURIComponent(bareId)}`,
+        },
+      ];
+
+  async function copy(value: string, key: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(key);
+      window.setTimeout(() => setCopied(null), 1_800);
+    } catch {
+      window.prompt("Copie este link:", value);
+    }
+  }
+  const balanceText = balance == null
+    ? ""
+    : `\nSaldo disponível exibido no AdsCtrl: ${new Intl.NumberFormat("pt-BR", {
+        style: "currency",
+        currency: currency || "BRL",
+      }).format(balance)}.`;
+  const clientMessage =
+    `Olá! Para manter as campanhas da conta "${accountName}" (ID ${bareId}) ativas, ` +
+    `acesse o link abaixo para conferir o faturamento e adicionar saldo.${balanceText}\n\n${billingUrl}\n\n` +
+    "É necessário entrar com um perfil que tenha permissão financeira ou de administrador nessa conta.";
+
+  return (
+    <section
+      style={{
+        margin: compact ? "12px 0 0" : "14px 0 2px",
+        padding: compact ? "10px 11px" : "11px 13px",
+        border: "1px solid #e8e8e5",
+        borderRadius: 11,
+        background: "#fff",
+        display: "flex",
+        alignItems: "center",
+        gap: 7,
+        flexWrap: "wrap",
+      }}
+    >
+      <span style={{ fontSize: 10, color: "#888", fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.35, marginRight: 3 }}>
+        Acesso rápido{business?.name ? ` · ${business.name}` : ""}
+      </span>
+      {links.map((link) => (
+        <a
+          key={link.label}
+          href={link.url}
+          target="_blank"
+          rel="noreferrer"
+          title={link.title}
+          style={{
+            padding: "6px 9px",
+            borderRadius: 8,
+            border: `1px solid ${link.accent ? "#b9d5fb" : "#e2e2df"}`,
+            background: link.accent ? "#eef5ff" : "#fafaf9",
+            color: link.accent ? "#1768ca" : "#444",
+            fontSize: 11,
+            fontWeight: 650,
+            textDecoration: "none",
+          }}
+        >
+          {link.label} ↗
+        </a>
+      ))}
+      <button
+        onClick={() => copy(billingUrl, "billing")}
+        title="Copiar para enviar ao cliente; ele precisará entrar com um perfil autorizado"
+        style={{
+          padding: "6px 9px",
+          borderRadius: 8,
+          border: "1px dashed #b9d5fb",
+          background: "#fff",
+          color: "#1768ca",
+          fontSize: 11,
+          fontWeight: 650,
+          cursor: "pointer",
+        }}
+      >
+        {copied === "billing" ? "Link copiado ✓" : "Copiar link de saldo"}
+      </button>
+      {isMeta && (
+        <button
+          onClick={() => copy(clientMessage, "message")}
+          title="Copiar uma mensagem pronta com conta, saldo e link para enviar ao cliente"
+          style={{
+            padding: "6px 9px",
+            borderRadius: 8,
+            border: "1px dashed #bfe0c8",
+            background: "#f6fbf7",
+            color: "#267a45",
+            fontSize: 11,
+            fontWeight: 650,
+            cursor: "pointer",
+          }}
+        >
+          {copied === "message" ? "Mensagem copiada ✓" : "Copiar aviso ao cliente"}
+        </button>
+      )}
+      <button
+        onClick={() => copy(bareId, "id")}
+        title="Copiar o ID desta conta de anúncios"
+        style={{
+          padding: "6px 9px",
+          borderRadius: 8,
+          border: "1px solid transparent",
+          background: "transparent",
+          color: "#888",
+          fontSize: 10.5,
+          cursor: "pointer",
+        }}
+      >
+        {copied === "id" ? "ID copiado ✓" : `ID ${bareId}`}
+      </button>
+    </section>
   );
 }
 
