@@ -17,7 +17,7 @@ import {
   CartesianGrid,
 } from "recharts";
 import {
-  brl, brlShort, num, pct, dayLabel, weekdayLabel, resultLabel,
+  money, moneyShort, num, pct, dayLabel, weekdayLabel, resultLabel,
   pickPrimaryResult, orderedResults, pickVal, delta, roas,
   PURCHASE_KEYS, ATC_KEYS, CHECKOUT_KEYS, LINKCLICK_KEYS,
 } from "@/lib/format";
@@ -25,6 +25,7 @@ import {
   compareSortValues,
   SortButton,
   SortState,
+  usePersistentSort,
 } from "@/components/SortableHeader";
 
 interface Vals { results: Record<string, number>; values: Record<string, number> }
@@ -71,13 +72,23 @@ type DetailSortKey =
   | "result"
   | "cpr"
   | "roas";
+const DETAIL_SORT_KEYS: readonly DetailSortKey[] = [
+  "name",
+  "spend",
+  "impressions",
+  "clicks",
+  "ctr",
+  "result",
+  "cpr",
+  "roas",
+];
 const METRIC_LABELS: Record<MetricKey, string> = {
   spend: "Investimento", impressions: "Impressões", clicks: "Cliques",
   ctr: "CTR", cpm: "CPM", results: "Resultados", cpr: "CPR",
 };
 
 export default function AccountDetail({
-  accountId, platform, since, until, status, balance,
+  accountId, platform, since, until, status, balance, currency,
 }: {
   accountId: string; platform: "meta" | "google"; since: string; until: string; status: string; balance: number | null; currency: string;
 }) {
@@ -87,11 +98,15 @@ export default function AccountDetail({
   const [result, setResult] = useState<string | null>(null);
   const [tab, setTab] = useState<"campaigns" | "adsets" | "ads">("campaigns");
   const [demoMetric, setDemoMetric] = useState<MetricKey>("spend");
-  const [tableSort, setTableSort] = useState<SortState<DetailSortKey>>({
-    key: "spend",
-    direction: "desc",
-  });
+  const [tableSort, setTableSort] = usePersistentSort<DetailSortKey>(
+    "adsctrl:sort:account-detail",
+    { key: "spend", direction: "desc" },
+    DETAIL_SORT_KEYS
+  );
   const platformLabel = platform === "google" ? "Google Ads" : "Meta Ads";
+  const formatMoney = (value: number, digits = 2) =>
+    money(value, currency, digits);
+  const formatMoneyShort = (value: number) => moneyShort(value, currency);
 
   useEffect(() => {
     let alive = true;
@@ -121,7 +136,7 @@ export default function AccountDetail({
     }
   };
   const fmtMetric = (v: number, m: MetricKey) =>
-    m === "spend" || m === "cpm" || m === "cpr" ? brl(v) : m === "ctr" ? pct(v) : num(v);
+    m === "spend" || m === "cpm" || m === "cpr" ? formatMoney(v) : m === "ctr" ? pct(v) : num(v);
 
   const byObjective = useMemo(() => {
     if (!data) return [];
@@ -231,20 +246,26 @@ export default function AccountDetail({
 
       {/* KPIs PRINCIPAIS com deltas */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12, marginBottom: 12 }}>
-        <KpiCard label="INVESTIMENTO" value={brl(k.spend)} cur={k.spend} prev={p.spend} neutral />
+        <KpiCard label="INVESTIMENTO" value={formatMoney(k.spend)} cur={k.spend} prev={p.spend} neutral />
         <KpiCard label="ALCANCE" value={num(k.reach)} cur={k.reach} prev={p.reach} sub={`Freq. ${freq.toFixed(2)}x`} />
         <KpiCard label={resultLabel(result || "").toUpperCase()} value={num(primaryRes)} cur={primaryRes} prev={prevPrimaryRes} />
-        <KpiCard label="CUSTO / RESULTADO" value={brl(cpr)} cur={cpr} prev={prevCpr} invert />
+        <KpiCard
+          label="CUSTO / RESULTADO"
+          value={primaryRes > 0 ? formatMoney(cpr) : "—"}
+          cur={primaryRes > 0 ? cpr : undefined}
+          prev={prevPrimaryRes > 0 ? prevCpr : undefined}
+          invert
+        />
       </div>
 
       {/* Métricas secundárias */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 8, marginBottom: 12 }}>
         <MiniKpi label="Impressões" value={num(k.impressions)} cur={k.impressions} prev={p.impressions} />
         <MiniKpi label="Cliques" value={num(k.clicks)} cur={k.clicks} prev={p.clicks} />
-        <MiniKpi label="CTR" value={pct(k.ctr)} cur={k.ctr} prev={p.ctr} />
-        <MiniKpi label="CPC" value={brl(k.clicks ? k.spend / k.clicks : 0)} cur={k.clicks ? k.spend / k.clicks : 0} prev={p.clicks ? p.spend / p.clicks : 0} invert />
-        <MiniKpi label="CPM" value={brl(k.cpm)} cur={k.cpm} prev={p.cpm} invert />
-        <MiniKpi label="Frequência" value={`${freq.toFixed(2)}x`} cur={freq} prev={prevFreq} invert />
+        <MiniKpi label="CTR" value={k.impressions > 0 ? pct(k.ctr) : "—"} cur={k.impressions > 0 ? k.ctr : undefined} prev={p.impressions > 0 ? p.ctr : undefined} />
+        <MiniKpi label="CPC" value={k.clicks > 0 ? formatMoney(k.spend / k.clicks) : "—"} cur={k.clicks > 0 ? k.spend / k.clicks : undefined} prev={p.clicks > 0 ? p.spend / p.clicks : undefined} invert />
+        <MiniKpi label="CPM" value={k.impressions > 0 ? formatMoney(k.cpm) : "—"} cur={k.impressions > 0 ? k.cpm : undefined} prev={p.impressions > 0 ? p.cpm : undefined} invert />
+        <MiniKpi label="Frequência" value={k.reach > 0 ? `${freq.toFixed(2)}x` : "—"} cur={k.reach > 0 ? freq : undefined} prev={p.reach > 0 ? prevFreq : undefined} invert />
       </div>
 
       {/* E-COMMERCE (só quando há venda) */}
@@ -252,10 +273,10 @@ export default function AccountDetail({
         <>
           <SectionTitle>E-commerce</SectionTitle>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 16 }}>
-            <KpiCard label="ROAS" value={`${roas(pValue, k.spend).toFixed(2)}x`} cur={roas(pValue, k.spend)} prev={roas(prevPValue, p.spend)} />
+            <KpiCard label="ROAS" value={k.spend > 0 ? `${roas(pValue, k.spend).toFixed(2)}x` : "—"} cur={k.spend > 0 ? roas(pValue, k.spend) : undefined} prev={p.spend > 0 ? roas(prevPValue, p.spend) : undefined} />
             <KpiCard label="COMPRAS" value={num(purchases)} cur={purchases} prev={prevPurchases} />
-            <KpiCard label="VALOR DE COMPRA" value={brl(pValue)} cur={pValue} prev={prevPValue} />
-            <KpiCard label="CUSTO / COMPRA" value={brl(purchases ? k.spend / purchases : 0)} cur={purchases ? k.spend / purchases : 0} prev={prevPurchases ? p.spend / prevPurchases : 0} invert />
+            <KpiCard label="VALOR DE COMPRA" value={formatMoney(pValue)} cur={pValue} prev={prevPValue} />
+            <KpiCard label="CUSTO / COMPRA" value={purchases > 0 ? formatMoney(k.spend / purchases) : "—"} cur={purchases > 0 ? k.spend / purchases : undefined} prev={prevPurchases > 0 ? p.spend / prevPurchases : undefined} invert />
           </div>
         </>
       )}
@@ -296,9 +317,9 @@ export default function AccountDetail({
           <ComposedChart data={data.daily.map((d) => ({ ...d, label: dayLabel(d.date) }))} margin={{ top: 10, right: 8, left: 8, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eee" />
             <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#999" }} tickLine={false} axisLine={false} />
-            <YAxis yAxisId="l" tick={{ fontSize: 11, fill: "#999" }} tickLine={false} axisLine={false} tickFormatter={(v) => brlShort(v)} width={56} />
-            <YAxis yAxisId="r" orientation="right" tick={{ fontSize: 11, fill: "#999" }} tickLine={false} axisLine={false} tickFormatter={(v) => brlShort(v)} width={48} />
-            <Tooltip formatter={(v: any, n: any) => [brl(Number(v)), n === "spend" ? "Investimento" : "CPM"]} />
+            <YAxis yAxisId="l" tick={{ fontSize: 11, fill: "#999" }} tickLine={false} axisLine={false} tickFormatter={(v) => formatMoneyShort(v)} width={56} />
+            <YAxis yAxisId="r" orientation="right" tick={{ fontSize: 11, fill: "#999" }} tickLine={false} axisLine={false} tickFormatter={(v) => formatMoneyShort(v)} width={48} />
+            <Tooltip formatter={(v: any, n: any) => [formatMoney(Number(v)), n === "spend" ? "Investimento" : "CPM"]} />
             <Bar yAxisId="l" dataKey="spend" name="Investimento" fill={TEAL} radius={[4, 4, 0, 0]} maxBarSize={48} />
             <Line yAxisId="r" type="monotone" dataKey="cpm" name="CPM" stroke={ACCENT2} strokeWidth={2} dot={false} />
           </ComposedChart>
@@ -346,8 +367,8 @@ export default function AccountDetail({
                         <span style={{ maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.name}>{r.name}</span>
                       </div>
                     </td>
-                    <Td>{brl(r.spend)}</Td><Td>{num(r.impressions)}</Td><Td>{num(r.clicks)}</Td><Td>{pct(r.ctr)}</Td>
-                    <Td accent>{num(res)}</Td><Td>{res ? brl(r.spend / res) : "—"}</Td>
+                    <Td>{formatMoney(r.spend)}</Td><Td>{num(r.impressions)}</Td><Td>{num(r.clicks)}</Td><Td>{pct(r.ctr)}</Td>
+                    <Td accent>{num(res)}</Td><Td>{res ? formatMoney(r.spend / res) : "—"}</Td>
                     <Td>{rv > 0 && r.spend > 0 ? `${(rv / r.spend).toFixed(2)}x` : "—"}</Td>
                   </tr>
                 );
@@ -363,9 +384,9 @@ export default function AccountDetail({
         <ChartCard height={220} title="Investimento por objetivo">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={byObjective} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
-              <XAxis type="number" tickFormatter={(v) => brlShort(v)} tick={{ fontSize: 11, fill: "#999" }} axisLine={false} tickLine={false} />
+              <XAxis type="number" tickFormatter={(v) => formatMoneyShort(v)} tick={{ fontSize: 11, fill: "#999" }} axisLine={false} tickLine={false} />
               <YAxis type="category" dataKey="objective" width={130} tick={{ fontSize: 11, fill: "#666" }} axisLine={false} tickLine={false} />
-              <Tooltip formatter={(v: any) => brl(Number(v))} />
+              <Tooltip formatter={(v: any) => formatMoney(Number(v))} />
               <Bar dataKey="spend" fill={TEAL} radius={[0, 4, 4, 0]} maxBarSize={28} />
             </BarChart>
           </ResponsiveContainer>
@@ -408,7 +429,7 @@ export default function AccountDetail({
           <BarChart data={data.breakdowns.hour.map((h) => ({ label: h.key, v: metricOf(h, demoMetric) }))} margin={{ top: 6, right: 8, left: 8, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eee" />
             <XAxis dataKey="label" tick={{ fontSize: 10, fill: "#999" }} tickLine={false} axisLine={false} interval={1} />
-            <YAxis tick={{ fontSize: 11, fill: "#999" }} tickLine={false} axisLine={false} width={48} tickFormatter={(v) => (demoMetric === "spend" || demoMetric === "cpm" || demoMetric === "cpr" ? brlShort(v) : num(v))} />
+            <YAxis tick={{ fontSize: 11, fill: "#999" }} tickLine={false} axisLine={false} width={48} tickFormatter={(v) => (demoMetric === "spend" || demoMetric === "cpm" || demoMetric === "cpr" ? formatMoneyShort(v) : num(v))} />
             <Tooltip formatter={(v: any) => fmtMetric(Number(v), demoMetric)} />
             <Bar dataKey="v" fill={ACCENT} radius={[3, 3, 0, 0]} maxBarSize={22} />
           </BarChart>
@@ -446,13 +467,13 @@ function KpiCard({ label, value, sub, cur, prev, invert, neutral }: { label: str
   );
 }
 
-function MiniKpi({ label, value, cur, prev, invert, neutral }: { label: string; value: string; cur: number; prev: number; invert?: boolean; neutral?: boolean }) {
+function MiniKpi({ label, value, cur, prev, invert, neutral }: { label: string; value: string; cur?: number; prev?: number; invert?: boolean; neutral?: boolean }) {
   return (
     <div style={{ background: "#fff", border: "1px solid #eee", borderRadius: 10, padding: "10px 12px" }}>
       <div style={{ fontSize: 11, color: "#999" }}>{label}</div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 6, marginTop: 2 }}>
         <span style={{ fontSize: 16, fontWeight: 600 }}>{value}</span>
-        <DeltaBadge cur={cur} prev={prev} invert={invert} neutral={neutral} />
+        {cur != null && prev != null && <DeltaBadge cur={cur} prev={prev} invert={invert} neutral={neutral} />}
       </div>
     </div>
   );

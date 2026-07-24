@@ -8,6 +8,7 @@ import {
   compareSortValues,
   SortButton,
   SortState,
+  usePersistentSort,
 } from "@/components/SortableHeader";
 
 interface Group {
@@ -55,6 +56,33 @@ type AccountAdminSortKey =
   | "client"
   | "group"
   | "visibility";
+const CLIENT_ADMIN_SORT_KEYS: readonly ClientAdminSortKey[] = [
+  "name",
+  "objective",
+  "budget",
+  "result",
+  "kpi",
+  "target",
+  "cycle",
+];
+const GROUP_SORT_KEYS: readonly GroupSortKey[] = ["name", "accounts"];
+const ACCOUNT_ADMIN_SORT_KEYS: readonly AccountAdminSortKey[] = [
+  "platform",
+  "name",
+  "status",
+  "client",
+  "group",
+  "visibility",
+];
+const MONETARY_CLIENT_KPIS = new Set([
+  "cpa",
+  "cpl",
+  "cpc",
+  "cpm",
+  "cost_per_result",
+  "revenue",
+  "custom",
+]);
 
 const PALETTE = ["#3987e5", "#16a34a", "#db2777", "#f59e0b", "#7c3aed", "#0891b2", "#dc2626", "#4b5563"];
 
@@ -70,18 +98,21 @@ export default function Admin() {
 
   const [newName, setNewName] = useState("");
   const [newColor, setNewColor] = useState(PALETTE[0]);
-  const [clientSort, setClientSort] = useState<SortState<ClientAdminSortKey>>({
-    key: "name",
-    direction: "asc",
-  });
-  const [groupSort, setGroupSort] = useState<SortState<GroupSortKey>>({
-    key: "name",
-    direction: "asc",
-  });
-  const [accountSort, setAccountSort] = useState<SortState<AccountAdminSortKey>>({
-    key: "name",
-    direction: "asc",
-  });
+  const [clientSort, setClientSort] = usePersistentSort<ClientAdminSortKey>(
+    "adsctrl:sort:admin-clients",
+    { key: "name", direction: "asc" },
+    CLIENT_ADMIN_SORT_KEYS
+  );
+  const [groupSort, setGroupSort] = usePersistentSort<GroupSortKey>(
+    "adsctrl:sort:admin-groups",
+    { key: "name", direction: "asc" },
+    GROUP_SORT_KEYS
+  );
+  const [accountSort, setAccountSort] = usePersistentSort<AccountAdminSortKey>(
+    "adsctrl:sort:admin-accounts",
+    { key: "name", direction: "asc" },
+    ACCOUNT_ADMIN_SORT_KEYS
+  );
 
   async function load() {
     setError(null);
@@ -112,6 +143,27 @@ export default function Admin() {
     }
   }
 
+  async function refreshClients() {
+    try {
+      const response = await fetch("/api/clients?status=active", {
+        cache: "no-store",
+      });
+      const text = await response.text();
+      const payload = text ? JSON.parse(text) : {};
+      if (!response.ok || payload.error) {
+        throw new Error(payload.error || `Falha (HTTP ${response.status}).`);
+      }
+      setClients(payload.clients || []);
+      setClientsUnavailable(null);
+    } catch (cause: any) {
+      setError(
+        `A conta foi atualizada, mas a lista de clientes não pôde ser sincronizada: ${
+          cause?.message || "tente atualizar a página"
+        }.`
+      );
+    }
+  }
+
   useEffect(() => {
     load();
   }, []);
@@ -134,6 +186,8 @@ export default function Admin() {
       traffic: "Tráfego",
       engagement: "Engajamento",
       awareness: "Reconhecimento",
+      app: "Aplicativo",
+      other: "Outro",
     };
     const resultLabel: Record<string, string> = {
       conversoes: "Conversões",
@@ -144,6 +198,17 @@ export default function Admin() {
       cliques: "Cliques",
       lpv: "LPV",
       engajamento: "Engajamento",
+    };
+    const kpiLabel: Record<string, string> = {
+      cpa: "CPA",
+      cpl: "CPL",
+      roas: "ROAS",
+      revenue: "Receita",
+      conversions: "Conversões",
+      ctr: "CTR",
+      cpc: "CPC",
+      cpm: "CPM",
+      custom: "Custo / resultado personalizado",
     };
     const value = (client: ClientRecord) => {
       switch (clientSort.key) {
@@ -157,12 +222,29 @@ export default function Admin() {
           return client.result_family
             ? resultLabel[client.result_family] || client.result_family
             : null;
-        case "kpi": return client.primary_kpi?.toUpperCase() || null;
+        case "kpi":
+          return client.primary_kpi
+            ? kpiLabel[client.primary_kpi] || client.primary_kpi
+            : null;
         case "target": return client.target_value;
         case "cycle": return client.budget_start_day;
       }
     };
     return [...clients].sort((left, right) => {
+      const leftValue = value(left);
+      const rightValue = value(right);
+      if (
+        clientSort.key === "budget" ||
+        clientSort.key === "target"
+      ) {
+        const leftMissing =
+          leftValue == null ||
+          (typeof leftValue === "number" && Number.isNaN(leftValue));
+        const rightMissing =
+          rightValue == null ||
+          (typeof rightValue === "number" && Number.isNaN(rightValue));
+        if (leftMissing !== rightMissing) return leftMissing ? 1 : -1;
+      }
       if (
         clientSort.key === "budget" &&
         left.currency !== right.currency
@@ -179,10 +261,17 @@ export default function Admin() {
           "asc"
         );
       }
+      if (
+        clientSort.key === "target" &&
+        MONETARY_CLIENT_KPIS.has(left.primary_kpi || "") &&
+        left.currency !== right.currency
+      ) {
+        return compareSortValues(left.currency, right.currency, "asc");
+      }
       return (
         compareSortValues(
-          value(left),
-          value(right),
+          leftValue,
+          rightValue,
           clientSort.direction
         ) || compareSortValues(left.name, right.name, "asc")
       );
@@ -297,6 +386,7 @@ export default function Admin() {
         method: "POST",
         body: JSON.stringify({ account_id, hidden }),
       });
+      await refreshClients();
     } catch (e: any) {
       setError(e?.message);
       await load();
@@ -313,6 +403,7 @@ export default function Admin() {
         method: "POST",
         body: JSON.stringify({ google_account_id, meta_account_id: linked }),
       });
+      await refreshClients();
     } catch (e: any) {
       setError(e?.message);
       await load();
@@ -418,10 +509,12 @@ export default function Admin() {
                     <option value="traffic">Tráfego</option>
                     <option value="engagement">Engajamento</option>
                     <option value="awareness">Reconhecimento</option>
+                    <option value="app">Aplicativo</option>
+                    <option value="other">Outro</option>
                   </select>
                 </Field>
-                <Field label="Orçamento mensal">
-                  <input key={`${client.id}-budget-${loadRevision}-${client.monthly_budget ?? ""}`} type="number" min="0" step="10" defaultValue={client.monthly_budget ?? ""} placeholder="R$ 0" onBlur={(e) => updateClient(client.id, { monthly_budget: e.target.value ? Number(e.target.value) : null })} style={compactInput} />
+                <Field label={`Orçamento mensal · ${client.currency || "BRL"}`}>
+                  <input key={`${client.id}-budget-${loadRevision}-${client.monthly_budget ?? ""}`} type="number" min="0" step="10" defaultValue={client.monthly_budget ?? ""} placeholder={`${client.currency || "BRL"} 0`} onBlur={(e) => updateClient(client.id, { monthly_budget: e.target.value ? Number(e.target.value) : null })} style={compactInput} />
                 </Field>
                 <Field label="Resultado">
                   <select value={client.result_family || ""} onChange={(e) => updateClient(client.id, { result_family: e.target.value || null })} style={compactInput}>
@@ -437,18 +530,62 @@ export default function Admin() {
                   </select>
                 </Field>
                 <Field label="KPI principal">
-                  <select value={client.primary_kpi || ""} onChange={(e) => updateClient(client.id, { primary_kpi: e.target.value || null })} style={compactInput}>
+                  <select
+                    value={client.primary_kpi || ""}
+                    onChange={(e) =>
+                      updateClient(client.id, {
+                        primary_kpi: e.target.value || null,
+                        target_value: null,
+                      })
+                    }
+                    title="Ao trocar o tipo de KPI, a meta anterior é limpa para evitar reinterpretar moeda como percentual ou ROAS."
+                    style={compactInput}
+                  >
                     <option value="">— selecionar —</option>
                     <option value="cpl">CPL</option>
                     <option value="cpa">CPA</option>
                     <option value="roas">ROAS</option>
+                    <option value="revenue">Receita</option>
                     <option value="conversions">Conversões</option>
                     <option value="ctr">CTR</option>
                     <option value="cpc">CPC</option>
+                    <option value="cpm">CPM</option>
+                    <option value="custom">Custo / resultado personalizado</option>
                   </select>
                 </Field>
-                <Field label="Meta do KPI">
-                  <input key={`${client.id}-target-${loadRevision}-${client.target_value ?? ""}`} type="number" min="0" step="0.01" defaultValue={client.target_value ?? ""} placeholder="0,00" onBlur={(e) => updateClient(client.id, { target_value: e.target.value ? Number(e.target.value) : null })} style={compactInput} />
+                <Field
+                  label={`Meta do KPI${
+                    MONETARY_CLIENT_KPIS.has(
+                      client.primary_kpi?.toLowerCase() || ""
+                    )
+                      ? ` · ${client.currency || "BRL"}`
+                      : client.primary_kpi?.toLowerCase() === "ctr"
+                        ? " · %"
+                        : client.primary_kpi?.toLowerCase() === "roas"
+                          ? " · x"
+                          : ""
+                  }`}
+                >
+                  <input
+                    key={`${client.id}-target-${loadRevision}-${client.target_value ?? ""}`}
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    defaultValue={client.target_value ?? ""}
+                    placeholder={
+                      MONETARY_CLIENT_KPIS.has(
+                        client.primary_kpi?.toLowerCase() || ""
+                      )
+                        ? `${client.currency || "BRL"} 0,00`
+                        : client.primary_kpi?.toLowerCase() === "ctr"
+                          ? "0,00%"
+                          : client.primary_kpi?.toLowerCase() === "roas"
+                            ? "0,00x"
+                            : "0,00"
+                    }
+                    onBlur={(e) => updateClient(client.id, { target_value: e.target.value ? Number(e.target.value) : null })}
+                    style={compactInput}
+                  />
                 </Field>
                 <Field label="Início do ciclo">
                   <select value={client.budget_start_day || 1} onChange={(e) => updateClient(client.id, { budget_start_day: Number(e.target.value) })} style={compactInput}>
@@ -532,52 +669,54 @@ export default function Admin() {
         {groups.length === 0 ? (
           <p style={{ color: "#888", fontSize: 14 }}>Nenhum grupo ainda. Crie o primeiro acima.</p>
         ) : (
-          <div style={{ border: "1px solid #eee", borderRadius: 12, overflow: "hidden" }}>
-            <div style={{ display: "grid", gridTemplateColumns: GROUP_GRID, alignItems: "center", gap: 12, padding: "9px 16px", color: "#888", background: "#fafaf9", borderBottom: "1px solid #eee", fontSize: 10, fontWeight: 750, textTransform: "uppercase", letterSpacing: 0.25 }}>
+          <div style={{ border: "1px solid #eee", borderRadius: 12, overflowX: "auto" }}>
+            <div style={{ minWidth: 500 }}>
+              <div style={{ display: "grid", gridTemplateColumns: GROUP_GRID, alignItems: "center", gap: 12, padding: "9px 16px", color: "#888", background: "#fafaf9", borderBottom: "1px solid #eee", fontSize: 10, fontWeight: 750, textTransform: "uppercase", letterSpacing: 0.25 }}>
               <span>Cor</span>
               <SortButton column="name" sort={groupSort} onSort={setGroupSort} align="left">Grupo</SortButton>
               <SortButton column="accounts" sort={groupSort} onSort={setGroupSort} initialDirection="desc">Contas</SortButton>
               <span style={{ textAlign: "right" }}>Ação</span>
-            </div>
-            {sortedGroups.map((g) => (
-              <div
-                key={g.id}
-                style={{
-                  padding: "12px 16px",
-                  borderTop: "1px solid #f0f0f0",
-                  display: "grid",
-                  gridTemplateColumns: GROUP_GRID,
-                  alignItems: "center",
-                  gap: 12,
-                }}
-              >
-                <input
-                  type="color"
-                  value={g.color}
-                  onChange={(e) => updateGroup(g.id, { color: e.target.value })}
-                  style={{ width: 28, height: 28, border: "none", background: "none", cursor: "pointer", padding: 0 }}
-                />
-                <input
-                  key={`${g.id}-name-${loadRevision}-${g.name}`}
-                  defaultValue={g.name}
-                  onBlur={(e) => {
-                    const v = e.target.value.trim();
-                    if (v && v !== g.name) updateGroup(g.id, { name: v });
-                  }}
-                  style={{ width: "100%", boxSizing: "border-box", padding: "6px 10px", borderRadius: 6, border: "1px solid #eee", fontSize: 14 }}
-                />
-                <span style={{ fontSize: 13, color: "#888", textAlign: "right" }}>
-                  {countByGroup[g.id] || 0} conta(s)
-                </span>
-                <button
-                  onClick={() => deleteGroup(g.id, g.name)}
-                  disabled={busy}
-                  style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid #f0d0d0", background: "#fff", color: "#a32d2d", fontSize: 13, cursor: "pointer" }}
-                >
-                  Excluir
-                </button>
               </div>
-            ))}
+              {sortedGroups.map((g) => (
+                <div
+                  key={g.id}
+                  style={{
+                    padding: "12px 16px",
+                    borderTop: "1px solid #f0f0f0",
+                    display: "grid",
+                    gridTemplateColumns: GROUP_GRID,
+                    alignItems: "center",
+                    gap: 12,
+                  }}
+                >
+                  <input
+                    type="color"
+                    value={g.color}
+                    onChange={(e) => updateGroup(g.id, { color: e.target.value })}
+                    style={{ width: 28, height: 28, border: "none", background: "none", cursor: "pointer", padding: 0 }}
+                  />
+                  <input
+                    key={`${g.id}-name-${loadRevision}-${g.name}`}
+                    defaultValue={g.name}
+                    onBlur={(e) => {
+                      const v = e.target.value.trim();
+                      if (v && v !== g.name) updateGroup(g.id, { name: v });
+                    }}
+                    style={{ width: "100%", boxSizing: "border-box", padding: "6px 10px", borderRadius: 6, border: "1px solid #eee", fontSize: 14 }}
+                  />
+                  <span style={{ fontSize: 13, color: "#888", textAlign: "right" }}>
+                    {countByGroup[g.id] || 0} conta(s)
+                  </span>
+                  <button
+                    onClick={() => deleteGroup(g.id, g.name)}
+                    disabled={busy}
+                    style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid #f0d0d0", background: "#fff", color: "#a32d2d", fontSize: 13, cursor: "pointer" }}
+                  >
+                    Excluir
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </section>

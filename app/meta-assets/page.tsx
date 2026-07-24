@@ -5,6 +5,7 @@ import {
   compareSortValues,
   SortButton,
   SortState,
+  usePersistentSort,
 } from "@/components/SortableHeader";
 
 type Connection = {
@@ -76,11 +77,29 @@ type MetaSortKey =
   | "status"
   | "today"
   | "spend7d"
-  | "billing"
+  | "prepaidAvailable"
+  | "postpaidOutstanding"
   | "amountSpent"
   | "spendCap"
   | "payment"
   | "connection";
+
+const DEFAULT_SORT: SortState<MetaSortKey> = {
+  key: "account",
+  direction: "asc",
+};
+const META_SORT_KEYS: readonly MetaSortKey[] = [
+  "account",
+  "status",
+  "today",
+  "spend7d",
+  "prepaidAvailable",
+  "postpaidOutstanding",
+  "amountSpent",
+  "spendCap",
+  "payment",
+  "connection",
+];
 
 const statusLabel: Record<string, string> = {
   ACTIVE: "Ativa",
@@ -118,10 +137,11 @@ export default function MetaAssetsPage() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"all" | "active" | "issues">("all");
   const [connection, setConnection] = useState("all");
-  const [sort, setSort] = useState<SortState<MetaSortKey>>({
-    key: "account",
-    direction: "asc",
-  });
+  const [sort, setSort] = usePersistentSort<MetaSortKey>(
+    "adsctrl:sort:meta-assets",
+    DEFAULT_SORT,
+    META_SORT_KEYS
+  );
   const [copied, setCopied] = useState<string | null>(null);
 
   async function load(target?: string | "all") {
@@ -221,10 +241,10 @@ export default function MetaAssetsPage() {
           return account.metrics_available ? account.spend_today : null;
         case "spend7d":
           return account.metrics_available ? account.spend_7d : null;
-        case "billing":
-          return account.is_prepaid
-            ? account.available_balance
-            : account.billing_balance;
+        case "prepaidAvailable":
+          return account.is_prepaid ? account.available_balance : null;
+        case "postpaidOutstanding":
+          return account.is_prepaid ? null : account.billing_balance;
         case "amountSpent": return account.amount_spent;
         case "spendCap": return account.spend_cap;
         case "payment": return account.payment_summary;
@@ -234,15 +254,22 @@ export default function MetaAssetsPage() {
     const monetary = new Set<MetaSortKey>([
       "today",
       "spend7d",
-      "billing",
+      "prepaidAvailable",
+      "postpaidOutstanding",
       "amountSpent",
       "spendCap",
     ]);
     return rows.sort((left, right) => {
+      const leftValue = value(left);
+      const rightValue = value(right);
       if (monetary.has(sort.key)) {
-        if (sort.key === "billing" && left.is_prepaid !== right.is_prepaid) {
-          return Number(right.is_prepaid) - Number(left.is_prepaid);
-        }
+        const leftMissing =
+          leftValue == null ||
+          (typeof leftValue === "number" && Number.isNaN(leftValue));
+        const rightMissing =
+          rightValue == null ||
+          (typeof rightValue === "number" && Number.isNaN(rightValue));
+        if (leftMissing !== rightMissing) return leftMissing ? 1 : -1;
         const currencyOrder = compareSortValues(
           left.currency,
           right.currency,
@@ -251,7 +278,7 @@ export default function MetaAssetsPage() {
         if (currencyOrder) return currencyOrder;
       }
       return (
-        compareSortValues(value(left), value(right), sort.direction) ||
+        compareSortValues(leftValue, rightValue, sort.direction) ||
         compareSortValues(left.name, right.name, "asc")
       );
     });
@@ -320,8 +347,8 @@ export default function MetaAssetsPage() {
         account.currency,
         account.metrics_available ? account.spend_today : "",
         account.metrics_available ? account.spend_7d : "",
-        account.available_balance,
-        account.billing_balance,
+        account.is_prepaid ? account.available_balance : "",
+        account.is_prepaid ? "" : account.billing_balance,
         account.amount_spent,
         account.spend_cap,
         account.spend_cap_remaining,
@@ -446,7 +473,7 @@ export default function MetaAssetsPage() {
           </section>
 
           <div style={{ padding: "10px 12px", borderRadius: 10, background: "#f6f8fb", border: "1px solid #e4e9f0", color: "#657080", fontSize: 11, lineHeight: 1.45, marginBottom: 12 }}>
-            <strong>Leitura correta:</strong> o limite exibido abaixo é o limite total de gastos da conta (`spend_cap`). O limite diário interno definido pela Meta não é disponibilizado pela API oficial. Tokens e cookies nunca saem do servidor.
+            <strong>Leitura correta:</strong> saldo disponível aparece somente para contas pré-pagas; saldo em aberto aparece somente para contas pós-pagas. O limite exibido abaixo é o limite total de gastos da conta (`spend_cap`). O limite diário interno definido pela Meta não é disponibilizado pela API oficial. Tokens e cookies nunca saem do servidor.
             {totals.metricsUnavailable > 0 && <> {totals.metricsUnavailable} conta(s) ficaram com métricas indisponíveis nesta consulta; elas não foram convertidas em zero.</>}
           </div>
 
@@ -461,16 +488,32 @@ export default function MetaAssetsPage() {
                 <option value="all">Todas as conexões</option>
                 {data.connections.map((item) => <option key={item.index} value={item.index}>Conexão {item.index + 1} · {item.name}</option>)}
               </select>
+              <button
+                type="button"
+                onClick={() => setSort(DEFAULT_SORT)}
+                disabled={sort.key === DEFAULT_SORT.key && sort.direction === DEFAULT_SORT.direction}
+                title="Restaurar ordenação por nome da conta"
+                style={{
+                  ...buttonStyle,
+                  height: 34,
+                  marginLeft: "auto",
+                  opacity: sort.key === DEFAULT_SORT.key && sort.direction === DEFAULT_SORT.direction ? 0.5 : 1,
+                  cursor: sort.key === DEFAULT_SORT.key && sort.direction === DEFAULT_SORT.direction ? "default" : "pointer",
+                }}
+              >
+                ↺ Ordem padrão
+              </button>
             </div>
             <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1460 }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1580 }}>
                 <thead>
                   <tr style={{ background: "#fafaf9", color: "#888", fontSize: 9.5, textTransform: "uppercase", letterSpacing: 0.3 }}>
                     <Th sortKey="account" sort={sort} onSort={setSort} align="left">Conta / BM</Th>
                     <Th sortKey="status" sort={sort} onSort={setSort}>Status</Th>
                     <Th sortKey="today" sort={sort} onSort={setSort} initialDirection="desc">Hoje</Th>
                     <Th sortKey="spend7d" sort={sort} onSort={setSort} initialDirection="desc">7 dias</Th>
-                    <Th sortKey="billing" sort={sort} onSort={setSort} initialDirection="desc">Cobrança</Th>
+                    <Th sortKey="prepaidAvailable" sort={sort} onSort={setSort} initialDirection="desc">Disponível pré-pago</Th>
+                    <Th sortKey="postpaidOutstanding" sort={sort} onSort={setSort} initialDirection="desc">Em aberto pós-pago</Th>
                     <Th sortKey="amountSpent" sort={sort} onSort={setSort} initialDirection="desc">Gasto acumulado</Th>
                     <Th sortKey="spendCap" sort={sort} onSort={setSort} initialDirection="desc">Limite total</Th>
                     <Th sortKey="payment" sort={sort} onSort={setSort}>Pagamento</Th>
@@ -496,8 +539,20 @@ export default function MetaAssetsPage() {
                         <Td strong>{account.metrics_available ? money(account.spend_today, account.currency) : "Indisponível"}</Td>
                         <Td>{account.metrics_available ? money(account.spend_7d, account.currency) : "Indisponível"}</Td>
                         <Td>
-                          <div style={{ fontWeight: 700 }}>{account.is_prepaid ? money(account.available_balance, account.currency) : money(account.billing_balance, account.currency)}</div>
-                          <div style={{ fontSize: 9.5, color: "#999", marginTop: 2 }}>{account.is_prepaid ? "saldo disponível" : "saldo em aberto"}</div>
+                          {account.is_prepaid ? (
+                            <>
+                              <div style={{ fontWeight: 700 }}>{money(account.available_balance, account.currency)}</div>
+                              <div style={{ fontSize: 9.5, color: "#999", marginTop: 2 }}>crédito disponível</div>
+                            </>
+                          ) : <span style={{ color: "#aaa" }}>Não se aplica</span>}
+                        </Td>
+                        <Td>
+                          {!account.is_prepaid ? (
+                            <>
+                              <div style={{ fontWeight: 700 }}>{money(account.billing_balance, account.currency)}</div>
+                              <div style={{ fontSize: 9.5, color: "#999", marginTop: 2 }}>saldo em aberto</div>
+                            </>
+                          ) : <span style={{ color: "#aaa" }}>Não se aplica</span>}
                         </Td>
                         <Td>{money(account.amount_spent, account.currency)}</Td>
                         <Td>

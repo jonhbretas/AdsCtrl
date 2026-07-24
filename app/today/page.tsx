@@ -5,6 +5,7 @@ import {
   compareSortValues,
   SortButton,
   SortState,
+  usePersistentSort,
 } from "@/components/SortableHeader";
 
 type Priority = {
@@ -48,20 +49,83 @@ type ClientSortKey =
   | "trend"
   | "forecast"
   | "dataStatus";
+const CLIENT_SORT_KEYS: readonly ClientSortKey[] = [
+  "priority",
+  "client",
+  "pacing",
+  "kpiAttainment",
+  "trend",
+  "forecast",
+  "dataStatus",
+];
+const TODAY_SORT_STORAGE_KEY = `adsctrl:sort:today:${
+  new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+  }).format(new Date())
+}`;
 
 const currencyMoney = (value: number, currency: string, digits = 0) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: currency || "BRL", minimumFractionDigits: digits, maximumFractionDigits: digits }).format(value || 0);
 const num = (value: number, digits = 0) =>
   (value || 0).toLocaleString("pt-BR", { maximumFractionDigits: digits });
+const LOWER_IS_BETTER_KPIS = new Set([
+  "cpc",
+  "cpm",
+  "cpa",
+  "cpl",
+  "cost_per_result",
+  "custom",
+]);
+const MONETARY_KPIS = new Set([
+  "roas",
+  "revenue",
+  "cpc",
+  "cpm",
+  "cpa",
+  "cpl",
+  "cost_per_result",
+  "custom",
+]);
+
+type KpiAttainment = {
+  ratio: number;
+  lowerIsBetter: boolean;
+};
+
+function kpiAttainment(client: Client): KpiAttainment | null {
+  const target = Number(client.target_value || 0);
+  const current = Number(client.metrics.kpiValue);
+  if (
+    !client.primary_kpi ||
+    !Number.isFinite(target) ||
+    !Number.isFinite(current) ||
+    target <= 0 ||
+    current < 0
+  ) {
+    return null;
+  }
+
+  const kpiType = client.primary_kpi.toLowerCase();
+  if (client.mixedCurrencies && MONETARY_KPIS.has(kpiType)) return null;
+
+  const lowerIsBetter = LOWER_IS_BETTER_KPIS.has(kpiType);
+  if (lowerIsBetter && current <= 0) return null;
+
+  return {
+    ratio: lowerIsBetter ? target / current : current / target,
+    lowerIsBetter,
+  };
+}
 
 export default function TodayPage() {
   const [data, setData] = useState<Cockpit | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [sort, setSort] = useState<SortState<ClientSortKey>>({
-    key: "priority",
-    direction: "asc",
-  });
+  const [sort, setSort] = usePersistentSort<ClientSortKey>(
+    TODAY_SORT_STORAGE_KEY,
+    { key: "priority", direction: "asc" },
+    CLIENT_SORT_KEYS
+  );
 
   async function load() {
     setLoading(true); setError(null);
@@ -92,39 +156,17 @@ export default function TodayPage() {
     const value = (client: Client) => {
       switch (sort.key) {
         case "priority":
-          return client.priorities.some(
-            (priority) => priority.level === "critical"
-          )
-            ? 0
-            : client.priorities.length
-              ? 1
-              : 2;
+          return client.priorities.reduce(
+            (rank, priority) =>
+              Math.min(
+                rank,
+                { critical: 0, warning: 1, info: 2 }[priority.level] ?? 3
+              ),
+            3
+          );
         case "client": return client.name;
-        case "pacing": return client.pacing.percentOfBudget;
-        case "kpiAttainment": {
-          const target = Number(client.target_value || 0);
-          const current = client.metrics.kpiValue;
-          if (!client.primary_kpi || target <= 0 || current < 0) return null;
-          const kpiType = client.primary_kpi.toLowerCase();
-          const monetaryKpi = [
-            "roas",
-            "revenue",
-            "cpc",
-            "cpm",
-            "cpa",
-            "cpl",
-          ].includes(kpiType);
-          if (client.mixedCurrencies && monetaryKpi) return null;
-          const lowerIsBetter = [
-            "cpc",
-            "cpm",
-            "cpa",
-            "cpl",
-            "cost_per_result",
-          ].includes(kpiType);
-          if (lowerIsBetter && current <= 0) return null;
-          return lowerIsBetter ? target / current : current / target;
-        }
+        case "pacing": return client.pacing.percentOfExpected;
+        case "kpiAttainment": return kpiAttainment(client)?.ratio ?? null;
         case "trend":
           return client.metrics.prev7.spend > 0
             ? ((client.metrics.last7.spend - client.metrics.prev7.spend) /
@@ -140,25 +182,67 @@ export default function TodayPage() {
       }
     };
     return rows.sort((left, right) => {
-      if (
-        sort.key === "forecast" &&
-        left.currency !== right.currency
-      ) {
-        return compareSortValues(left.currency, right.currency, "asc");
+      const leftValue = value(left);
+      const rightValue = value(right);
+      if (sort.key === "forecast") {
+        const leftMissing =
+          leftValue == null ||
+          (typeof leftValue === "number" && Number.isNaN(leftValue));
+        const rightMissing =
+          rightValue == null ||
+          (typeof rightValue === "number" && Number.isNaN(rightValue));
+        if (leftMissing !== rightMissing) return leftMissing ? 1 : -1;
+        if (left.currency !== right.currency) {
+          return compareSortValues(left.currency, right.currency, "asc");
+        }
       }
       if (sort.key === "priority") {
+        const leftImpact = Math.max(
+          0,
+          ...left.priorities.map((priority) => priority.impact || 0)
+        );
+        const rightImpact = Math.max(
+          0,
+          ...right.priorities.map((priority) => priority.impact || 0)
+        );
+        const leftRelativeImpact =
+          !left.mixedCurrencies && left.pacing.budget > 0
+            ? leftImpact / left.pacing.budget
+            : 0;
+        const rightRelativeImpact =
+          !right.mixedCurrencies && right.pacing.budget > 0
+            ? rightImpact / right.pacing.budget
+            : 0;
+        const leftPaceDeviation =
+          left.pacing.percentOfExpected == null
+            ? 0
+            : Math.abs(left.pacing.percentOfExpected - 100);
+        const rightPaceDeviation =
+          right.pacing.percentOfExpected == null
+            ? 0
+            : Math.abs(right.pacing.percentOfExpected - 100);
         return (
-          compareSortValues(value(left), value(right), "asc") ||
+          compareSortValues(leftValue, rightValue, "asc") ||
           compareSortValues(
-            left.metrics.mtd.spend,
-            right.metrics.mtd.spend,
+            leftRelativeImpact,
+            rightRelativeImpact,
+            "desc"
+          ) ||
+          compareSortValues(
+            left.priorities.length,
+            right.priorities.length,
+            "desc"
+          ) ||
+          compareSortValues(
+            leftPaceDeviation,
+            rightPaceDeviation,
             "desc"
           ) ||
           compareSortValues(left.name, right.name, "asc")
         );
       }
       return (
-        compareSortValues(value(left), value(right), sort.direction) ||
+        compareSortValues(leftValue, rightValue, sort.direction) ||
         compareSortValues(left.name, right.name, "asc")
       );
     });
@@ -177,8 +261,71 @@ export default function TodayPage() {
   if (!data) return null;
 
   return (
-    <div style={{ maxWidth: 1420, margin: "0 auto", padding: "28px 24px 56px", fontFamily: "system-ui, -apple-system, sans-serif", color: "#171716" }}>
-      <header style={{ display: "flex", justifyContent: "space-between", gap: 20, alignItems: "flex-start", marginBottom: 22 }}>
+    <div className="adsctrl-today-page" style={{ fontFamily: "system-ui, -apple-system, sans-serif", color: "#171716" }}>
+      <style>{`
+        .adsctrl-today-page {
+          max-width: 1420px;
+          margin: 0 auto;
+          padding: 28px 24px 56px;
+        }
+        .adsctrl-today-header {
+          display: flex;
+          justify-content: space-between;
+          gap: 20px;
+          align-items: flex-start;
+          margin-bottom: 22px;
+        }
+        .adsctrl-today-actions {
+          display: flex;
+          align-items: center;
+          gap: 9px;
+        }
+        .adsctrl-today-summary {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 12px;
+          margin-bottom: 18px;
+        }
+        .adsctrl-today-layout {
+          display: grid;
+          grid-template-columns: 360px minmax(0, 1fr);
+          gap: 16px;
+          align-items: start;
+        }
+        .adsctrl-today-priority-list {
+          max-height: 650px;
+          overflow-y: auto;
+        }
+        @media (max-width: 1000px) {
+          .adsctrl-today-layout {
+            grid-template-columns: minmax(0, 1fr);
+          }
+          .adsctrl-today-priority-list {
+            max-height: 360px;
+          }
+        }
+        @media (max-width: 760px) {
+          .adsctrl-today-page {
+            padding: 22px 16px 44px;
+          }
+          .adsctrl-today-header {
+            flex-direction: column;
+            align-items: stretch;
+          }
+          .adsctrl-today-actions {
+            flex-wrap: wrap;
+          }
+          .adsctrl-today-summary {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+        }
+        @media (max-width: 520px) {
+          .adsctrl-today-summary {
+            grid-template-columns: minmax(0, 1fr);
+          }
+        }
+      `}</style>
+      <header className="adsctrl-today-header">
         <div>
           <div style={{ fontSize: 12, fontWeight: 700, color: "#777", letterSpacing: 0.7, textTransform: "uppercase" }}>Cockpit diário</div>
           <h1 style={{ margin: "4px 0 0", fontSize: 30, letterSpacing: -0.9 }}>{greeting}, Jonathan.</h1>
@@ -186,21 +333,21 @@ export default function TodayPage() {
             {critical ? `${critical} situação(ões) crítica(s) exigem atenção.` : "Nenhuma situação crítica detectada."}
           </p>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+        <div className="adsctrl-today-actions">
           <DataPill status={data.last_collection?.status || "unknown"} />
           <button onClick={load} style={buttonStyle}>↻ Atualizar</button>
           <a href="/admin#clients" style={{ ...buttonStyle, textDecoration: "none" }}>Metas e orçamento</a>
         </div>
       </header>
 
-      <section style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: 12, marginBottom: 18 }}>
+      <section className="adsctrl-today-summary">
         <Kpi label="Investimento no ciclo" value={data.summary.mixedCurrencies ? "Múltiplas moedas" : currencyMoney(data.summary.spend, portfolioCurrency)} sub={data.summary.mixedCurrencies ? "Veja os valores por cliente" : data.summary.budget ? `${portfolioPacing.toFixed(0)}% do orçamento cadastrado` : "Cadastre os orçamentos"} />
         <Kpi label="Orçamento do ciclo" value={data.summary.mixedCurrencies ? "Por cliente" : data.summary.budget ? currencyMoney(data.summary.budget, portfolioCurrency) : "—"} sub={`${configured}/${data.clients.length} clientes configurados`} />
         <Kpi label="Resultados reportados" value={num(data.summary.conversions, 1)} sub="Soma operacional; não deduplicada entre canais" />
         <Kpi label="Fila de decisões" value={`${critical + warning}`} sub={`${critical} críticas · ${warning} atenção`} danger={critical > 0} />
       </section>
 
-      <div style={{ display: "grid", gridTemplateColumns: "360px minmax(0,1fr)", gap: 16, alignItems: "start" }}>
+      <div className="adsctrl-today-layout">
         <aside style={{ border: "1px solid #e8e8e5", borderRadius: 14, background: "#fff", overflow: "hidden" }}>
           <div style={{ padding: "15px 16px", borderBottom: "1px solid #eee", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div>
@@ -209,7 +356,7 @@ export default function TodayPage() {
             </div>
             <span style={{ fontSize: 12, fontWeight: 700, color: "#777" }}>{data.priorities.length}</span>
           </div>
-          <div style={{ maxHeight: 650, overflowY: "auto" }}>
+          <div className="adsctrl-today-priority-list">
             {data.priorities.length === 0 ? (
               <div style={{ padding: 24, color: "#888", fontSize: 13 }}>Tudo tranquilo por aqui. ✓</div>
             ) : data.priorities.slice(0, 15).map((priority, index) => (
@@ -231,7 +378,7 @@ export default function TodayPage() {
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr .85fr .85fr .9fr 70px", gap: 12, padding: "12px 16px", background: "#fafaf9", borderBottom: "1px solid #eee", color: "#888", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.3 }}>
             <SortButton column="client" sort={sort} onSort={setSort} align="left">Cliente</SortButton>
-            <SortButton column="pacing" sort={sort} onSort={setSort} align="left" initialDirection="desc">Pacing MTD</SortButton>
+            <SortButton column="pacing" sort={sort} onSort={setSort} align="left" initialDirection="desc">Ritmo esperado</SortButton>
             <SortButton column="kpiAttainment" sort={sort} onSort={setSort} initialDirection="desc">KPI / meta</SortButton>
             <SortButton column="trend" sort={sort} onSort={setSort} initialDirection="desc">7d vs ant.</SortButton>
             <SortButton column="forecast" sort={sort} onSort={setSort} initialDirection="desc">Projeção</SortButton>
@@ -249,17 +396,41 @@ export default function TodayPage() {
 function ClientRow({ client }: { client: Client }) {
   const trend = client.metrics.prev7.spend
     ? ((client.metrics.last7.spend - client.metrics.prev7.spend) / client.metrics.prev7.spend) * 100 : null;
-  const pct = client.pacing.percentOfBudget || 0;
-  const paceColor = !client.pacing.budget ? "#bbb" : pct > 110 ? "#d14b4b" : pct < 45 ? "#d49a27" : "#2d9b58";
+  const budgetPct = client.pacing.percentOfBudget || 0;
+  const expectedPct = client.pacing.percentOfExpected;
+  const paceColor =
+    expectedPct == null
+      ? "#bbb"
+      : expectedPct > 115
+        ? "#d14b4b"
+        : expectedPct < 85
+          ? "#d49a27"
+          : "#2d9b58";
   const kpiType = (client.primary_kpi || "").toLowerCase();
-  const monetaryKpi = ["roas", "revenue", "cpc", "cpm", "cpa", "cpl"].includes(kpiType);
+  const monetaryKpi = MONETARY_KPIS.has(kpiType);
+  const lowerIsBetterKpi = LOWER_IS_BETTER_KPIS.has(kpiType);
   const kpi = client.metrics.kpiValue;
+  const attainment = kpiAttainment(client);
+  const attainmentPercent = attainment ? attainment.ratio * 100 : null;
+  const attainmentColor =
+    attainmentPercent == null
+      ? "#999"
+      : attainmentPercent >= 100
+        ? "#27874e"
+        : attainmentPercent >= 85
+          ? "#a56a18"
+          : "#c54a4a";
   const formatKpi = (value: number) =>
     kpiType === "roas" ? `${value.toFixed(2)}x`
     : kpiType === "ctr" ? `${value.toFixed(2)}%`
     : kpiType === "conversions" ? num(value)
     : currencyMoney(value, client.currency, 2);
-  const kpiText = !client.primary_kpi || (client.mixedCurrencies && monetaryKpi) ? "—" : formatKpi(kpi);
+  const kpiText =
+    !client.primary_kpi ||
+    (client.mixedCurrencies && monetaryKpi) ||
+    (lowerIsBetterKpi && kpi <= 0)
+      ? "—"
+      : formatKpi(kpi);
   const targetText = !client.target_value || (client.mixedCurrencies && monetaryKpi) ? "sem comparação" : formatKpi(Number(client.target_value));
   const targetAccount = client.source_meta_account_id
     || client.accounts.find((account) => account.platform === "meta")?.account_id
@@ -278,15 +449,48 @@ function ClientRow({ client }: { client: Client }) {
       <div>
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 5 }}>
           <strong>{client.mixedCurrencies ? "Moedas mistas" : currencyMoney(client.metrics.mtd.spend, client.currency)}</strong>
-          <span style={{ color: "#888" }}>{client.mixedCurrencies ? "corrigir vínculo" : client.pacing.budget ? `${pct.toFixed(0)}%` : "sem budget"}</span>
+          <span style={{ color: "#888" }}>{client.mixedCurrencies ? "corrigir vínculo" : client.pacing.budget ? `${budgetPct.toFixed(0)}% do orçamento` : "sem budget"}</span>
         </div>
         <div style={{ height: 6, borderRadius: 4, background: "#efefed", overflow: "hidden" }}>
-          <div style={{ width: `${Math.min(pct, 100)}%`, height: "100%", background: paceColor, borderRadius: 4 }} />
+          <div
+            title="Parcela do orçamento já consumida"
+            style={{
+              width: `${Math.min(budgetPct, 100)}%`,
+              height: "100%",
+              background: client.pacing.budget ? "#3987e5" : "#bbb",
+              borderRadius: 4,
+            }}
+          />
+        </div>
+        <div
+          title="100% significa que o investimento acumulado está exatamente no ritmo esperado para o dia atual do ciclo."
+          style={{ marginTop: 4, fontSize: 9.5, fontWeight: 700, color: paceColor }}
+        >
+          {expectedPct == null
+            ? "ritmo indisponível"
+            : `${expectedPct.toFixed(0)}% do ritmo esperado`}
         </div>
       </div>
       <div style={{ textAlign: "right" }}>
         <div style={{ fontSize: 14, fontWeight: 700 }}>{kpiText}</div>
         <div style={{ fontSize: 10, color: "#999" }}>meta {targetText}</div>
+        {attainment && attainmentPercent != null && (
+          <div
+            title={
+              attainment.lowerIsBetter
+                ? "Atingimento = meta ÷ valor atual. Para este KPI, menor é melhor."
+                : "Atingimento = valor atual ÷ meta. Para este KPI, maior é melhor."
+            }
+            style={{ marginTop: 3, display: "grid", justifyItems: "end", gap: 1, fontSize: 9.5 }}
+          >
+            <span style={{ color: attainmentColor, fontWeight: 750, whiteSpace: "nowrap" }}>
+              {attainmentPercent.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}% atingimento
+            </span>
+            <span style={{ color: "#888", whiteSpace: "nowrap" }}>
+              {attainment.lowerIsBetter ? "↓ menor é melhor" : "↑ maior é melhor"}
+            </span>
+          </div>
+        )}
       </div>
       <div style={{ textAlign: "right", fontSize: 13, fontWeight: 650, color: trend == null ? "#aaa" : trend >= 0 ? "#27874e" : "#c54a4a" }}>
         {trend == null ? "—" : `${trend >= 0 ? "▲" : "▼"} ${Math.abs(trend).toFixed(1)}%`}

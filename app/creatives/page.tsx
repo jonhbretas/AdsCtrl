@@ -8,6 +8,7 @@ import {
   compareSortValues,
   SortButton,
   SortState,
+  usePersistentSort,
 } from "@/components/SortableHeader";
 
 type AccountOption = { account_id: string; name: string; platform: string; hidden?: boolean; status: string };
@@ -53,6 +54,67 @@ type CreativeSortKey =
   | "costPerResult"
   | "roas"
   | "diagnosis";
+type CreativeGoal = Creative["goal"];
+type GoalFilter = "all" | CreativeGoal;
+
+const DEFAULT_CREATIVE_SORT: SortState<CreativeSortKey> = {
+  key: "spend",
+  direction: "desc",
+};
+const CREATIVE_SORT_KEYS: readonly CreativeSortKey[] = [
+  "creative",
+  "spend",
+  "impressions",
+  "frequency",
+  "cpm",
+  "hookRate",
+  "holdRate",
+  "actionCtr",
+  "results",
+  "lpvRate",
+  "resultRate",
+  "costPerResult",
+  "roas",
+  "diagnosis",
+];
+const GOAL_ORDER: CreativeGoal[] = [
+  "messages",
+  "sales",
+  "leads",
+  "traffic",
+  "engagement",
+  "awareness",
+  "app",
+  "other",
+];
+const FALLBACK_GOAL_LABELS: Record<CreativeGoal, string> = {
+  messages: "Mensagens",
+  sales: "Vendas",
+  leads: "Leads",
+  traffic: "Tráfego",
+  engagement: "Engajamento",
+  awareness: "Reconhecimento",
+  app: "Aplicativo",
+  other: "Outros",
+};
+const SORT_LABELS: Record<CreativeSortKey, string> = {
+  creative: "Criativo",
+  spend: "Investimento",
+  impressions: "Impressões",
+  frequency: "Frequência",
+  cpm: "CPM",
+  hookRate: "Hook",
+  holdRate: "Hold",
+  actionCtr: "CTR de ação",
+  results: "Resultados",
+  lpvRate: "LPV rate",
+  resultRate: "Taxa de resultado",
+  costPerResult: "Custo por resultado",
+  roas: "ROAS",
+  diagnosis: "Leitura",
+};
+const hasApplicableRoas = (creative: Creative) =>
+  creative.goal === "sales" || creative.metrics.conversionValue > 0;
 
 const daysAgo = (n: number) => {
   const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10);
@@ -145,10 +207,12 @@ export default function CreativesPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [format, setFormat] = useState<"all" | "video" | "static">("all");
-  const [sort, setSort] = useState<SortState<CreativeSortKey>>({
-    key: "spend",
-    direction: "desc",
-  });
+  const [goalFilter, setGoalFilter] = useState<GoalFilter>("all");
+  const [sort, setSort] = usePersistentSort<CreativeSortKey>(
+    "adsctrl:sort:creatives",
+    DEFAULT_CREATIVE_SORT,
+    CREATIVE_SORT_KEYS
+  );
   const [search, setSearch] = useState("");
 
   useEffect(() => {
@@ -176,8 +240,42 @@ export default function CreativesPage() {
   }
   useEffect(() => { if (accountId) analyze(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [accountId]);
 
+  const goalOptions = useMemo(() => {
+    const byGoal = new Map<
+      CreativeGoal,
+      { goal: CreativeGoal; label: string; count: number }
+    >();
+    for (const creative of lab?.creatives || []) {
+      const current = byGoal.get(creative.goal);
+      if (current) current.count += 1;
+      else {
+        byGoal.set(creative.goal, {
+          goal: creative.goal,
+          label: creative.goalLabel || FALLBACK_GOAL_LABELS[creative.goal],
+          count: 1,
+        });
+      }
+    }
+    return GOAL_ORDER.flatMap((goal) => {
+      const option = byGoal.get(goal);
+      return option ? [option] : [];
+    });
+  }, [lab]);
+
+  useEffect(() => {
+    if (
+      goalFilter !== "all" &&
+      !goalOptions.some((option) => option.goal === goalFilter)
+    ) {
+      setGoalFilter("all");
+    }
+  }, [goalFilter, goalOptions]);
+
   const creatives = useMemo(() => {
     let rows = [...(lab?.creatives || [])];
+    if (goalFilter !== "all") {
+      rows = rows.filter((creative) => creative.goal === goalFilter);
+    }
     if (format === "video") rows = rows.filter((c) => c.metrics.video.isVideo);
     if (format === "static") rows = rows.filter((c) => !c.metrics.video.isVideo);
     if (search.trim()) {
@@ -216,7 +314,7 @@ export default function CreativesPage() {
             ? metrics.costPerMessage
             : metrics.costPerConversion;
         case "roas":
-          return creative.goal === "messages" || metrics.conversions < 3
+          return !hasApplicableRoas(creative) || metrics.conversions < 3
             ? null
             : metrics.roas;
         case "diagnosis": {
@@ -258,12 +356,17 @@ export default function CreativesPage() {
         rightValue == null ||
         (typeof rightValue === "number" && Number.isNaN(rightValue));
       if (leftMissing !== rightMissing) return leftMissing ? 1 : -1;
+      const metricOrder = compareSortValues(
+        leftValue,
+        rightValue,
+        sort.direction
+      );
+      if (metricOrder) return metricOrder;
       if (decisionMetric.has(sort.key) && !leftMissing && !rightMissing) {
         const sampleOrder = sampleRank(left) - sampleRank(right);
         if (sampleOrder) return sampleOrder;
       }
       return (
-        compareSortValues(leftValue, rightValue, sort.direction) ||
         compareSortValues(
           left.metrics.impressions,
           right.metrics.impressions,
@@ -272,7 +375,7 @@ export default function CreativesPage() {
         compareSortValues(left.adName, right.adName, "asc")
       );
     });
-  }, [lab, format, search, sort]);
+  }, [lab, goalFilter, format, search, sort]);
 
   const scatter = useMemo(() => creatives.filter((c) =>
     c.sampleStatus !== "insufficient" && c.metrics.video.hookRate != null && c.metrics.outboundCtr != null
@@ -334,9 +437,81 @@ export default function CreativesPage() {
               <div style={{ display: "flex", gap: 3, background: "#f2f2f0", padding: 3, borderRadius: 9 }}>
                 {(["all", "video", "static"] as const).map((key) => <Toggle key={key} active={format === key} onClick={() => setFormat(key)}>{key === "all" ? "Todos" : key === "video" ? "Vídeos" : "Estáticos"}</Toggle>)}
               </div>
+              <Field label="Objetivo">
+                <select
+                  value={goalFilter}
+                  onChange={(event) =>
+                    setGoalFilter(event.target.value as GoalFilter)
+                  }
+                  style={{ ...inputStyle, minWidth: 154 }}
+                >
+                  <option value="all">Todos os objetivos</option>
+                  {goalOptions.map((option) => (
+                    <option key={option.goal} value={option.goal}>
+                      {option.label} ({option.count})
+                    </option>
+                  ))}
+                </select>
+              </Field>
               <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar criativo…" style={{ ...inputStyle, minWidth: 180 }} />
               <span style={{ flex: 1 }} />
-              <span style={{ color: "#999", fontSize: 10.5 }}>Clique em uma coluna para ordenar ↕ · amostras utilizáveis primeiro</span>
+              {goalFilter === "all" && goalOptions.length > 1 && (
+                <span
+                  title="Conversas, leads e vendas têm valores econômicos diferentes."
+                  style={{
+                    color: "#946516",
+                    background: "#fff8e9",
+                    border: "1px solid #f1dfb8",
+                    borderRadius: 999,
+                    padding: "6px 9px",
+                    fontSize: 10,
+                    fontWeight: 650,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  Filtre o objetivo para comparar custos
+                </span>
+              )}
+              <div
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  minHeight: 30,
+                  padding: "0 8px 0 10px",
+                  border: "1px solid #dfe6ef",
+                  borderRadius: 999,
+                  background: "#f7faff",
+                  color: "#536173",
+                  fontSize: 10.5,
+                  whiteSpace: "nowrap",
+                }}
+                title="A seta ordena pelo valor exibido; em caso de empate, a amostra mais confiável vem primeiro."
+              >
+                <span>Ordenação:</span>
+                <strong style={{ color: "#286fc9" }}>
+                  {SORT_LABELS[sort.key]} {sort.direction === "asc" ? "↑" : "↓"}
+                </strong>
+                {(sort.key !== DEFAULT_CREATIVE_SORT.key ||
+                  sort.direction !== DEFAULT_CREATIVE_SORT.direction) && (
+                  <button
+                    type="button"
+                    onClick={() => setSort({ ...DEFAULT_CREATIVE_SORT })}
+                    style={{
+                      border: 0,
+                      borderLeft: "1px solid #dfe6ef",
+                      background: "transparent",
+                      color: "#5e6b7d",
+                      padding: "2px 0 2px 7px",
+                      font: "inherit",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Restaurar
+                  </button>
+                )}
+              </div>
             </div>
             <CreativeTable
               creatives={creatives}
@@ -354,6 +529,7 @@ export default function CreativesPage() {
 function Summary({ account }: { account: LabAccount }) {
   const s = account.summary;
   const messages = account.creatives.length > 0 && account.creatives.every((c) => c.goal === "messages");
+  const hasRoas = account.creatives.some(hasApplicableRoas);
   return (
     <section style={{ display: "grid", gridTemplateColumns: "repeat(7,minmax(0,1fr))", gap: 9, marginBottom: 14 }}>
       <Metric label="Investimento" value={money(s.spend, account.currency)} />
@@ -362,7 +538,16 @@ function Summary({ account }: { account: LabAccount }) {
       <Metric label="Hook rate" value={pct(s.video?.hookRate)} accent />
       <Metric label="Hold rate" value={pct(s.video?.holdRate)} accent />
       <Metric label={messages ? "CTR no link" : "Outbound CTR"} value={pct(messages ? s.linkCtr : s.outboundCtr, 2)} />
-      <Metric label={messages ? "Custo / conversa" : "CPA / ROAS"} value={messages ? `${money(s.costPerMessage, account.currency)} · ${number(s.messageConversations)} conversas` : `${money(s.costPerConversion, account.currency)} · ${s.roas == null ? "—" : `${s.roas.toFixed(2)}x`}`} />
+      <Metric
+        label={messages ? "Custo / conversa" : hasRoas ? "CPA / ROAS" : "Custo / resultado"}
+        value={
+          messages
+            ? `${money(s.costPerMessage, account.currency)} · ${number(s.messageConversations)} conversas`
+            : hasRoas
+              ? `${money(s.costPerConversion, account.currency)} · ${s.roas == null ? "—" : `${s.roas.toFixed(2)}x`}`
+              : money(s.costPerConversion, account.currency)
+        }
+      />
     </section>
   );
 }
@@ -441,11 +626,19 @@ function CreativeTable({
 }) {
   const b = account.summary.benchmarks || {};
   const messagesOnly = creatives.length > 0 && creatives.every((c) => c.goal === "messages");
+  const showLpv = creatives.some((creative) => creative.goal !== "messages");
+  const showRoas = creatives.some(
+    hasApplicableRoas
+  );
   useEffect(() => {
-    if (messagesOnly && sort.key === "lpvRate") {
+    if (
+      creatives.length > 0 &&
+      ((!showLpv && sort.key === "lpvRate") ||
+        (!showRoas && sort.key === "roas"))
+    ) {
       onSort({ key: "results", direction: "desc" });
     }
-  }, [messagesOnly, sort.key, onSort]);
+  }, [creatives.length, showLpv, showRoas, sort.key, onSort]);
   return (
     <div style={{ overflowX: "auto" }}>
       <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1380 }}>
@@ -459,14 +652,20 @@ function CreativeTable({
           <Th sortKey="holdRate" sort={sort} onSort={onSort} initialDirection="desc">Hold</Th>
           <Th sortKey="actionCtr" sort={sort} onSort={onSort} initialDirection="desc">{messagesOnly ? "CTR no link" : "CTR de ação"}</Th>
           <Th sortKey="results" sort={sort} onSort={onSort} initialDirection="desc">{messagesOnly ? "Conversas" : "Resultados"}</Th>
-          {!messagesOnly && <Th sortKey="lpvRate" sort={sort} onSort={onSort} initialDirection="desc">LPV rate</Th>}
+          {showLpv && <Th sortKey="lpvRate" sort={sort} onSort={onSort} initialDirection="desc">LPV rate</Th>}
           <Th sortKey="resultRate" sort={sort} onSort={onSort} initialDirection="desc">{messagesOnly ? "Taxa conversa" : "Taxa resultado"}</Th>
           <Th sortKey="costPerResult" sort={sort} onSort={onSort}>{messagesOnly ? "Custo/conversa" : "Custo/resultado"}</Th>
-          <Th sortKey="roas" sort={sort} onSort={onSort} initialDirection="desc">ROAS</Th>
+          {showRoas && <Th sortKey="roas" sort={sort} onSort={onSort} initialDirection="desc">ROAS</Th>}
           <Th sortKey="diagnosis" sort={sort} onSort={onSort} align="left">Leitura</Th>
         </tr></thead>
         <tbody>{creatives.map((c) => {
           const m = c.metrics, video = m.video;
+          const isMessages = c.goal === "messages";
+          const resultCount = isMessages
+            ? m.messageConversations
+            : m.conversions;
+          const lowEconomicSample = resultCount < 3;
+          const roasApplicable = hasApplicableRoas(c);
           return (
             <tr key={c.adId} style={{ borderTop: "1px solid #efefed", opacity: c.sampleStatus === "no_delivery" ? 0.58 : 1 }}>
               <td style={{ padding: "9px 12px", minWidth: 265 }}>
@@ -478,12 +677,46 @@ function CreativeTable({
               <Td>{money(m.spend, account.currency)}</Td><Td>{number(m.impressions)}</Td><Td>{number(m.frequency)}</Td><Td>{money(m.cpm, account.currency)}</Td>
               <Heat value={video.hookRate} benchmark={b.hookRate} sample={c.sampleStatus}>{video.isVideo ? pct(video.hookRate) : "—"}</Heat>
               <Heat value={video.holdRate} benchmark={b.holdRate} sample={c.sampleStatus}>{video.isVideo ? pct(video.holdRate) : "—"}</Heat>
-              <Heat value={c.goal === "messages" ? m.linkCtr : m.outboundCtr} benchmark={c.goal === "messages" ? b.linkCtr : b.outboundCtr} sample={c.sampleStatus}>{pct(c.goal === "messages" ? m.linkCtr : m.outboundCtr, 2)}</Heat>
-              <Td>{number(c.goal === "messages" ? m.messageConversations : m.conversions)}</Td>
-              {!messagesOnly && <Heat value={c.goal === "messages" ? null : m.landingPageViewRate} benchmark={b.landingPageViewRate} sample={c.sampleStatus}>{c.goal === "messages" ? "—" : pct(m.landingPageViewRate)}</Heat>}
-              <Heat value={c.goal === "messages" ? m.messageRate : m.conversionRate} benchmark={c.goal === "messages" ? b.messageRate : b.conversionRate} sample={c.sampleStatus}>{pct(c.goal === "messages" ? m.messageRate : m.conversionRate)}</Heat>
-              <Heat value={c.goal === "messages" ? m.costPerMessage : m.costPerConversion} benchmark={c.goal === "messages" ? b.costPerMessage : b.costPerConversion} sample={c.sampleStatus} invert>{money(c.goal === "messages" ? m.costPerMessage : m.costPerConversion, account.currency)}</Heat>
-              <Heat value={c.goal === "messages" ? null : m.roas} benchmark={b.roas} sample={c.sampleStatus}>{c.goal === "messages" || m.roas == null ? "—" : `${m.roas.toFixed(2)}x`}</Heat>
+              <Heat value={isMessages ? m.linkCtr : m.outboundCtr} benchmark={isMessages ? b.linkCtr : b.outboundCtr} sample={c.sampleStatus}>{pct(isMessages ? m.linkCtr : m.outboundCtr, 2)}</Heat>
+              <Td>{number(resultCount)}</Td>
+              {showLpv && <Heat value={isMessages ? null : m.landingPageViewRate} benchmark={b.landingPageViewRate} sample={c.sampleStatus}>{isMessages ? "—" : pct(m.landingPageViewRate)}</Heat>}
+              <Heat value={isMessages ? m.messageRate : m.conversionRate} benchmark={isMessages ? b.messageRate : b.conversionRate} sample={c.sampleStatus}>{pct(isMessages ? m.messageRate : m.conversionRate)}</Heat>
+              <Heat
+                value={isMessages ? m.costPerMessage : m.costPerConversion}
+                benchmark={isMessages ? b.costPerMessage : b.costPerConversion}
+                sample={lowEconomicSample ? "insufficient" : c.sampleStatus}
+                invert
+              >
+                <EconomicValue
+                  value={money(
+                    isMessages ? m.costPerMessage : m.costPerConversion,
+                    account.currency
+                  )}
+                  lowSample={lowEconomicSample}
+                  resultCount={resultCount}
+                />
+              </Heat>
+              {showRoas && (
+                <Heat
+                  value={roasApplicable ? m.roas : null}
+                  benchmark={b.roas}
+                  sample={
+                    roasApplicable && lowEconomicSample
+                      ? "insufficient"
+                      : c.sampleStatus
+                  }
+                >
+                  {!roasApplicable ? (
+                    <span title="ROAS aparece somente para vendas ou quando há valor de conversão atribuído.">—</span>
+                  ) : (
+                    <EconomicValue
+                      value={m.roas == null ? "—" : `${m.roas.toFixed(2)}x`}
+                      lowSample={lowEconomicSample}
+                      resultCount={resultCount}
+                    />
+                  )}
+                </Heat>
+              )}
               <td style={{ padding: "9px 12px", minWidth: 205 }}><Diagnosis diagnosis={c.primaryDiagnosis} sample={c.sample} /></td>
             </tr>
           );
@@ -506,6 +739,41 @@ function Heat({ value, benchmark, sample, invert, children }: { value: number | 
     else { background = "#fff8e9"; color = "#946516"; }
   }
   return <td style={{ padding: "9px 8px", textAlign: "right", fontSize: 11.5, fontWeight: 650, background, color }}>{children}</td>;
+}
+function EconomicValue({
+  value,
+  lowSample,
+  resultCount,
+}: {
+  value: string;
+  lowSample: boolean;
+  resultCount: number;
+}) {
+  return (
+    <span
+      title={
+        lowSample
+          ? "São necessários pelo menos 3 resultados para classificar esta métrica."
+          : undefined
+      }
+      style={{ display: "inline-grid", justifyItems: "end", gap: 2 }}
+    >
+      <span>{value}</span>
+      {lowSample && (
+        <small
+          style={{
+            color: "#8b8b86",
+            fontSize: 8.5,
+            fontWeight: 700,
+            lineHeight: 1,
+            whiteSpace: "nowrap",
+          }}
+        >
+          n={number(resultCount)} · baixa amostra
+        </small>
+      )}
+    </span>
+  );
 }
 function Diagnosis({ diagnosis, sample }: { diagnosis: Diagnostic | null; sample: { label: string; reason: string } }) {
   if (!diagnosis) return <span title={sample.reason} style={{ fontSize: 11, color: "#999" }}>{sample.label}</span>;

@@ -5,6 +5,7 @@ import {
   compareSortValues,
   SortButton,
   SortState,
+  usePersistentSort,
 } from "@/components/SortableHeader";
 
 type AlertLevel = "critical" | "warning" | "info";
@@ -24,6 +25,12 @@ type AlertItem = {
   last_seen_at: string | null;
 };
 type AlertSortKey = "level" | "account" | "alert" | "updated";
+const ALERT_SORT_KEYS: readonly AlertSortKey[] = [
+  "level",
+  "account",
+  "alert",
+  "updated",
+];
 
 const LEVEL = {
   critical: { label: "Crítico", color: "#b23a35", bg: "#fff4f2", border: "#efcfca" },
@@ -40,10 +47,11 @@ export default function AlertsPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [sort, setSort] = useState<SortState<AlertSortKey>>({
-    key: "level",
-    direction: "asc",
-  });
+  const [sort, setSort] = usePersistentSort<AlertSortKey>(
+    "adsctrl:sort:alerts",
+    { key: "level", direction: "asc" },
+    ALERT_SORT_KEYS
+  );
 
   async function load() {
     setLoading(true);

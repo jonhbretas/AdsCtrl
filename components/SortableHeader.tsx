@@ -1,6 +1,12 @@
 "use client";
 
-import { isValidElement, type ReactNode } from "react";
+import {
+  isValidElement,
+  useCallback,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 
 export type SortDirection = "asc" | "desc";
 export type SortState<Key extends string> = {
@@ -8,6 +14,48 @@ export type SortState<Key extends string> = {
   direction: SortDirection;
 };
 export type SortValue = string | number | boolean | null | undefined;
+
+export function usePersistentSort<Key extends string>(
+  storageKey: string,
+  initialSort: SortState<Key>,
+  allowedKeys: readonly Key[]
+) {
+  const [sort, setSort] = useState<SortState<Key>>(initialSort);
+  const allowedKeySignature = allowedKeys.join("|");
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(storageKey);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as Partial<SortState<Key>>;
+      if (
+        typeof saved.key === "string" &&
+        allowedKeys.includes(saved.key as Key) &&
+        (saved.direction === "asc" || saved.direction === "desc")
+      ) {
+        setSort({ key: saved.key as Key, direction: saved.direction });
+      }
+    } catch {
+      // Preferências inválidas ou storage indisponível não devem quebrar a tela.
+    }
+    // A assinatura representa a lista sem depender da identidade do array.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storageKey, allowedKeySignature]);
+
+  const updateSort = useCallback(
+    (next: SortState<Key>) => {
+      setSort(next);
+      try {
+        window.localStorage.setItem(storageKey, JSON.stringify(next));
+      } catch {
+        // A ordenação continua funcionando em memória quando o storage falha.
+      }
+    },
+    [storageKey]
+  );
+
+  return [sort, updateSort] as const;
+}
 
 function textFromNode(node: ReactNode): string {
   if (typeof node === "string" || typeof node === "number") {

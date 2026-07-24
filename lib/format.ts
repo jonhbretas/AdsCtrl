@@ -1,10 +1,25 @@
 // lib/format.ts — helpers de formatação e resultado.
 
-export const brl = (v: number, digits = 2) =>
-  `R$ ${(v || 0).toLocaleString("pt-BR", { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
+function safeCurrency(currency?: string) {
+  const normalized = (currency || "BRL").trim().toUpperCase();
+  return /^[A-Z]{3}$/.test(normalized) ? normalized : "BRL";
+}
 
-export const brlShort = (v: number) =>
-  `R$ ${(v || 0).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}`;
+export const money = (v: number, currency = "BRL", digits = 2) =>
+  new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: safeCurrency(currency),
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(Number.isFinite(v) ? v : 0);
+
+export const moneyShort = (v: number, currency = "BRL") =>
+  money(v, currency, 0);
+
+// Atalhos mantidos para telas que operam exclusivamente em BRL.
+export const brl = (v: number, digits = 2) => money(v, "BRL", digits);
+
+export const brlShort = (v: number) => moneyShort(v, "BRL");
 
 export const num = (v: number) => (v || 0).toLocaleString("pt-BR", { maximumFractionDigits: 0 });
 

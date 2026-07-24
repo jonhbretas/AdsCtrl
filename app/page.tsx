@@ -13,8 +13,9 @@ import {
   compareSortValues,
   SortButton,
   SortState,
+  usePersistentSort,
 } from "@/components/SortableHeader";
-import { brl, num, delta, RESULT_FAMILIES, RESULT_FAMILY_BY_SLUG } from "@/lib/format";
+import { money, num, delta, RESULT_FAMILIES, RESULT_FAMILY_BY_SLUG } from "@/lib/format";
 
 interface Metrics {
   spend: number;
@@ -90,6 +91,14 @@ type AccountSortKey =
   | "spend"
   | "result"
   | "balance";
+const ACCOUNT_SORT_KEYS: readonly AccountSortKey[] = [
+  "name",
+  "channels",
+  "trend",
+  "spend",
+  "result",
+  "balance",
+];
 const PRESETS: { key: Period; label: string }[] = [
   { key: "today", label: "Hoje" },
   { key: "7d", label: "7D" },
@@ -149,10 +158,11 @@ export default function Dashboard() {
   const [acking, setAcking] = useState<number | null>(null);
   const [live, setLive] = useState<LiveOverview | null>(null);
   const [liveLoading, setLiveLoading] = useState(false);
-  const [tableSort, setTableSort] = useState<SortState<AccountSortKey>>({
-    key: "spend",
-    direction: "desc",
-  });
+  const [tableSort, setTableSort] = usePersistentSort<AccountSortKey>(
+    "adsctrl:sort:overview",
+    { key: "spend", direction: "desc" },
+    ACCOUNT_SORT_KEYS
+  );
 
   useEffect(() => {
     if (window.location.hash === "#alerts") window.location.replace("/alerts");
@@ -403,16 +413,27 @@ export default function Dashboard() {
       }
     };
     return [...list].sort((left, right) => {
+      const leftValue = value(left);
+      const rightValue = value(right);
       if (
-        (tableSort.key === "spend" || tableSort.key === "balance") &&
-        left.currency !== right.currency
+        tableSort.key === "spend" ||
+        tableSort.key === "balance"
       ) {
-        return compareSortValues(left.currency, right.currency, "asc");
+        const leftMissing =
+          leftValue == null ||
+          (typeof leftValue === "number" && Number.isNaN(leftValue));
+        const rightMissing =
+          rightValue == null ||
+          (typeof rightValue === "number" && Number.isNaN(rightValue));
+        if (leftMissing !== rightMissing) return leftMissing ? 1 : -1;
+        if (left.currency !== right.currency) {
+          return compareSortValues(left.currency, right.currency, "asc");
+        }
       }
       return (
         compareSortValues(
-          value(left),
-          value(right),
+          leftValue,
+          rightValue,
           tableSort.direction
         ) || compareSortValues(left.name, right.name, "asc")
       );
@@ -423,11 +444,33 @@ export default function Dashboard() {
   const totals = useMemo(() => {
     let spend = 0, res = 0, val = 0;
     let prevSpend = 0, prevRes = 0, prevVal = 0;
+    const byCurrency: Record<string, {
+      spend: number;
+      res: number;
+      val: number;
+      prevSpend: number;
+      prevRes: number;
+      prevVal: number;
+    }> = {};
     for (const a of filtered) {
       const m = accMetrics(a), p = accPrev(a);
+      const currency = (a.currency || "BRL").toUpperCase();
+      const bucket = byCurrency[currency] || (byCurrency[currency] = {
+        spend: 0,
+        res: 0,
+        val: 0,
+        prevSpend: 0,
+        prevRes: 0,
+        prevVal: 0,
+      });
       spend += m.spend; res += m.result; val += m.value;
       prevSpend += p.spend; prevRes += p.result; prevVal += p.value;
+      bucket.spend += m.spend; bucket.res += m.result; bucket.val += m.value;
+      bucket.prevSpend += p.spend; bucket.prevRes += p.result; bucket.prevVal += p.value;
     }
+    const currencyTotals = Object.entries(byCurrency)
+      .sort(([left], [right]) => left.localeCompare(right, "pt-BR"))
+      .map(([currency, values]) => ({ currency, ...values }));
     return {
       spend, res, val,
       cpr: res ? spend / res : 0,
@@ -435,6 +478,8 @@ export default function Dashboard() {
       prevSpend, prevRes, prevVal,
       prevCpr: prevRes ? prevSpend / prevRes : 0,
       prevRoas: prevSpend ? prevVal / prevSpend : 0,
+      currencyTotals,
+      mixedCurrencies: currencyTotals.length > 1,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtered, period, live, focus]);
@@ -461,6 +506,44 @@ export default function Dashboard() {
   const groupById = (id: string | null) => groups.find((g) => g.id === id);
   const short = PERIOD_SHORT[period];
   const fam = RESULT_FAMILY_BY_SLUG[focus] || RESULT_FAMILIES[0];
+  const primaryCurrency = totals.currencyTotals[0]?.currency || "BRL";
+  const moneySummary = (
+    getValue: (entry: (typeof totals.currencyTotals)[number]) => number,
+    digits = 2
+  ) =>
+    totals.currencyTotals.length
+      ? totals.currencyTotals
+          .map((entry) => money(getValue(entry), entry.currency, digits))
+          .join(" · ")
+      : "—";
+  const investmentValue = totals.mixedCurrencies
+    ? moneySummary((entry) => entry.spend, 0)
+    : money(totals.spend, primaryCurrency, 0);
+  const cprValue = totals.mixedCurrencies
+    ? totals.currencyTotals
+        .map((entry) =>
+          entry.res > 0
+            ? money(entry.spend / entry.res, entry.currency)
+            : `— ${entry.currency}`
+        )
+        .join(" · ")
+    : totals.res > 0
+      ? money(totals.cpr, primaryCurrency)
+      : "—";
+  const purchaseValue = totals.mixedCurrencies
+    ? moneySummary((entry) => entry.val, 0)
+    : money(totals.val, primaryCurrency, 0);
+  const roasValue = totals.mixedCurrencies
+    ? totals.currencyTotals
+        .map((entry) =>
+          entry.spend > 0
+            ? `${(entry.val / entry.spend).toFixed(2)}x ${entry.currency}`
+            : `— ${entry.currency}`
+        )
+        .join(" · ")
+    : totals.spend > 0
+      ? `${totals.roas.toFixed(2)}x`
+      : "—";
 
   if (loading) return <Center>Carregando overview…</Center>;
   if (error)
@@ -568,21 +651,26 @@ export default function Dashboard() {
         <span style={{ fontSize: 12, color: "#aaa" }}>{range.since} → {range.until}</span>
         {isLive && (
           <span style={{ fontSize: 12, color: liveLoading ? "#f59e0b" : "#16a34a", fontWeight: 500 }}>
-            {liveLoading ? "● buscando ao vivo na Meta…" : "● dados ao vivo"}
+            {liveLoading ? `● buscando ao vivo no ${platformFilter === "google" ? "Google Ads" : "Meta Ads"}…` : "● dados ao vivo"}
           </span>
         )}
         {!isLive && <span style={{ fontSize: 12, color: "#bbb" }}>cache (atualiza 1x/dia) · não inclui hoje</span>}
+        {totals.mixedCurrencies && (
+          <span style={{ fontSize: 12, color: "#8a5b16", background: "#fff8eb", borderRadius: 7, padding: "3px 7px" }}>
+            Totais separados por moeda: {totals.currencyTotals.map((entry) => entry.currency).join(" · ")}
+          </span>
+        )}
       </div>
 
       {/* KPIs GERAIS (agregado do período vs período anterior, guiado pelo foco) */}
       <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginBottom: 20 }}>
-        <Kpi label={`Investimento (${short})`} value={liveReady ? brl(totals.spend, 0) : "…"} cur={totals.spend} prev={totals.prevSpend} neutral />
+        <Kpi label={`Investimento (${short})`} value={liveReady ? investmentValue : "…"} cur={totals.mixedCurrencies ? undefined : totals.spend} prev={totals.mixedCurrencies ? undefined : totals.prevSpend} neutral />
         <Kpi label={`${fam.label} (${short})`} value={liveReady ? num(totals.res) : "…"} cur={totals.res} prev={totals.prevRes} />
-        <Kpi label={`Custo por resultado`} value={liveReady ? brl(totals.cpr) : "…"} cur={totals.cpr} prev={totals.prevCpr} invert />
+        <Kpi label={`Custo por resultado`} value={liveReady ? cprValue : "…"} cur={!totals.mixedCurrencies && totals.res > 0 ? totals.cpr : undefined} prev={!totals.mixedCurrencies && totals.prevRes > 0 ? totals.prevCpr : undefined} invert />
         {fam.sales && (
           <>
-            <Kpi label="Valor de compra" value={liveReady ? brl(totals.val, 0) : "…"} cur={totals.val} prev={totals.prevVal} />
-            <Kpi label="ROAS" value={liveReady ? `${totals.roas.toFixed(2)}x` : "…"} cur={totals.roas} prev={totals.prevRoas} />
+            <Kpi label="Valor de compra" value={liveReady ? purchaseValue : "…"} cur={totals.mixedCurrencies ? undefined : totals.val} prev={totals.mixedCurrencies ? undefined : totals.prevVal} />
+            <Kpi label="ROAS" value={liveReady ? roasValue : "…"} cur={!totals.mixedCurrencies && totals.spend > 0 ? totals.roas : undefined} prev={!totals.mixedCurrencies && totals.prevSpend > 0 ? totals.prevRoas : undefined} />
           </>
         )}
       </section>
@@ -737,7 +825,7 @@ export default function Dashboard() {
                     </span>
                   </div>
                   <div title={liveError?.message} style={{ textAlign: "right", fontSize: 14, fontWeight: 600, color: liveError ? "#a16207" : undefined }}>
-                    {liveError ? "Indisponível" : brl(m.spend)}
+                    {liveError ? "Indisponível" : money(m.spend, a.currency)}
                   </div>
                   <div style={{ textAlign: "right" }}>
                     <div style={{ fontSize: 14, fontWeight: 600, color: m.result > 0 ? "#111" : "#bbb" }}>
@@ -747,8 +835,25 @@ export default function Dashboard() {
                       <div style={{ fontSize: 10.5, color: "#16a34a" }}>{(m.value / m.spend).toFixed(1)}x ROAS</div>
                     )}
                   </div>
-                  <div style={{ textAlign: "right", fontSize: 14, color: a.balance != null && a.balance > 0 ? "#111" : "#bbb" }}>
-                    {a.platform === "meta" && a.balance != null && a.balance > 0 ? brl(a.balance) : "—"}
+                  <div
+                    style={{
+                      textAlign: "right",
+                      fontSize: 14,
+                      fontWeight:
+                        a.platform === "meta" && a.balance != null && a.balance <= 0
+                          ? 700
+                          : 400,
+                      color:
+                        a.platform !== "meta" || a.balance == null
+                          ? "#bbb"
+                          : a.balance <= 0
+                            ? "#c54a4a"
+                            : "#111",
+                    }}
+                  >
+                    {a.platform === "meta" && a.balance != null
+                      ? money(a.balance, a.currency)
+                      : "—"}
                   </div>
                   <button
                     onClick={(e) => { e.stopPropagation(); toggleHidden(a.account_id, !a.hidden); }}
@@ -794,7 +899,7 @@ export default function Dashboard() {
                                 <span style={{ width: 26, height: 26, borderRadius: 7, background: "#fff", color: "#4285f4", display: "grid", placeItems: "center", fontWeight: 700 }}>G</span>
                                 <span style={{ flex: 1, fontSize: 14, fontWeight: 600 }}>{google.name}</span>
                                 <span style={{ fontSize: 12, color: "#888" }}>Investimento</span>
-                                <strong style={{ fontSize: 14 }}>{brl(gm.spend)}</strong>
+                                <strong style={{ fontSize: 14 }}>{money(gm.spend, google.currency)}</strong>
                                 <span style={{ fontSize: 12, color: "#888" }}>Conversões</span>
                                 <strong style={{ fontSize: 14 }}>{num(gm.results.conversoes || gm.result || 0)}</strong>
                               </summary>

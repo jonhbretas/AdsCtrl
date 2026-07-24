@@ -208,7 +208,7 @@ export async function GET() {
         impact: expected - mtd.spend,
       });
       const target = Number(client.target_value || 0);
-      const kpiUsesMoney = ["roas", "revenue", "cpc", "cpm", "cpa", "cpl"].includes(kpiType);
+      const kpiUsesMoney = ["roas", "revenue", "cpc", "cpm", "cpa", "cpl", "custom"].includes(kpiType);
       if (target && mtd.spend > 0 && !(mixedCurrencies && kpiUsesMoney)) {
         const higherIsBetter = ["roas", "conversions", "revenue", "ctr"].includes(kpiType);
         const isBad = higherIsBetter ? kpiValue < target * 0.85 : kpiValue > target * 1.2;
