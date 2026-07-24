@@ -565,11 +565,11 @@ function normalizeCreative(
   );
   const conversions = familyTotal(actions, CONVERSION_FAMILIES);
   const conversionValue = familyTotal(actionValues, CONVERSION_FAMILIES);
-  const messageConversations = Math.max(
-    actions["onsite_conversion.messaging_conversation_started_7d"] || 0,
-    actions["onsite_conversion.total_messaging_connection"] || 0,
-    actions["onsite_conversion.messaging_first_reply"] || 0
-  );
+  const messageConversations =
+    actions["onsite_conversion.messaging_conversation_started_7d"] ??
+    actions["onsite_conversion.total_messaging_connection"] ??
+    actions["onsite_conversion.messaging_first_reply"] ??
+    0;
 
   const plays = actionArrayTotal(row.video_play_actions);
   const threeSecondViews = actions.video_view || 0;

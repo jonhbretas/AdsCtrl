@@ -43,13 +43,18 @@ export async function GET(req: Request) {
     const today = fmt(new Date());
     const since = searchParams.get("since") || today;
     const until = searchParams.get("until") || today;
+    const platform = searchParams.get("platform");
     const prev = previousRange(since, until);
 
     const supabase = getServiceClient();
-    const { data: accounts } = await supabase
+    let accountQuery = supabase
       .from("ad_accounts")
       .select("account_id, platform, hidden, token_ref")
       .eq("hidden", false);
+    if (platform === "meta" || platform === "google") {
+      accountQuery = accountQuery.eq("platform", platform);
+    }
+    const { data: accounts } = await accountQuery;
     const rows = accounts || [];
 
     const metrics: Record<string, { spend: number; conversions: number; purchases: number; value: number; results: Record<string, number>; daily: { date: string; spend: number }[] }> = {};

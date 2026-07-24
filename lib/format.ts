@@ -81,7 +81,7 @@ export interface ResultFamily {
 export const RESULT_FAMILIES: ResultFamily[] = [
   { slug: "conversoes", label: "Conversões reportadas", keys: [] },
   { slug: "vendas", label: "Vendas / Compras", sales: true, keys: ["purchase", "omni_purchase", "offsite_conversion.fb_pixel_purchase"] },
-  { slug: "mensagens", label: "Mensagens (conversas)", keys: ["onsite_conversion.messaging_conversation_started_7d", "onsite_conversion.total_messaging_connection", "onsite_conversion.messaging_first_reply"] },
+  { slug: "mensagens", label: "Conversas iniciadas", keys: ["onsite_conversion.messaging_conversation_started_7d"] },
   { slug: "leads", label: "Leads", keys: ["lead", "offsite_conversion.fb_pixel_lead", "onsite_web_lead", "onsite_conversion.lead_grouped", "leadgen_grouped"] },
   { slug: "cadastros", label: "Cadastros", keys: ["complete_registration", "offsite_conversion.fb_pixel_complete_registration"] },
   { slug: "cliques", label: "Cliques no link", keys: ["link_click"] },

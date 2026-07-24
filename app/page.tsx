@@ -4,8 +4,8 @@
 // Topo: grupos + filtros + período. Esquerda: alertas. Centro: tabela expansível.
 //
 // Período: HOJE / 7D / 14D / 30D + personalizado.
-//  - 7D/14D/30D vêm do cache (snapshots do cron) e terminam ONTEM (dia atual não conta).
-//  - HOJE e personalizado são buscados AO VIVO na Meta (/api/accounts/overview).
+// Todos os períodos visíveis são buscados ao vivo para que o resumo e o
+// detalhe expandido usem a mesma consolidação da plataforma.
 
 import { useEffect, useMemo, useState } from "react";
 import AccountDetail from "@/components/AccountDetail";
@@ -143,7 +143,7 @@ export default function Dashboard() {
   }, []);
 
   const range = useMemo(() => rangeForPeriod(period, customSince, customUntil), [period, customSince, customUntil]);
-  const isLive = period === "today" || period === "custom";
+  const isLive = true;
   const periodKey = period === "7d" || period === "14d" || period === "30d" ? period : null;
   const liveReady = !isLive || !!live;
 
@@ -214,7 +214,8 @@ export default function Dashboard() {
     if (period === "custom" && (!range.since || !range.until || range.since > range.until)) return;
     let alive = true;
     setLiveLoading(true);
-    fetch(`/api/accounts/overview?since=${range.since}&until=${range.until}`)
+    setLive(null);
+    fetch(`/api/accounts/overview?since=${range.since}&until=${range.until}&platform=${platformFilter}`)
       .then(async (r) => {
         const t = await r.text();
         const d = t ? JSON.parse(t) : {};
@@ -226,14 +227,14 @@ export default function Dashboard() {
       .finally(() => { if (alive) setLiveLoading(false); });
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [period, range.since, range.until]);
+  }, [period, range.since, range.until, platformFilter]);
 
   async function refresh() {
     setRefreshing(true);
     await load();
     if (isLive) {
       try {
-        const r = await fetch(`/api/accounts/overview?since=${range.since}&until=${range.until}`);
+        const r = await fetch(`/api/accounts/overview?since=${range.since}&until=${range.until}&platform=${platformFilter}`);
         const t = await r.text();
         setLive(t ? JSON.parse(t) : null);
       } catch { /* silencioso */ }
