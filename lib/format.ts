@@ -12,6 +12,7 @@ export const pct = (v: number) => `${(v || 0).toLocaleString("pt-BR", { maximumF
 
 // Prioridade para escolher o "resultado" principal de uma conta.
 const RESULT_PRIORITY = [
+  "conversions",
   "purchase",
   "offsite_conversion.fb_pixel_purchase",
   "lead",
@@ -39,6 +40,7 @@ export function orderedResults(available: string[]): string[] {
 
 // Rótulos amigáveis para action_types da Meta (client-safe).
 export const ACTION_LABELS: Record<string, string> = {
+  conversions: "Conversões",
   purchase: "Compras",
   "offsite_conversion.fb_pixel_purchase": "Compras (pixel)",
   lead: "Leads",
@@ -77,6 +79,7 @@ export interface ResultFamily {
   sales?: boolean; // habilita valor de compra + ROAS
 }
 export const RESULT_FAMILIES: ResultFamily[] = [
+  { slug: "conversoes", label: "Conversões reportadas", keys: [] },
   { slug: "vendas", label: "Vendas / Compras", sales: true, keys: ["purchase", "omni_purchase", "offsite_conversion.fb_pixel_purchase"] },
   { slug: "mensagens", label: "Mensagens (conversas)", keys: ["onsite_conversion.messaging_conversation_started_7d", "onsite_conversion.total_messaging_connection", "onsite_conversion.messaging_first_reply"] },
   { slug: "leads", label: "Leads", keys: ["lead", "offsite_conversion.fb_pixel_lead", "onsite_web_lead", "onsite_conversion.lead_grouped", "leadgen_grouped"] },

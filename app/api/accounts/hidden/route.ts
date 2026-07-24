@@ -15,12 +15,10 @@ export async function POST(req: Request) {
     if (!account_id) return NextResponse.json({ error: "account_id é obrigatório." }, { status: 400 });
 
     const sb = getServiceClient();
-    const { data, error } = await sb
-      .from("ad_accounts")
-      .update({ hidden, updated_at: new Date().toISOString() })
-      .eq("account_id", account_id)
-      .select("account_id, hidden")
-      .single();
+    const { data, error } = await sb.rpc("set_adsctrl_account_hidden", {
+      p_account_id: account_id,
+      p_hidden: hidden,
+    });
     if (error) throw error;
     return NextResponse.json({ account: data });
   } catch (e: any) {

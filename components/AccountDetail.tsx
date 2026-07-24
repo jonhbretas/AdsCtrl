@@ -63,9 +63,9 @@ const METRIC_LABELS: Record<MetricKey, string> = {
 };
 
 export default function AccountDetail({
-  accountId, since, until, status, balance,
+  accountId, platform, since, until, status, balance,
 }: {
-  accountId: string; since: string; until: string; status: string; balance: number | null; currency: string;
+  accountId: string; platform: "meta" | "google"; since: string; until: string; status: string; balance: number | null; currency: string;
 }) {
   const [data, setData] = useState<Detail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -77,7 +77,7 @@ export default function AccountDetail({
   useEffect(() => {
     let alive = true;
     setLoading(true); setError(null);
-    fetch(`/api/account/detail?account_id=${accountId}&since=${since}&until=${until}`)
+    fetch(`/api/account/detail?account_id=${encodeURIComponent(accountId)}&platform=${platform}&since=${since}&until=${until}`)
       .then(async (r) => {
         const t = await r.text(); const d = t ? JSON.parse(t) : {};
         if (!r.ok || d.error) throw new Error(d.error || `Falha (HTTP ${r.status}).`);

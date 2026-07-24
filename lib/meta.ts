@@ -233,6 +233,7 @@ function familyCounts(actions?: { action_type: string; value?: string }[]): Reco
     for (const k of f.keys) if (map[k] != null) best = Math.max(best, map[k]);
     out[f.slug] = best;
   }
+  out.conversoes = sumConversions(actions);
   return out;
 }
 
