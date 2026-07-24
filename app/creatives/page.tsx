@@ -116,6 +116,97 @@ const SORT_LABELS: Record<CreativeSortKey, string> = {
 const hasApplicableRoas = (creative: Creative) =>
   creative.goal === "sales" || creative.metrics.conversionValue > 0;
 
+type VisibleCreativeBenchmarks = {
+  frequency: number | null;
+  linkCtr: number | null;
+  outboundCtr: number | null;
+  landingPageViewRate: number | null;
+  conversionRate: number | null;
+  costPerConversion: number | null;
+  messageRate: number | null;
+  costPerMessage: number | null;
+  roas: number | null;
+  hookRate: number | null;
+  holdRate: number | null;
+};
+
+function creativeMedian(
+  creatives: Creative[],
+  picker: (creative: Creative) => number | null,
+  predicate: (creative: Creative) => boolean = () => true
+) {
+  const values = creatives
+    .filter(
+      (creative) =>
+        (creative.sampleStatus === "learning" ||
+          creative.sampleStatus === "reliable") &&
+        predicate(creative)
+    )
+    .map(picker)
+    .filter(
+      (value): value is number =>
+        value != null && Number.isFinite(value)
+    )
+    .sort((left, right) => left - right);
+  if (values.length < 2) return null;
+  const middle = Math.floor(values.length / 2);
+  return values.length % 2
+    ? values[middle]
+    : (values[middle - 1] + values[middle]) / 2;
+}
+
+function benchmarksForVisibleCreatives(
+  creatives: Creative[]
+): VisibleCreativeBenchmarks {
+  return {
+    frequency: creativeMedian(creatives, (creative) => creative.metrics.frequency),
+    linkCtr: creativeMedian(creatives, (creative) => creative.metrics.linkCtr),
+    outboundCtr: creativeMedian(creatives, (creative) => creative.metrics.outboundCtr),
+    landingPageViewRate: creativeMedian(
+      creatives,
+      (creative) => creative.metrics.landingPageViewRate
+    ),
+    conversionRate: creativeMedian(
+      creatives,
+      (creative) => creative.metrics.conversionRate
+    ),
+    costPerConversion: creativeMedian(
+      creatives,
+      (creative) => creative.metrics.costPerConversion,
+      (creative) => creative.metrics.conversions >= 3
+    ),
+    messageRate: creativeMedian(
+      creatives,
+      (creative) => creative.metrics.messageRate,
+      (creative) => creative.goal === "messages"
+    ),
+    costPerMessage: creativeMedian(
+      creatives,
+      (creative) => creative.metrics.costPerMessage,
+      (creative) =>
+        creative.goal === "messages" &&
+        creative.metrics.messageConversations >= 3
+    ),
+    roas: creativeMedian(
+      creatives,
+      (creative) => creative.metrics.roas,
+      (creative) =>
+        hasApplicableRoas(creative) &&
+        creative.metrics.conversions >= 3
+    ),
+    hookRate: creativeMedian(
+      creatives,
+      (creative) => creative.metrics.video.hookRate,
+      (creative) => creative.metrics.video.isVideo
+    ),
+    holdRate: creativeMedian(
+      creatives,
+      (creative) => creative.metrics.video.holdRate,
+      (creative) => creative.metrics.video.isVideo
+    ),
+  };
+}
+
 const daysAgo = (n: number) => {
   const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10);
 };
@@ -123,80 +214,66 @@ const money = (v: number | null | undefined, currency = "BRL") =>
   v == null ? "—" : new Intl.NumberFormat("pt-BR", { style: "currency", currency, maximumFractionDigits: 2 }).format(v);
 const pct = (v: number | null | undefined, digits = 1) => v == null ? "—" : `${v.toFixed(digits)}%`;
 const number = (v: number | null | undefined) => v == null ? "—" : v.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
-const METRIC_GUIDE = [
-  {
-    stage: "Objetivo · Mensagens",
-    metric: "Taxa e custo por conversa",
-    reference: "Compare com a mediana da conta e a meta comercial",
-    formula: "Conversas iniciadas ÷ cliques · gasto ÷ conversas",
-    bottleneck: "Muitos cliques sem conversa: destino, CTA ou abordagem inicial com atrito.",
-    action: "Teste CTA, mensagem pré-preenchida e destino; acompanhe qualidade, resposta e venda no CRM.",
-  },
-  {
-    stage: "1 · Atenção",
-    metric: "Hook rate",
-    reference: "≥ 25% saudável · ≥ 35% forte",
-    formula: "Visualizações de 3s ÷ impressões",
-    bottleneck: "< 20%: a abertura não interrompe o scroll.",
-    action: "Troque os 3 primeiros segundos, promessa, cena inicial ou texto na tela.",
-  },
-  {
-    stage: "2 · Retenção",
-    metric: "Hold rate",
-    reference: "≥ 25% saudável · ≥ 35% forte",
-    formula: "ThruPlays ÷ visualizações de 3s",
-    bottleneck: "< 15%: o hook chama atenção, mas o conteúdo não sustenta.",
-    action: "Encurte, acelere cortes e antecipe prova, benefício e demonstração.",
-  },
-  {
-    stage: "3 · Intenção",
-    metric: "Outbound CTR",
-    reference: "≥ 1,0% saudável · ≥ 1,5% forte",
-    formula: "Cliques de saída ÷ impressões",
-    bottleneck: "< 0,8%: oferta, mensagem ou CTA pouco convincentes.",
-    action: "Teste ângulo, oferta, headline, prova social e CTA mais específico.",
-  },
-  {
-    stage: "4 · Pós-clique",
-    metric: "LPV rate",
-    reference: "≥ 70% saudável · ≥ 85% forte",
-    formula: "Visualizações da página ÷ cliques no link",
-    bottleneck: "< 60%: clique não está virando visita real.",
-    action: "Revise velocidade, redirecionamento, tracking e experiência mobile.",
-  },
-  {
-    stage: "5 · Conversão",
-    metric: "CVR",
-    reference: "Leads: 5–15% · E-commerce: 1–3%",
-    formula: "Conversões ÷ LPV (ou clique de saída)",
-    bottleneck: "CTR e LPV bons com CVR baixo: gargalo após a chegada.",
-    action: "Revise aderência anúncio–página, oferta, formulário, preço e confiança.",
-  },
-  {
-    stage: "6 · Saturação",
-    metric: "Frequência",
-    reference: "1,5–3x costuma ser saudável no recorte",
-    formula: "Impressões ÷ alcance",
-    bottleneck: "> 4x com CTR caindo e CPM/CPA subindo sugere fadiga.",
-    action: "Renove criativos, amplie público ou redistribua orçamento.",
-  },
-  {
-    stage: "7 · Custo",
-    metric: "CPM",
-    reference: "Saudável: até ±15% da mediana da conta",
-    formula: "Investimento ÷ impressões × 1.000",
-    bottleneck: "CPM alto isoladamente não condena o criativo; avalie CTR e CPA.",
-    action: "Cheque público, posicionamento, leilão e qualidade percebida.",
-  },
-  {
-    stage: "8 · Negócio",
-    metric: "CPA / ROAS",
-    reference: "CPA ≤ meta · ROAS ≥ ponto de equilíbrio",
-    formula: "Gasto ÷ conversões · receita atribuída ÷ gasto",
-    bottleneck: "Boa atenção sem resultado indica problema de oferta ou conversão.",
-    action: "Decida pela meta econômica, com volume mínimo antes de escalar ou pausar.",
-  },
+type BenchmarkSource = "AdsCtrl" | "Meta / CRM" | "Site / Analytics" | "Gestão";
+type BenchmarkStage = "Mídia" | "Criativo" | "Funil" | "Operação";
+const CREATIVE_BENCHMARKS: readonly {
+  stage: BenchmarkStage;
+  metric: string;
+  reference: string;
+  reading: string;
+  source: BenchmarkSource;
+}[] = [
+  { stage: "Mídia", metric: "CTR no link", reference: "2%–5%", reading: "< 2%: revisar ângulo, oferta, headline e CTA.", source: "AdsCtrl" },
+  { stage: "Mídia", metric: "Outbound CTR", reference: "≥ 1% saudável · ≥ 1,5% forte", reading: "Mede intenção de saída; compare anúncios do mesmo objetivo.", source: "AdsCtrl" },
+  { stage: "Mídia", metric: "CPC de link", reference: "≤ meta · até +15% da mediana", reading: "Não existe faixa monetária universal; país, nicho e leilão dominam o custo.", source: "Meta / CRM" },
+  { stage: "Mídia", metric: "CPM", reference: "Dentro de ±15% da mediana", reading: "CPM alto isolado não condena o criativo; cruze com CTR e CPA.", source: "AdsCtrl" },
+  { stage: "Mídia", metric: "LPV rate", reference: "≥ 70% saudável · ≥ 85% forte", reading: "< 60%: suspeite de velocidade, redirecionamento ou tracking.", source: "AdsCtrl" },
+  { stage: "Funil", metric: "CVR · leads / formulário", reference: "5%–15%", reading: "Clique chega, mas não converte: revisar oferta, página e formulário.", source: "AdsCtrl" },
+  { stage: "Funil", metric: "CVR · e-commerce", reference: "1%–3%", reading: "Avaliar junto a ticket, margem, qualidade do tráfego e dispositivo.", source: "AdsCtrl" },
+  { stage: "Funil", metric: "Clique → conversa", reference: "≥ mediana da conta", reading: "Muitos cliques sem conversa: CTA, destino ou abordagem inicial com atrito.", source: "AdsCtrl" },
+  { stage: "Funil", metric: "CPL", reference: "≤ meta do cliente", reading: "Qualidade do lead e taxa de fechamento valem mais que uma faixa genérica.", source: "AdsCtrl" },
+  { stage: "Funil", metric: "CPA / custo por compra", reference: "≤ meta baseada na margem", reading: "O CPA máximo deve respeitar margem, recompra e taxa de aprovação.", source: "AdsCtrl" },
+  { stage: "Funil", metric: "ROAS", reference: "≥ ponto de equilíbrio / meta", reading: "A faixa 2x–4x serve só como triagem; margem e recompra definem a meta real.", source: "AdsCtrl" },
+  { stage: "Mídia", metric: "Frequência · público frio", reference: "1,5–2,5x por 7 dias", reading: "Acima da faixa com CTR caindo e CPA subindo sugere fadiga.", source: "AdsCtrl" },
+  { stage: "Mídia", metric: "Frequência · remarketing", reference: "3–6x por 7 dias", reading: "Tolera mais repetição, mas exige vigilância de rejeição e custo.", source: "AdsCtrl" },
+  { stage: "Criativo", metric: "Video hook rate · 3s", reference: "25%–40%+", reading: "< 20%: a abertura não interrompe o scroll.", source: "AdsCtrl" },
+  { stage: "Criativo", metric: "Video hold rate · ThruPlay", reference: "15%–30%", reading: "< 15%: o hook chama atenção, mas o conteúdo não sustenta.", source: "AdsCtrl" },
+  { stage: "Criativo", metric: "Conclusão do vídeo · 100%", reference: "15%–30%+ direcional", reading: "Depende muito da duração; compare vídeos com duração e formato semelhantes.", source: "AdsCtrl" },
+  { stage: "Criativo", metric: "Taxa de engajamento", reference: "3%–8%", reading: "Engajamento sem clique pode indicar entretenimento sem intenção.", source: "AdsCtrl" },
+  { stage: "Funil", metric: "Add to cart rate", reference: "5%–12%", reading: "Abaixo: revisar oferta, preço, prova, prazo e confiança.", source: "Meta / CRM" },
+  { stage: "Funil", metric: "Initiate checkout rate", reference: "≥ 50% dos ATCs", reading: "Queda entre carrinho e checkout aponta fricção comercial ou técnica.", source: "Meta / CRM" },
+  { stage: "Funil", metric: "Purchase conversion rate", reference: "40%–60% dos checkouts", reading: "Queda no pagamento: frete, meios de pagamento, erro ou confiança.", source: "Meta / CRM" },
+  { stage: "Funil", metric: "Carregamento da landing page", reference: "< 3 segundos", reading: "Lentidão reduz LPV e conversão, especialmente em mobile.", source: "Site / Analytics" },
+  { stage: "Funil", metric: "Bounce rate", reference: "< 50%", reading: "Rejeição alta: promessa do anúncio e página podem estar desalinhadas.", source: "Site / Analytics" },
+  { stage: "Mídia", metric: "Ranking de qualidade/relevância", reference: "Médio → acima da média", reading: "Abaixo da média: revisar aderência entre público, mensagem e experiência.", source: "Meta / CRM" },
+  { stage: "Operação", metric: "Volume de testes", reference: "3–6 criativos por conjunto", reading: "Variar conceito e ângulo, não apenas cor ou legenda.", source: "Gestão" },
+  { stage: "Operação", metric: "Ciclo de renovação", reference: "A cada 7–10 dias", reading: "Antecipar a troca se frequência e CPA subirem com CTR em queda.", source: "Gestão" },
+  { stage: "Operação", metric: "Escala de orçamento", reference: "+20%–30% a cada 2–3 dias", reading: "Escalar em degraus após estabilidade; evitar saltos bruscos.", source: "Gestão" },
+  { stage: "Operação", metric: "Saída do aprendizado", reference: "≈ 50 conversões/semana/conjunto", reading: "Consolidar estrutura quando o volume estiver pulverizado.", source: "Gestão" },
+  { stage: "Operação", metric: "Event match quality", reference: "8/10+", reading: "Qualidade baixa compromete atribuição, otimização e públicos.", source: "Meta / CRM" },
+  { stage: "Operação", metric: "Janela de remarketing", reference: "7–30 dias", reading: "Ajustar ao ciclo de decisão e excluir convertidos.", source: "Gestão" },
+  { stage: "Operação", metric: "Kill rule", reference: "CPA > 130% da meta", reading: "Pausar somente após amostra suficiente; antes disso, tratar como aprendizado.", source: "Gestão" },
 ] as const;
+
+const BENCHMARK_STAGE_STYLE: Record<BenchmarkStage, { color: string; background: string }> = {
+  Mídia: { color: "#245f9b", background: "#edf5fd" },
+  Criativo: { color: "#7441a8", background: "#f5effb" },
+  Funil: { color: "#8a5b16", background: "#fff7e8" },
+  Operação: { color: "#287746", background: "#edf8f0" },
+};
+
+const BENCHMARK_SOURCE_STYLE: Record<BenchmarkSource, { color: string; background: string }> = {
+  AdsCtrl: { color: "#176cd2", background: "#edf4fe" },
+  "Meta / CRM": { color: "#6e54a3", background: "#f3effa" },
+  "Site / Analytics": { color: "#8a5b16", background: "#fff6e6" },
+  Gestão: { color: "#287746", background: "#edf8f0" },
+};
+const BENCHMARK_SOURCE_LABEL: Record<BenchmarkSource, string> = {
+  AdsCtrl: "No AdsCtrl",
+  "Meta / CRM": "Meta / CRM",
+  "Site / Analytics": "Site / Analytics",
+  Gestão: "Gestão",
+};
 
 export default function CreativesPage() {
   const [accounts, setAccounts] = useState<AccountOption[]>([]);
@@ -271,11 +348,16 @@ export default function CreativesPage() {
     }
   }, [goalFilter, goalOptions]);
 
-  const creatives = useMemo(() => {
+  const benchmarkCohort = useMemo(() => {
     let rows = [...(lab?.creatives || [])];
     if (goalFilter !== "all") {
       rows = rows.filter((creative) => creative.goal === goalFilter);
     }
+    return rows;
+  }, [lab, goalFilter]);
+
+  const creatives = useMemo(() => {
+    let rows = [...benchmarkCohort];
     if (format === "video") rows = rows.filter((c) => c.metrics.video.isVideo);
     if (format === "static") rows = rows.filter((c) => !c.metrics.video.isVideo);
     if (search.trim()) {
@@ -375,7 +457,7 @@ export default function CreativesPage() {
         compareSortValues(left.adName, right.adName, "asc")
       );
     });
-  }, [lab, goalFilter, format, search, sort]);
+  }, [benchmarkCohort, format, search, sort]);
 
   const scatter = useMemo(() => creatives.filter((c) =>
     c.sampleStatus !== "insufficient" && c.metrics.video.hookRate != null && c.metrics.outboundCtr != null
@@ -409,7 +491,7 @@ export default function CreativesPage() {
       {lab && (
         <>
           <Summary account={lab} />
-          <MetricGuide />
+          <MetricGuide currency={lab.currency} />
           <div style={{ display: "grid", gridTemplateColumns: "1.15fr .85fr", gap: 14, marginBottom: 16 }}>
             <VideoFunnel account={lab} />
             <div style={panelStyle}>
@@ -433,7 +515,7 @@ export default function CreativesPage() {
 
           <section style={{ ...panelStyle, padding: 0, overflow: "hidden" }}>
             <div style={{ padding: "14px 15px", display: "flex", alignItems: "end", gap: 9, borderBottom: "1px solid #ececea", flexWrap: "wrap" }}>
-              <div style={{ marginRight: 8 }}><PanelTitle title="Heatmap de criativos" subtitle={`${creatives.length} anúncios no recorte`} /></div>
+              <div style={{ marginRight: 8 }}><PanelTitle title="Heatmap de criativos" subtitle={`${creatives.length} anúncios · cores vs. mediana do mesmo objetivo`} /></div>
               <div style={{ display: "flex", gap: 3, background: "#f2f2f0", padding: 3, borderRadius: 9 }}>
                 {(["all", "video", "static"] as const).map((key) => <Toggle key={key} active={format === key} onClick={() => setFormat(key)}>{key === "all" ? "Todos" : key === "video" ? "Vídeos" : "Estáticos"}</Toggle>)}
               </div>
@@ -513,8 +595,17 @@ export default function CreativesPage() {
                 )}
               </div>
             </div>
+            <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", padding: "7px 15px", borderBottom: "1px solid #ececea", background: "#fcfcfb", color: "#7b7b76", fontSize: 9.5 }}>
+              <strong style={{ color: "#555" }}>Legenda do heatmap:</strong>
+              <span><i style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "#eaf7ee", border: "1px solid #cfe9d6", marginRight: 4 }} />melhor que a mediana</span>
+              <span><i style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "#fff8e9", border: "1px solid #f0dfb4", marginRight: 4 }} />próximo da mediana</span>
+              <span><i style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "#fff0ee", border: "1px solid #efd2ce", marginRight: 4 }} />pior que a mediana</span>
+              <span><i style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "#fafafa", border: "1px solid #e7e7e4", marginRight: 4 }} />sem amostra/referência</span>
+              <span style={{ marginLeft: "auto" }}>Leitura automática compara anúncios do mesmo objetivo.</span>
+            </div>
             <CreativeTable
               creatives={creatives}
+              benchmarkCohort={benchmarkCohort}
               account={lab}
               sort={sort}
               onSort={setSort}
@@ -552,33 +643,74 @@ function Summary({ account }: { account: LabAccount }) {
   );
 }
 
-function MetricGuide() {
+function MetricGuide({ currency }: { currency: string }) {
+  const accountCurrency = (currency || "BRL").toUpperCase();
   return (
     <details open style={{ ...panelStyle, marginBottom: 14, padding: 0, overflow: "hidden" }}>
-      <summary style={{ cursor: "pointer", listStyle: "none", padding: "14px 16px", display: "flex", alignItems: "center", gap: 12, background: "#fbfbfa" }}>
+      <summary style={{ cursor: "pointer", listStyle: "none", padding: "15px 16px", display: "flex", alignItems: "center", gap: 12, background: "#f7fafc" }}>
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 13, fontWeight: 750 }}>Mapa de leitura das métricas</div>
-          <div style={{ fontSize: 10.5, color: "#888", marginTop: 3 }}>Referências iniciais para localizar o gargalo do criativo e escolher a próxima ação</div>
+          <div style={{ fontSize: 14, fontWeight: 780 }}>Benchmarks práticos de criativos e funil</div>
+          <div style={{ fontSize: 10.5, color: "#77808b", marginTop: 3 }}>Faixas de triagem no estilo “cola PPC”: métrica, referência, gargalo e onde validar</div>
         </div>
-        <span style={{ fontSize: 10, fontWeight: 750, color: "#35734b", background: "#eaf7ee", borderRadius: 999, padding: "5px 9px" }}>GUIA PPC</span>
+        <span style={{ fontSize: 10, fontWeight: 800, color: "#087b8d", background: "#e4f7fa", borderRadius: 999, padding: "5px 9px" }}>{CREATIVE_BENCHMARKS.length} REFERÊNCIAS</span>
       </summary>
-      <div style={{ borderTop: "1px solid #ececea", padding: 14 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(235px,1fr))", gap: 9 }}>
-          {METRIC_GUIDE.map((item) => (
-            <article key={item.metric} style={{ border: "1px solid #e9e9e6", borderRadius: 11, padding: 12, background: "#fff" }}>
-              <div style={{ fontSize: 9.5, color: "#777", fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.35 }}>{item.stage}</div>
-              <div style={{ fontSize: 14, fontWeight: 760, marginTop: 4 }}>{item.metric}</div>
-              <div style={{ marginTop: 7, color: "#267a45", background: "#eef8f1", borderRadius: 7, padding: "6px 8px", fontSize: 11, fontWeight: 700 }}>{item.reference}</div>
-              <div style={{ fontSize: 10, color: "#999", marginTop: 6 }}>{item.formula}</div>
-              <div style={{ fontSize: 11, color: "#7a4f13", lineHeight: 1.4, marginTop: 8 }}><strong>Gargalo:</strong> {item.bottleneck}</div>
-              <div style={{ fontSize: 11, color: "#555", lineHeight: 1.4, marginTop: 5 }}><strong>Ação:</strong> {item.action}</div>
-            </article>
+      <div style={{ borderTop: "1px solid #e6ebef", padding: 14 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(210px,1fr))", gap: 8, marginBottom: 12 }}>
+          {[
+            ["1", "Meta do cliente", "Margem, CPL/CPA e ROAS de equilíbrio"],
+            ["2", "Mediana da conta", "Mesmo objetivo, janela e amostra comparável"],
+            ["3", "Faixa de mercado", "Somente como orientação inicial"],
+          ].map(([order, title, detail]) => (
+            <div key={order} style={{ display: "flex", gap: 9, alignItems: "center", border: "1px solid #e2e8ee", borderRadius: 9, padding: "9px 10px", background: "#fff" }}>
+              <span style={{ width: 22, height: 22, borderRadius: "50%", display: "grid", placeItems: "center", flexShrink: 0, background: order === "1" ? "#102d4f" : order === "2" ? "#087f94" : "#e9eef3", color: order === "3" ? "#5e6975" : "#fff", fontSize: 10, fontWeight: 800 }}>{order}</span>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 760, color: "#253342" }}>{title}</div>
+                <div style={{ fontSize: 9.5, color: "#87909a", marginTop: 1 }}>{detail}</div>
+              </div>
+            </div>
           ))}
         </div>
-        <p style={{ margin: "11px 2px 0", fontSize: 10.5, color: "#888", lineHeight: 1.45 }}>
-          As faixas são pontos de partida para Meta Ads, não metas universais. Objetivo, país, ticket, público, posicionamento e janela alteram o benchmark.
-          Para decidir, priorize a meta econômica do cliente e a comparação com a mediana da própria conta exibida no heatmap.
-        </p>
+
+        <div style={{ border: "1px solid #dce4eb", borderRadius: 11, overflow: "auto", maxHeight: 470, background: "#fff" }}>
+          <table style={{ width: "100%", minWidth: 1020, borderCollapse: "collapse" }}>
+            <thead style={{ position: "sticky", top: 0, zIndex: 2 }}>
+              <tr style={{ background: "#102d4f", color: "#fff", fontSize: 10, textTransform: "uppercase", letterSpacing: 0.35 }}>
+                <th style={{ width: 48, padding: "10px 8px", textAlign: "center" }}>#</th>
+                <th style={{ width: 94, padding: "10px 9px", textAlign: "left" }}>Etapa</th>
+                <th style={{ width: 230, padding: "10px 10px", textAlign: "left" }}>Métrica</th>
+                <th style={{ width: 230, padding: "10px 10px", textAlign: "left", background: "#087f94" }}>Referência ideal</th>
+                <th style={{ padding: "10px 12px", textAlign: "left" }}>Leitura / próxima ação</th>
+                <th style={{ width: 115, padding: "10px 10px", textAlign: "center" }}>Dado disponível em</th>
+              </tr>
+            </thead>
+            <tbody>
+              {CREATIVE_BENCHMARKS.map((item, index) => {
+                const stageStyle = BENCHMARK_STAGE_STYLE[item.stage];
+                const sourceStyle = BENCHMARK_SOURCE_STYLE[item.source];
+                return (
+                  <tr key={`${item.stage}-${item.metric}`} style={{ borderTop: "1px solid #edf0f2", background: index % 2 ? "#fbfcfd" : "#fff" }}>
+                    <td style={{ padding: "9px 8px", textAlign: "center" }}>
+                      <span style={{ width: 21, height: 21, display: "inline-grid", placeItems: "center", borderRadius: "50%", color: "#102d4f", background: "#eaf0f6", fontSize: 9.5, fontWeight: 800 }}>{index + 1}</span>
+                    </td>
+                    <td style={{ padding: "9px" }}>
+                      <span style={{ display: "inline-flex", color: stageStyle.color, background: stageStyle.background, borderRadius: 999, padding: "3px 7px", fontSize: 9, fontWeight: 800 }}>{item.stage}</span>
+                    </td>
+                    <td style={{ padding: "9px 10px", color: "#273544", fontSize: 11, fontWeight: 720 }}>{item.metric}</td>
+                    <td style={{ padding: "9px 10px", color: "#147347", background: index % 2 ? "#f0faf3" : "#f5fcf7", fontSize: 11, fontWeight: 780 }}>{item.reference}</td>
+                    <td style={{ padding: "9px 12px", color: "#65707b", fontSize: 10.5, lineHeight: 1.38 }}>{item.reading}</td>
+                    <td style={{ padding: "9px 10px", textAlign: "center" }}>
+                      <span style={{ display: "inline-flex", justifyContent: "center", color: sourceStyle.color, background: sourceStyle.background, borderRadius: 999, padding: "3px 7px", fontSize: 8.5, fontWeight: 800, whiteSpace: "nowrap" }}>{BENCHMARK_SOURCE_LABEL[item.source]}</span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        <div style={{ marginTop: 10, borderRadius: 9, padding: "9px 11px", background: "#fff8e9", color: "#805714", fontSize: 10.5, lineHeight: 1.45 }}>
+          <strong>Como usar:</strong> esta conta está em <strong>{accountCurrency}</strong>. Por isso, CPC, CPM, CPL e CPA devem permanecer na moeda da conta e ser julgados pela meta do cliente e pela própria mediana — não por valores universais em dólar. As cores usam a mediana dos anúncios com amostra do mesmo objetivo no período; busca e filtro de formato não alteram essa referência. Com menos de dois pares comparáveis, a célula fica neutra. Esta tabela é uma referência secundária e não um benchmark oficial da Meta.
+        </div>
       </div>
     </details>
   );
@@ -615,16 +747,29 @@ function VideoFunnel({ account }: { account: LabAccount }) {
 
 function CreativeTable({
   creatives,
+  benchmarkCohort,
   account,
   sort,
   onSort,
 }: {
   creatives: Creative[];
+  benchmarkCohort: Creative[];
   account: LabAccount;
   sort: SortState<CreativeSortKey>;
   onSort: (next: SortState<CreativeSortKey>) => void;
 }) {
-  const b = account.summary.benchmarks || {};
+  const benchmarksByGoal = useMemo(() => {
+    const output = new Map<CreativeGoal, VisibleCreativeBenchmarks>();
+    for (const goal of new Set(benchmarkCohort.map((creative) => creative.goal))) {
+      output.set(
+        goal,
+        benchmarksForVisibleCreatives(
+          benchmarkCohort.filter((creative) => creative.goal === goal)
+        )
+      );
+    }
+    return output;
+  }, [benchmarkCohort]);
   const messagesOnly = creatives.length > 0 && creatives.every((c) => c.goal === "messages");
   const showLpv = creatives.some((creative) => creative.goal !== "messages");
   const showRoas = creatives.some(
@@ -660,6 +805,7 @@ function CreativeTable({
         </tr></thead>
         <tbody>{creatives.map((c) => {
           const m = c.metrics, video = m.video;
+          const b = benchmarksByGoal.get(c.goal)!;
           const isMessages = c.goal === "messages";
           const resultCount = isMessages
             ? m.messageConversations

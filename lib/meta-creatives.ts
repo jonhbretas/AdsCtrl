@@ -725,7 +725,9 @@ function valuesFor(
   return creatives
     .filter(
       (creative) =>
-        creative.sampleStatus !== "no_delivery" && predicate(creative)
+        (creative.sampleStatus === "learning" ||
+          creative.sampleStatus === "reliable") &&
+        predicate(creative)
     )
     .map(picker)
     .filter((value): value is number => value != null && Number.isFinite(value));
@@ -755,7 +757,7 @@ function benchmarksFor(creatives: MetaCreative[]): MetaCreativeBenchmarks {
       valuesFor(
         creatives,
         (c) => c.metrics.costPerConversion,
-        (c) => c.metrics.conversions > 0
+        (c) => c.metrics.conversions >= 3
       )
     ),
     messageRate: median(
@@ -765,14 +767,18 @@ function benchmarksFor(creatives: MetaCreative[]): MetaCreativeBenchmarks {
       valuesFor(
         creatives,
         (c) => c.metrics.costPerMessage,
-        (c) => c.goal === "messages" && c.metrics.messageConversations > 0
+        (c) =>
+          c.goal === "messages" &&
+          c.metrics.messageConversations >= 3
       )
     ),
     roas: median(
       valuesFor(
         creatives,
         (c) => c.metrics.roas,
-        (c) => c.metrics.conversionValue > 0
+        (c) =>
+          c.metrics.conversionValue > 0 &&
+          c.metrics.conversions >= 3
       )
     ),
     hookRate: median(
@@ -1450,8 +1456,23 @@ export async function getMetaCreativeLab(input: {
     return { ...creative, goal, goalLabel: GOAL_LABELS[goal] };
   });
   const benchmarks = benchmarksFor(contextualized);
+  const benchmarksByGoal = new Map(
+    Array.from(new Set(contextualized.map((creative) => creative.goal))).map(
+      (goal) => [
+        goal,
+        benchmarksFor(
+          contextualized.filter((creative) => creative.goal === goal)
+        ),
+      ] as const
+    )
+  );
   const creatives = contextualized
-    .map((creative) => diagnose(creative, benchmarks))
+    .map((creative) =>
+      diagnose(
+        creative,
+        benchmarksByGoal.get(creative.goal) || benchmarks
+      )
+    )
     .sort((left, right) => right.metrics.spend - left.metrics.spend);
 
   return {
