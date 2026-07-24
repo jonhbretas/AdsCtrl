@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import {
   CartesianGrid, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis,
 } from "recharts";
@@ -504,6 +504,7 @@ export default function CreativesPage() {
       {lab && (
         <>
           <Summary account={lab} />
+          <ActionTypesDebug account={lab} />
           <MetricGuide currency={lab.currency} />
           <div style={{ display: "grid", gridTemplateColumns: "1.15fr .85fr", gap: 14, marginBottom: 16 }}>
             <VideoFunnel account={lab} />
@@ -660,6 +661,35 @@ function Summary({ account }: { account: LabAccount }) {
   );
 }
 
+// Painel de diagnóstico: mostra os action_types crus que a Meta devolveu nesta
+// conta e no período. Serve para mapear as métricas que aparecem vazias.
+function ActionTypesDebug({ account }: { account: LabAccount }) {
+  const totals: Record<string, number> = account.summary?.actionTypeTotals || {};
+  const entries = Object.entries(totals)
+    .filter(([, v]) => v > 0)
+    .sort((a, b) => b[1] - a[1]);
+  if (!entries.length) return null;
+  return (
+    <details style={{ ...panelStyle, marginBottom: 14, padding: 0, overflow: "hidden" }}>
+      <summary style={{ cursor: "pointer", listStyle: "none", padding: "11px 14px", display: "flex", alignItems: "center", gap: 10, background: "#fbfbfa" }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 720 }}>Tipos de resultado detectados (diagnóstico)</div>
+          <div style={{ fontSize: 10.5, color: "#888", marginTop: 2 }}>action_types crus da Meta nesta conta/período — use para me dizer o que deveria contar como resultado</div>
+        </div>
+        <span style={{ fontSize: 10, fontWeight: 800, color: "#087b8d", background: "#e4f7fa", borderRadius: 999, padding: "4px 8px" }}>{entries.length}</span>
+      </summary>
+      <div style={{ borderTop: "1px solid #eee", padding: 12, display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 6 }}>
+        {entries.map(([key, value]) => (
+          <div key={key} style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 11, border: "1px solid #eee", borderRadius: 7, padding: "5px 9px", background: "#fff" }}>
+            <code style={{ color: "#444", wordBreak: "break-all" }}>{key}</code>
+            <strong style={{ color: "#111", whiteSpace: "nowrap" }}>{number(value)}</strong>
+          </div>
+        ))}
+      </div>
+    </details>
+  );
+}
+
 function MetricGuide({ currency }: { currency: string }) {
   const accountCurrency = (currency || "BRL").toUpperCase();
   return (
@@ -787,6 +817,7 @@ function CreativeTable({
     }
     return output;
   }, [benchmarkCohort]);
+  const [openAd, setOpenAd] = useState<string | null>(null);
   const messagesOnly = creatives.length > 0 && creatives.every((c) => c.goal === "messages");
   const showLpv = creatives.some((creative) => creative.goal !== "messages");
   const showRoas = creatives.some(
@@ -829,12 +860,26 @@ function CreativeTable({
             : m.conversions;
           const lowEconomicSample = resultCount < 3;
           const roasApplicable = hasApplicableRoas(c);
+          const canFunnel = c.metrics.video.isVideo && c.metrics.video.hookRate != null;
+          const isOpen = openAd === c.adId;
           return (
-            <tr key={c.adId} style={{ borderTop: "1px solid #efefed", opacity: c.sampleStatus === "no_delivery" ? 0.58 : 1 }}>
+            <Fragment key={c.adId}>
+            <tr style={{ borderTop: "1px solid #efefed", opacity: c.sampleStatus === "no_delivery" ? 0.58 : 1, background: isOpen ? "#f8fbff" : undefined }}>
               <td style={{ padding: "9px 12px", minWidth: 265 }}>
                 <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                   {c.asset.thumbnail ? <img src={c.asset.thumbnail} alt="" width={52} height={52} style={{ width: 52, height: 52, borderRadius: 8, objectFit: "cover", background: "#eee" }} /> : <div style={{ width: 52, height: 52, borderRadius: 8, background: "#eee", display: "grid", placeItems: "center", color: "#aaa", fontSize: 18 }}>◫</div>}
-                  <div style={{ minWidth: 0 }}><div title={c.adName} style={{ maxWidth: 250, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontSize: 12.5, fontWeight: 650 }}>{c.adName}</div><div style={{ fontSize: 10, color: "#999", marginTop: 3 }}>{c.campaignName || "—"} · <span style={{ color: "#3970b7", fontWeight: 700 }}>{c.goalLabel}</span> · {FORMAT_LABELS[c.mediaType]} · {c.sample.label}</div></div>
+                  <div style={{ minWidth: 0 }}>
+                    <div title={c.adName} style={{ maxWidth: 250, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontSize: 12.5, fontWeight: 650 }}>{c.adName}</div>
+                    <div style={{ fontSize: 10, color: "#999", marginTop: 3 }}>{c.campaignName || "—"} · <span style={{ color: "#3970b7", fontWeight: 700 }}>{c.goalLabel}</span> · {FORMAT_LABELS[c.mediaType]} · {c.sample.label}</div>
+                    {canFunnel && (
+                      <button
+                        onClick={() => setOpenAd(isOpen ? null : c.adId)}
+                        style={{ marginTop: 5, border: "1px solid #d7e3f2", background: isOpen ? "#eaf2fd" : "#fff", color: "#2b6fc4", borderRadius: 7, padding: "2px 8px", fontSize: 10, fontWeight: 700, cursor: "pointer" }}
+                      >
+                        {isOpen ? "▾ Ocultar funil de retenção" : "▸ Funil de retenção"}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </td>
               <Td>{money(m.spend, account.currency)}</Td><Td>{number(m.impressions)}</Td><Td>{number(m.frequency)}</Td><Td>{money(m.cpm, account.currency)}</Td>
@@ -882,10 +927,53 @@ function CreativeTable({
               )}
               <td style={{ padding: "9px 12px", minWidth: 205 }}><Diagnosis diagnosis={c.primaryDiagnosis} sample={c.sample} /></td>
             </tr>
+            {isOpen && (
+              <tr style={{ background: "#f8fbff" }}>
+                <td colSpan={99} style={{ padding: "4px 12px 16px 74px" }}>
+                  <RetentionFunnel creative={c} />
+                </td>
+              </tr>
+            )}
+            </Fragment>
           );
         })}</tbody>
       </table>
       {!creatives.length && <Empty text="Nenhum criativo encontrado com esses filtros." />}
+    </div>
+  );
+}
+
+// Funil de retenção de um vídeo, em % das impressões. hookRate já é % das
+// impressões que chegaram a 3s; os quartis são % das views de 3s, então
+// reconvertemos para a base de impressões (hook × quartil).
+function RetentionFunnel({ creative }: { creative: Creative }) {
+  const v = creative.metrics.video;
+  const hook = v.hookRate;
+  if (hook == null) return <span style={{ fontSize: 11, color: "#999" }}>Sem dados de vídeo suficientes.</span>;
+  const fromHook = (rate: number | null) => (rate == null ? null : (hook * rate) / 100);
+  const stages: { label: string; pct: number | null; hint: string }[] = [
+    { label: "Impressões", pct: 100, hint: "Base do funil" },
+    { label: "3s (hook)", pct: hook, hint: "Views de 3s ÷ impressões" },
+    { label: "25%", pct: fromHook(v.retention25), hint: "Assistiu 25% do vídeo" },
+    { label: "50%", pct: fromHook(v.retention50), hint: "Assistiu 50%" },
+    { label: "75%", pct: fromHook(v.retention75), hint: "Assistiu 75%" },
+    { label: "100%", pct: fromHook(v.completionRate), hint: "Concluiu o vídeo" },
+  ];
+  return (
+    <div style={{ display: "grid", gap: 5, maxWidth: 560 }}>
+      <div style={{ fontSize: 10.5, fontWeight: 750, color: "#5a6675", marginBottom: 2 }}>
+        Funil de retenção · % das impressões que alcançaram cada estágio
+        {v.avgWatchTimeSeconds != null && <span style={{ color: "#999", fontWeight: 500 }}> · tempo médio {v.avgWatchTimeSeconds.toFixed(1)}s</span>}
+      </div>
+      {stages.map((s, i) => (
+        <div key={s.label} title={s.hint} style={{ display: "grid", gridTemplateColumns: "82px 1fr 52px", gap: 10, alignItems: "center" }}>
+          <span style={{ fontSize: 10.5, color: "#777" }}>{s.label}</span>
+          <div style={{ height: 16, background: "#eef0f3", borderRadius: 5, overflow: "hidden" }}>
+            <div style={{ width: `${Math.max(s.pct ?? 0, s.pct ? 1.5 : 0)}%`, height: "100%", background: `hsl(${212 - i * 14} 70% ${54 + i * 2}%)`, borderRadius: 5 }} />
+          </div>
+          <span style={{ fontSize: 10.5, fontWeight: 650, textAlign: "right", color: s.pct == null ? "#bbb" : "#333" }}>{s.pct == null ? "—" : `${s.pct.toFixed(1)}%`}</span>
+        </div>
+      ))}
     </div>
   );
 }

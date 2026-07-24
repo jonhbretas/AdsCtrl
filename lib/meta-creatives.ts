@@ -139,9 +139,12 @@ export interface MetaCreativeMetrics {
   video: MetaCreativeVideoMetrics;
 }
 
+export type MetaCreativeFormat = "VIDEO" | "IMAGE" | "CAROUSEL" | "OTHER";
+
 export interface MetaCreativeAsset {
   creativeId: string | null;
   thumbnail: string | null;
+  format: MetaCreativeFormat | null; // detectado a partir do objeto do criativo
 }
 
 export interface MetaCreativeSample {
@@ -235,6 +238,8 @@ export interface MetaCreativeAccountSummary {
     roas: string | null;
   };
   diagnosisCounts: Record<string, number>;
+  // Diagnóstico: totais por action_type cru (para mapear métricas vazias).
+  actionTypeTotals: Record<string, number>;
 }
 
 export interface MetaCreativeLabResult {
@@ -469,37 +474,69 @@ async function fetchCreativeAssets(
 
   // O endpoint de múltiplos IDs evita baixar todo o catálogo de anúncios da
   // conta e também recupera criativos históricos que tiveram entrega no período.
+  // Trazemos também campos que revelam o FORMATO (carrossel/vídeo/imagem):
+  // child_attachments (carrossel), video_id/video_data (vídeo) e object_type.
   for (let index = 0; index < unique.length; index += 50) {
     const chunk = unique.slice(index, index + 50);
     const params = new URLSearchParams({
       ids: chunk.join(","),
-      fields: "id,creative{id,thumbnail_url,image_url}",
+      fields:
+        "id,creative{id,thumbnail_url,image_url,video_id,object_type," +
+        "object_story_spec{video_data,link_data{child_attachments{link}}}," +
+        "asset_feed_spec{videos,images}}",
       access_token: token,
     });
-    const rows = await metaGetObject<
-      Record<
-        string,
-        {
-          id?: string;
-          creative?: {
-            id?: string;
-            thumbnail_url?: string;
-            image_url?: string;
-          };
-          error?: unknown;
-        }
-      >
-    >(`${GRAPH}/?${params.toString()}`);
+    const rows = await metaGetObject<Record<string, { creative?: MetaCreativeObject; error?: unknown }>>(
+      `${GRAPH}/?${params.toString()}`
+    );
 
     for (const adId of chunk) {
       const creative = rows[adId]?.creative;
       output[adId] = {
         creativeId: creative?.id || null,
         thumbnail: creative?.thumbnail_url || creative?.image_url || null,
+        format: detectCreativeFormat(creative),
       };
     }
   }
   return output;
+}
+
+type MetaCreativeObject = {
+  id?: string;
+  thumbnail_url?: string;
+  image_url?: string;
+  video_id?: string;
+  object_type?: string;
+  object_story_spec?: {
+    video_data?: unknown;
+    link_data?: { child_attachments?: unknown[] };
+  };
+  asset_feed_spec?: { videos?: unknown[]; images?: unknown[] };
+};
+
+// Formato do anúncio a partir do OBJETO do criativo (fonte confiável, ao
+// contrário de creative_media_type nos insights, que quase sempre vem vazio).
+function detectCreativeFormat(creative?: MetaCreativeObject): MetaCreativeFormat | null {
+  if (!creative) return null;
+  const children = creative.object_story_spec?.link_data?.child_attachments;
+  if (Array.isArray(children) && children.length > 1) return "CAROUSEL";
+
+  const afs = creative.asset_feed_spec;
+  const hasFeedVideo = Array.isArray(afs?.videos) && (afs?.videos?.length || 0) > 0;
+  if (
+    creative.video_id ||
+    creative.object_story_spec?.video_data ||
+    hasFeedVideo ||
+    String(creative.object_type || "").toUpperCase() === "VIDEO"
+  ) {
+    return "VIDEO";
+  }
+
+  const objectType = String(creative.object_type || "").toUpperCase();
+  if (objectType === "PHOTO" || objectType === "SHARE") return "IMAGE";
+  // Sem sinal conclusivo: deixa o normalizador decidir pelos sinais de entrega.
+  return null;
 }
 
 function sampleFor(metrics: MetaCreativeMetrics): MetaCreativeSample {
@@ -581,23 +618,21 @@ function normalizeCreative(
   const watched100 = actionArrayTotal(row.video_p100_watched_actions);
   const mediaTypeRaw = String(row.creative_media_type || "").toUpperCase();
   const hasVideoSignal = plays > 0 || threeSecondViews > 0 || watched25 > 0;
-  // O tipo informado pela Meta é a fonte de verdade do FORMATO do anúncio.
-  // Sinais de vídeo (plays, views) só decidem o formato quando a Meta não
-  // informa um tipo — sem isso, um carrossel com um card em vídeo era
-  // classificado como "vídeo" e reaparecia no filtro de Vídeos.
-  const format: "VIDEO" | "IMAGE" | "CAROUSEL" | "OTHER" = mediaTypeRaw.includes(
-    "CAROUSEL"
-  )
+  // Prioridade: formato do OBJETO do criativo (asset.format). Só quando ele
+  // não é conclusivo caímos no creative_media_type dos insights e, por fim,
+  // nos sinais de entrega de vídeo (evita rotular carrossel c/ 1 card de vídeo
+  // como "vídeo").
+  const formatFromMediaType: MetaCreativeFormat | null = mediaTypeRaw.includes("CAROUSEL")
     ? "CAROUSEL"
     : mediaTypeRaw.includes("VIDEO")
       ? "VIDEO"
       : mediaTypeRaw.includes("IMAGE") || mediaTypeRaw.includes("PHOTO")
         ? "IMAGE"
-        : hasVideoSignal
-          ? "VIDEO"
-          : mediaTypeRaw && mediaTypeRaw !== "UNKNOWN"
-            ? "OTHER"
-            : "IMAGE";
+        : null;
+  const format: MetaCreativeFormat =
+    asset.format ||
+    formatFromMediaType ||
+    (hasVideoSignal ? "VIDEO" : "IMAGE");
   const isVideo = format === "VIDEO";
   const conversionDenominator =
     landingPageViews > 0 ? landingPageViews : outboundClicks;
@@ -1290,7 +1325,7 @@ function sumCreatives(creatives: MetaCreative[]): MetaCreativeMetrics {
 function accountMetrics(row: MetaInsightRow): MetaCreativeMetrics {
   return normalizeCreative(
     { ...row, ad_id: "__account__", ad_name: "Conta" },
-    { creativeId: null, thumbnail: null }
+    { creativeId: null, thumbnail: null, format: null }
   ).metrics;
 }
 
@@ -1409,6 +1444,7 @@ function buildSummary(
       ),
     },
     diagnosisCounts,
+    actionTypeTotals: rollup.actions,
   };
 }
 
@@ -1448,6 +1484,7 @@ export async function getMetaCreativeLab(input: {
         assets[row.ad_id || ""] || {
           creativeId: null,
           thumbnail: null,
+          format: null,
         }
       )
     );
