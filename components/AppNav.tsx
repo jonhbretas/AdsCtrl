@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useRouter } from "next/navigation";
 
@@ -8,20 +7,13 @@ const ITEMS = [
   { href: "/today", label: "Hoje", icon: "✦" },
   { href: "/", label: "Clientes", icon: "◫" },
   { href: "/creatives", label: "Criativos", icon: "◉" },
-  { href: "/#alerts", label: "Alertas", icon: "△" },
+  { href: "/alerts", label: "Alertas", icon: "△" },
   { href: "/admin", label: "Configurações", icon: "⚙" },
 ];
 
 export default function AppNav() {
   const pathname = usePathname();
   const router = useRouter();
-  const [hash, setHash] = useState("");
-  useEffect(() => {
-    const syncHash = () => setHash(window.location.hash);
-    syncHash();
-    window.addEventListener("hashchange", syncHash);
-    return () => window.removeEventListener("hashchange", syncHash);
-  }, []);
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
     router.replace("/login");
@@ -41,12 +33,7 @@ export default function AppNav() {
       </a>
       <div style={{ display: "flex", gap: 4, height: "100%", alignItems: "center" }}>
         {ITEMS.map((item) => {
-          const exactPath = item.href.split("#")[0];
-          const active = item.href.includes("#")
-            ? pathname === exactPath && hash === `#${item.href.split("#")[1]}`
-            : exactPath === "/"
-              ? pathname === "/" && !hash
-              : pathname.startsWith(exactPath);
+          const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
           return (
             <a key={item.href} href={item.href} style={{
               display: "flex", alignItems: "center", gap: 7, padding: "8px 12px",

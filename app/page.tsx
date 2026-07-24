@@ -138,6 +138,10 @@ export default function Dashboard() {
   const [live, setLive] = useState<LiveOverview | null>(null);
   const [liveLoading, setLiveLoading] = useState(false);
 
+  useEffect(() => {
+    if (window.location.hash === "#alerts") window.location.replace("/alerts");
+  }, []);
+
   const range = useMemo(() => rangeForPeriod(period, customSince, customUntil), [period, customSince, customUntil]);
   const isLive = period === "today" || period === "custom";
   const periodKey = period === "7d" || period === "14d" || period === "30d" ? period : null;
