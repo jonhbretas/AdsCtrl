@@ -26,6 +26,12 @@ type SelectedMetaAccount = {
   token_ref: number | null;
 };
 
+type ClientContext = {
+  source_meta_account_id: string | null;
+  objective: string | null;
+  result_family: string | null;
+};
+
 const DAY_MS = 86_400_000;
 const MAX_RANGE_DAYS = 93;
 
@@ -120,8 +126,23 @@ export async function GET(req: Request) {
       );
     }
 
+    const selectedIds = selected.map((account) => account.account_id);
+    const clientContextByAccount = new Map<string, ClientContext>();
+    if (selectedIds.length) {
+      const { data: clientRows } = await supabase
+        .from("clients")
+        .select("source_meta_account_id,objective,result_family")
+        .in("source_meta_account_id", selectedIds);
+      for (const client of (clientRows || []) as ClientContext[]) {
+        if (client.source_meta_account_id) {
+          clientContextByAccount.set(client.source_meta_account_id, client);
+        }
+      }
+    }
+
     const results = await inBatches(selected, 3, async (account) => {
       try {
+        const clientContext = clientContextByAccount.get(account.account_id);
         const result = await getMetaCreativeLab({
           accountId: account.account_id,
           accountName: account.name,
@@ -131,6 +152,8 @@ export async function GET(req: Request) {
           token: tokenByIndex(
             typeof account.token_ref === "number" ? account.token_ref : 0
           ),
+          configuredObjective: clientContext?.objective,
+          configuredResultFamily: clientContext?.result_family,
         });
         return { ok: true as const, result };
       } catch (error: any) {

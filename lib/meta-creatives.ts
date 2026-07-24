@@ -65,6 +65,16 @@ export type MetaCreativeDiagnosticTone =
   | "critical"
   | "neutral";
 
+export type MetaCreativeGoal =
+  | "messages"
+  | "sales"
+  | "leads"
+  | "traffic"
+  | "engagement"
+  | "awareness"
+  | "app"
+  | "other";
+
 export interface MetaCreativeDiagnostic {
   code: string;
   tone: MetaCreativeDiagnosticTone;
@@ -117,6 +127,9 @@ export interface MetaCreativeMetrics {
   engagements: number;
   engagementRate: number | null;
   conversions: number;
+  messageConversations: number;
+  messageRate: number | null;
+  costPerMessage: number | null;
   conversionValue: number;
   conversionRate: number | null;
   costPerConversion: number | null;
@@ -145,6 +158,8 @@ export interface MetaCreative {
   campaignId: string | null;
   campaignName: string | null;
   objective: string | null;
+  goal: MetaCreativeGoal;
+  goalLabel: string;
   mediaType: string;
   asset: MetaCreativeAsset;
   metrics: MetaCreativeMetrics;
@@ -156,10 +171,13 @@ export interface MetaCreative {
 
 export interface MetaCreativeBenchmarks {
   frequency: number | null;
+  linkCtr: number | null;
   outboundCtr: number | null;
   landingPageViewRate: number | null;
   conversionRate: number | null;
   costPerConversion: number | null;
+  messageRate: number | null;
+  costPerMessage: number | null;
   roas: number | null;
   hookRate: number | null;
   holdRate: number | null;
@@ -188,6 +206,9 @@ export interface MetaCreativeAccountSummary {
   engagements: number;
   engagementRate: number | null;
   conversions: number;
+  messageConversations: number;
+  messageRate: number | null;
+  costPerMessage: number | null;
   conversionValue: number;
   costPerConversion: number | null;
   roas: number | null;
@@ -544,6 +565,11 @@ function normalizeCreative(
   );
   const conversions = familyTotal(actions, CONVERSION_FAMILIES);
   const conversionValue = familyTotal(actionValues, CONVERSION_FAMILIES);
+  const messageConversations = Math.max(
+    actions["onsite_conversion.messaging_conversation_started_7d"] || 0,
+    actions["onsite_conversion.total_messaging_connection"] || 0,
+    actions["onsite_conversion.messaging_first_reply"] || 0
+  );
 
   const plays = actionArrayTotal(row.video_play_actions);
   const threeSecondViews = actions.video_view || 0;
@@ -610,6 +636,9 @@ function normalizeCreative(
     engagements,
     engagementRate: percent(engagements, impressions),
     conversions,
+    messageConversations,
+    messageRate: percent(messageConversations, linkClicks || outboundClicks),
+    costPerMessage: divide(spend, messageConversations),
     conversionValue,
     conversionRate: percent(conversions, conversionDenominator),
     costPerConversion: divide(spend, conversions),
@@ -628,6 +657,8 @@ function normalizeCreative(
     campaignId: row.campaign_id || null,
     campaignName: row.campaign_name || null,
     objective: row.objective || null,
+    goal: inferGoal(row, actions),
+    goalLabel: "",
     mediaType: isVideo ? "VIDEO" : mediaType,
     asset,
     metrics,
@@ -636,6 +667,54 @@ function normalizeCreative(
     diagnostics: [],
     primaryDiagnosis: null,
   };
+}
+
+const GOAL_LABELS: Record<MetaCreativeGoal, string> = {
+  messages: "Mensagens",
+  sales: "Vendas",
+  leads: "Leads",
+  traffic: "Tráfego",
+  engagement: "Engajamento",
+  awareness: "Reconhecimento",
+  app: "App",
+  other: "Outro",
+};
+
+function configuredGoal(
+  resultFamily?: string | null,
+  objective?: string | null
+): MetaCreativeGoal | null {
+  const family = String(resultFamily || "").toLowerCase();
+  if (family === "mensagens") return "messages";
+  if (family === "vendas") return "sales";
+  if (family === "leads" || family === "cadastros") return "leads";
+  if (family === "lpv" || family === "cliques") return "traffic";
+  if (family === "engajamento") return "engagement";
+  const value = String(objective || "").toLowerCase();
+  return (["sales", "leads", "traffic", "engagement", "awareness", "app"] as MetaCreativeGoal[])
+    .includes(value as MetaCreativeGoal)
+    ? (value as MetaCreativeGoal)
+    : null;
+}
+
+function inferGoal(
+  row: Pick<MetaInsightRow, "objective" | "campaign_name" | "adset_name">,
+  actions: Record<string, number>
+): MetaCreativeGoal {
+  const objective = String(row.objective || "").toUpperCase();
+  const names = `${row.campaign_name || ""} ${row.adset_name || ""}`;
+  const hasMessageSignal =
+    Object.entries(actions).some(
+      ([key, value]) => value > 0 && /messaging|conversation|whatsapp/i.test(key)
+    ) || /mensag|whats\s?app|conversa|direct/i.test(names);
+  if (hasMessageSignal || /MESSAG|CONVERSATION/.test(objective)) return "messages";
+  if (/SALE|PURCHASE/.test(objective)) return "sales";
+  if (/LEAD/.test(objective)) return "leads";
+  if (/TRAFFIC/.test(objective)) return "traffic";
+  if (/ENGAGEMENT/.test(objective)) return "engagement";
+  if (/AWARENESS|REACH|BRAND/.test(objective)) return "awareness";
+  if (/APP/.test(objective)) return "app";
+  return "other";
 }
 
 function valuesFor(
@@ -664,6 +743,7 @@ function median(values: number[], minimumItems = 2): number | null {
 function benchmarksFor(creatives: MetaCreative[]): MetaCreativeBenchmarks {
   return {
     frequency: median(valuesFor(creatives, (c) => c.metrics.frequency)),
+    linkCtr: median(valuesFor(creatives, (c) => c.metrics.linkCtr)),
     outboundCtr: median(valuesFor(creatives, (c) => c.metrics.outboundCtr)),
     landingPageViewRate: median(
       valuesFor(creatives, (c) => c.metrics.landingPageViewRate)
@@ -676,6 +756,16 @@ function benchmarksFor(creatives: MetaCreative[]): MetaCreativeBenchmarks {
         creatives,
         (c) => c.metrics.costPerConversion,
         (c) => c.metrics.conversions > 0
+      )
+    ),
+    messageRate: median(
+      valuesFor(creatives, (c) => c.metrics.messageRate, (c) => c.goal === "messages")
+    ),
+    costPerMessage: median(
+      valuesFor(
+        creatives,
+        (c) => c.metrics.costPerMessage,
+        (c) => c.goal === "messages" && c.metrics.messageConversations > 0
       )
     ),
     roas: median(
@@ -727,6 +817,16 @@ function diagnose(
   const metrics = creative.metrics;
   const video = metrics.video;
   const diagnostics: MetaCreativeDiagnostic[] = [];
+  const usesLandingPage =
+    creative.goal === "traffic" ||
+    creative.goal === "leads" ||
+    creative.goal === "sales";
+  const actionCtr =
+    creative.goal === "messages" ? metrics.linkCtr : metrics.outboundCtr;
+  const actionCtrBenchmark =
+    creative.goal === "messages" ? benchmarks.linkCtr : benchmarks.outboundCtr;
+  const actionCtrLabel =
+    creative.goal === "messages" ? "CTR no link" : "CTR de saída";
 
   if (creative.sampleStatus === "no_delivery") {
     diagnostics.push({
@@ -777,14 +877,14 @@ function diagnose(
     video.holdRate <= benchmarks.holdRate * 0.8;
   const outboundHigh =
     canCompare &&
-    metrics.outboundCtr != null &&
-    benchmarks.outboundCtr != null &&
-    metrics.outboundCtr >= benchmarks.outboundCtr * 1.15;
+    actionCtr != null &&
+    actionCtrBenchmark != null &&
+    actionCtr >= actionCtrBenchmark * 1.15;
   const outboundLow =
     canCompare &&
-    metrics.outboundCtr != null &&
-    benchmarks.outboundCtr != null &&
-    metrics.outboundCtr <= benchmarks.outboundCtr * 0.8;
+    actionCtr != null &&
+    actionCtrBenchmark != null &&
+    actionCtr <= actionCtrBenchmark * 0.8;
 
   if (video.isVideo && hookHigh && holdLow) {
     addDiagnosis(diagnostics, {
@@ -851,14 +951,15 @@ function diagnose(
         "O hook funciona, mas não se transforma em clique de saída. Reforce oferta, mecanismo, prova e CTA.",
       evidence: [
         `Hook ${formatPercent(video.hookRate)}`,
-        `CTR de saída ${formatPercent(metrics.outboundCtr)} vs. mediana ${formatPercent(
-          benchmarks.outboundCtr
+        `${actionCtrLabel} ${formatPercent(actionCtr)} vs. mediana ${formatPercent(
+          actionCtrBenchmark
         )}`,
       ],
     });
   }
 
   if (
+    usesLandingPage &&
     outboundHigh &&
     metrics.linkClicks >= 20 &&
     metrics.landingPageViewRate != null &&
@@ -872,7 +973,7 @@ function diagnose(
       detail:
         "O criativo gera saída, mas uma parcela anormal não vira visualização de página. Verifique velocidade, URL, redirecionamentos e tracking.",
       evidence: [
-        `CTR de saída ${formatPercent(metrics.outboundCtr)}`,
+        `${actionCtrLabel} ${formatPercent(actionCtr)}`,
         `LPV/clique ${formatPercent(
           metrics.landingPageViewRate
         )} vs. mediana ${formatPercent(benchmarks.landingPageViewRate)}`,
@@ -881,6 +982,7 @@ function diagnose(
   }
 
   if (
+    usesLandingPage &&
     metrics.landingPageViews >= 20 &&
     metrics.landingPageViewRate != null &&
     benchmarks.landingPageViewRate != null &&
@@ -900,6 +1002,41 @@ function diagnose(
         `Conversão ${formatPercent(
           metrics.conversionRate
         )} vs. mediana ${formatPercent(benchmarks.conversionRate)}`,
+      ],
+    });
+  }
+
+  if (
+    creative.goal === "messages" &&
+    canCompare &&
+    metrics.linkClicks >= 20 &&
+    metrics.messageConversations === 0
+  ) {
+    addDiagnosis(diagnostics, {
+      code: "clicks_without_messages",
+      tone: "critical",
+      title: "Cliques sem conversa iniciada",
+      detail:
+        "Há intenção, mas nenhuma conversa registrada. Revise o destino (WhatsApp, Direct ou Messenger), a mensagem inicial, o CTA e o tracking.",
+      evidence: [`${metrics.linkClicks.toLocaleString("pt-BR")} cliques no link`, "0 conversas"],
+    });
+  } else if (
+    creative.goal === "messages" &&
+    canCompare &&
+    metrics.messageConversations >= 3
+  ) {
+    addDiagnosis(diagnostics, {
+      code: "messages_generated",
+      tone: "positive",
+      title: "Gerando conversas",
+      detail:
+        "O criativo transforma cliques em conversas. Compare o custo por conversa e, fora da mídia, a qualidade e o fechamento desses contatos.",
+      evidence: [
+        `${metrics.messageConversations.toLocaleString("pt-BR")} conversas`,
+        `Taxa de conversa ${formatPercent(metrics.messageRate)}`,
+        metrics.costPerMessage == null
+          ? "Custo/conversa —"
+          : `Custo/conversa ${metrics.costPerMessage.toFixed(2)}`,
       ],
     });
   }
@@ -1018,6 +1155,7 @@ function sumCreatives(creatives: MetaCreative[]): MetaCreativeMetrics {
   let landingPageViews = 0;
   let engagements = 0;
   let conversions = 0;
+  let messageConversations = 0;
   let conversionValue = 0;
   let plays = 0;
   let threeSecondViews = 0;
@@ -1041,6 +1179,7 @@ function sumCreatives(creatives: MetaCreative[]): MetaCreativeMetrics {
     landingPageViews += metrics.landingPageViews;
     engagements += metrics.engagements;
     conversions += metrics.conversions;
+    messageConversations += metrics.messageConversations;
     conversionValue += metrics.conversionValue;
     plays += metrics.video.plays;
     threeSecondViews += metrics.video.threeSecondViews;
@@ -1090,6 +1229,9 @@ function sumCreatives(creatives: MetaCreative[]): MetaCreativeMetrics {
     engagements,
     engagementRate: percent(engagements, impressions),
     conversions,
+    messageConversations,
+    messageRate: percent(messageConversations, linkClicks || outboundClicks),
+    costPerMessage: divide(spend, messageConversations),
     conversionValue,
     conversionRate: percent(conversions, conversionDenominator),
     costPerConversion: divide(spend, conversions),
@@ -1196,6 +1338,9 @@ function buildSummary(
     engagements: totals.engagements,
     engagementRate: totals.engagementRate,
     conversions: totals.conversions,
+    messageConversations: totals.messageConversations,
+    messageRate: totals.messageRate,
+    costPerMessage: totals.costPerMessage,
     conversionValue: totals.conversionValue,
     costPerConversion: totals.costPerConversion,
     roas: totals.roas,
@@ -1254,6 +1399,8 @@ export async function getMetaCreativeLab(input: {
   since: string;
   until: string;
   token: string;
+  configuredObjective?: string | null;
+  configuredResultFamily?: string | null;
 }): Promise<MetaCreativeLabResult> {
   if (!input.token) {
     throw new Error("Token Meta não configurado para esta conta.");
@@ -1284,8 +1431,26 @@ export async function getMetaCreativeLab(input: {
         }
       )
     );
-  const benchmarks = benchmarksFor(normalized);
-  const creatives = normalized
+  const accountGoal = configuredGoal(
+    input.configuredResultFamily,
+    input.configuredObjective
+  );
+  const messageCampaigns = new Set(
+    normalized
+      .filter((creative) => creative.goal === "messages")
+      .map((creative) => creative.campaignId)
+      .filter((id): id is string => Boolean(id))
+  );
+  const contextualized = normalized.map((creative) => {
+    const goal =
+      accountGoal ||
+      (creative.campaignId && messageCampaigns.has(creative.campaignId)
+        ? "messages"
+        : creative.goal);
+    return { ...creative, goal, goalLabel: GOAL_LABELS[goal] };
+  });
+  const benchmarks = benchmarksFor(contextualized);
+  const creatives = contextualized
     .map((creative) => diagnose(creative, benchmarks))
     .sort((left, right) => right.metrics.spend - left.metrics.spend);
 

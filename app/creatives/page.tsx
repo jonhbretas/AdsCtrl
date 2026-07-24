@@ -9,6 +9,8 @@ type AccountOption = { account_id: string; name: string; platform: string; hidde
 type Diagnostic = { code: string; tone: "positive" | "warning" | "critical" | "neutral"; title: string; detail: string; evidence: string[] };
 type Creative = {
   adId: string; adName: string; campaignName: string | null; adsetName: string | null; mediaType: string;
+  goal: "messages" | "sales" | "leads" | "traffic" | "engagement" | "awareness" | "app" | "other";
+  goalLabel: string;
   asset: { thumbnail: string | null };
   sampleStatus: "no_delivery" | "insufficient" | "learning" | "reliable";
   sample: { label: string; reason: string };
@@ -16,9 +18,10 @@ type Creative = {
   diagnostics: Diagnostic[];
   metrics: {
     spend: number; impressions: number; frequency: number | null; cpm: number | null;
-    outboundCtr: number | null; landingPageViewRate: number | null; conversionRate: number | null;
+    linkCtr: number | null; outboundCtr: number | null; landingPageViewRate: number | null; conversionRate: number | null;
     costPerConversion: number | null; roas: number | null; engagementRate: number | null;
-    conversions: number; conversionValue: number;
+    conversions: number; conversionValue: number; messageConversations: number;
+    messageRate: number | null; costPerMessage: number | null;
     video: {
       isVideo: boolean; hookRate: number | null; holdRate: number | null;
       retention25: number | null; retention50: number | null; retention75: number | null;
@@ -39,6 +42,14 @@ const money = (v: number | null | undefined, currency = "BRL") =>
 const pct = (v: number | null | undefined, digits = 1) => v == null ? "—" : `${v.toFixed(digits)}%`;
 const number = (v: number | null | undefined) => v == null ? "—" : v.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
 const METRIC_GUIDE = [
+  {
+    stage: "Objetivo · Mensagens",
+    metric: "Taxa e custo por conversa",
+    reference: "Compare com a mediana da conta e a meta comercial",
+    formula: "Conversas iniciadas ÷ cliques · gasto ÷ conversas",
+    bottleneck: "Muitos cliques sem conversa: destino, CTA ou abordagem inicial com atrito.",
+    action: "Teste CTA, mensagem pré-preenchida e destino; acompanhe qualidade, resposta e venda no CRM.",
+  },
   {
     stage: "1 · Atenção",
     metric: "Hook rate",
@@ -152,8 +163,8 @@ export default function CreativesPage() {
     }
     const value = (c: Creative) => sort === "spend" ? c.metrics.spend
       : sort === "hook" ? c.metrics.video.hookRate ?? -1
-      : sort === "ctr" ? c.metrics.outboundCtr ?? -1
-      : sort === "cpa" ? -(c.metrics.costPerConversion ?? Number.MAX_SAFE_INTEGER)
+      : sort === "ctr" ? (c.goal === "messages" ? c.metrics.linkCtr : c.metrics.outboundCtr) ?? -1
+      : sort === "cpa" ? -((c.goal === "messages" ? c.metrics.costPerMessage : c.metrics.costPerConversion) ?? Number.MAX_SAFE_INTEGER)
       : c.metrics.roas ?? -1;
     return rows.sort((a, b) => value(b) - value(a));
   }, [lab, format, search, sort]);
@@ -236,6 +247,7 @@ export default function CreativesPage() {
 
 function Summary({ account }: { account: LabAccount }) {
   const s = account.summary;
+  const messages = account.creatives.length > 0 && account.creatives.every((c) => c.goal === "messages");
   return (
     <section style={{ display: "grid", gridTemplateColumns: "repeat(7,minmax(0,1fr))", gap: 9, marginBottom: 14 }}>
       <Metric label="Investimento" value={money(s.spend, account.currency)} />
@@ -243,8 +255,8 @@ function Summary({ account }: { account: LabAccount }) {
       <Metric label="CPM" value={money(s.cpm, account.currency)} />
       <Metric label="Hook rate" value={pct(s.video?.hookRate)} accent />
       <Metric label="Hold rate" value={pct(s.video?.holdRate)} accent />
-      <Metric label="Outbound CTR" value={pct(s.outboundCtr, 2)} />
-      <Metric label="CPA / ROAS" value={`${money(s.costPerConversion, account.currency)} · ${s.roas == null ? "—" : `${s.roas.toFixed(2)}x`}`} />
+      <Metric label={messages ? "CTR no link" : "Outbound CTR"} value={pct(messages ? s.linkCtr : s.outboundCtr, 2)} />
+      <Metric label={messages ? "Custo / conversa" : "CPA / ROAS"} value={messages ? `${money(s.costPerMessage, account.currency)} · ${number(s.messageConversations)} conversas` : `${money(s.costPerConversion, account.currency)} · ${s.roas == null ? "—" : `${s.roas.toFixed(2)}x`}`} />
     </section>
   );
 }
@@ -312,12 +324,13 @@ function VideoFunnel({ account }: { account: LabAccount }) {
 
 function CreativeTable({ creatives, account }: { creatives: Creative[]; account: LabAccount }) {
   const b = account.summary.benchmarks || {};
+  const messagesOnly = creatives.length > 0 && creatives.every((c) => c.goal === "messages");
   return (
     <div style={{ overflowX: "auto" }}>
       <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1280 }}>
         <thead><tr style={{ color: "#888", fontSize: 10, textTransform: "uppercase", letterSpacing: 0.25 }}>
           <Th align="left">Criativo</Th><Th>Spend</Th><Th>Impr.</Th><Th>Freq.</Th><Th>CPM</Th>
-          <Th>Hook</Th><Th>Hold</Th><Th>Outbound CTR</Th><Th>LPV rate</Th><Th>CVR</Th><Th>CPA</Th><Th>ROAS</Th><Th align="left">Leitura</Th>
+          <Th>Hook</Th><Th>Hold</Th><Th>{messagesOnly ? "CTR no link" : "CTR de ação"}</Th><Th>{messagesOnly ? "Conversas" : "LPV rate"}</Th><Th>{messagesOnly ? "Taxa conversa" : "CVR"}</Th><Th>{messagesOnly ? "Custo/conversa" : "CPA"}</Th><Th>ROAS</Th><Th align="left">Leitura</Th>
         </tr></thead>
         <tbody>{creatives.map((c) => {
           const m = c.metrics, video = m.video;
@@ -326,17 +339,17 @@ function CreativeTable({ creatives, account }: { creatives: Creative[]; account:
               <td style={{ padding: "9px 12px", minWidth: 265 }}>
                 <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                   {c.asset.thumbnail ? <img src={c.asset.thumbnail} alt="" width={52} height={52} style={{ width: 52, height: 52, borderRadius: 8, objectFit: "cover", background: "#eee" }} /> : <div style={{ width: 52, height: 52, borderRadius: 8, background: "#eee", display: "grid", placeItems: "center", color: "#aaa", fontSize: 18 }}>◫</div>}
-                  <div style={{ minWidth: 0 }}><div title={c.adName} style={{ maxWidth: 250, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontSize: 12.5, fontWeight: 650 }}>{c.adName}</div><div style={{ fontSize: 10, color: "#999", marginTop: 3 }}>{c.campaignName || "—"} · {c.sample.label}</div></div>
+                  <div style={{ minWidth: 0 }}><div title={c.adName} style={{ maxWidth: 250, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontSize: 12.5, fontWeight: 650 }}>{c.adName}</div><div style={{ fontSize: 10, color: "#999", marginTop: 3 }}>{c.campaignName || "—"} · <span style={{ color: "#3970b7", fontWeight: 700 }}>{c.goalLabel}</span> · {c.sample.label}</div></div>
                 </div>
               </td>
               <Td>{money(m.spend, account.currency)}</Td><Td>{number(m.impressions)}</Td><Td>{number(m.frequency)}</Td><Td>{money(m.cpm, account.currency)}</Td>
               <Heat value={video.hookRate} benchmark={b.hookRate} sample={c.sampleStatus}>{video.isVideo ? pct(video.hookRate) : "—"}</Heat>
               <Heat value={video.holdRate} benchmark={b.holdRate} sample={c.sampleStatus}>{video.isVideo ? pct(video.holdRate) : "—"}</Heat>
-              <Heat value={m.outboundCtr} benchmark={b.outboundCtr} sample={c.sampleStatus}>{pct(m.outboundCtr, 2)}</Heat>
-              <Heat value={m.landingPageViewRate} benchmark={b.landingPageViewRate} sample={c.sampleStatus}>{pct(m.landingPageViewRate)}</Heat>
-              <Heat value={m.conversionRate} benchmark={b.conversionRate} sample={c.sampleStatus}>{pct(m.conversionRate)}</Heat>
-              <Heat value={m.costPerConversion} benchmark={b.costPerConversion} sample={c.sampleStatus} invert>{money(m.costPerConversion, account.currency)}</Heat>
-              <Heat value={m.roas} benchmark={b.roas} sample={c.sampleStatus}>{m.roas == null ? "—" : `${m.roas.toFixed(2)}x`}</Heat>
+              <Heat value={c.goal === "messages" ? m.linkCtr : m.outboundCtr} benchmark={c.goal === "messages" ? b.linkCtr : b.outboundCtr} sample={c.sampleStatus}>{pct(c.goal === "messages" ? m.linkCtr : m.outboundCtr, 2)}</Heat>
+              {c.goal === "messages" ? <Td>{number(m.messageConversations)}</Td> : <Heat value={m.landingPageViewRate} benchmark={b.landingPageViewRate} sample={c.sampleStatus}>{pct(m.landingPageViewRate)}</Heat>}
+              <Heat value={c.goal === "messages" ? m.messageRate : m.conversionRate} benchmark={c.goal === "messages" ? b.messageRate : b.conversionRate} sample={c.sampleStatus}>{pct(c.goal === "messages" ? m.messageRate : m.conversionRate)}</Heat>
+              <Heat value={c.goal === "messages" ? m.costPerMessage : m.costPerConversion} benchmark={c.goal === "messages" ? b.costPerMessage : b.costPerConversion} sample={c.sampleStatus} invert>{money(c.goal === "messages" ? m.costPerMessage : m.costPerConversion, account.currency)}</Heat>
+              <Heat value={c.goal === "messages" ? null : m.roas} benchmark={b.roas} sample={c.sampleStatus}>{c.goal === "messages" || m.roas == null ? "—" : `${m.roas.toFixed(2)}x`}</Heat>
               <td style={{ padding: "9px 12px", minWidth: 205 }}><Diagnosis diagnosis={c.primaryDiagnosis} sample={c.sample} /></td>
             </tr>
           );
