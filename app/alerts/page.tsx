@@ -1,6 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import {
+  compareSortValues,
+  SortButton,
+  SortState,
+} from "@/components/SortableHeader";
 
 type AlertLevel = "critical" | "warning" | "info";
 type AlertItem = {
@@ -18,6 +23,7 @@ type AlertItem = {
   first_seen_at: string | null;
   last_seen_at: string | null;
 };
+type AlertSortKey = "level" | "account" | "alert" | "updated";
 
 const LEVEL = {
   critical: { label: "Crítico", color: "#b23a35", bg: "#fff4f2", border: "#efcfca" },
@@ -34,6 +40,10 @@ export default function AlertsPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [sort, setSort] = useState<SortState<AlertSortKey>>({
+    key: "level",
+    direction: "asc",
+  });
 
   async function load() {
     setLoading(true);
@@ -82,12 +92,37 @@ export default function AlertsPage() {
   const source = tab === "active" ? active : history;
   const rows = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return source.filter((item) => {
+    const filtered = source.filter((item) => {
       if (level !== "all" && item.level !== level) return false;
       if (!query) return true;
       return `${item.account_name} ${item.title} ${item.detail} ${item.type}`.toLowerCase().includes(query);
     });
-  }, [source, level, search]);
+    const itemDate = (item: AlertItem) =>
+      tab === "active"
+        ? item.last_seen_at
+        : item.resolved_at || item.acknowledged_at || item.last_seen_at;
+    const value = (item: AlertItem) => {
+      switch (sort.key) {
+        case "level":
+          return { critical: 0, warning: 1, info: 2 }[item.level];
+        case "account": return item.account_name;
+        case "alert": return item.title;
+        case "updated":
+          return itemDate(item) ? new Date(itemDate(item)!).getTime() : null;
+      }
+    };
+    return filtered.sort((left, right) =>
+      compareSortValues(value(left), value(right), sort.direction) ||
+      (sort.key === "level"
+        ? compareSortValues(
+            itemDate(left) ? new Date(itemDate(left)!).getTime() : null,
+            itemDate(right) ? new Date(itemDate(right)!).getTime() : null,
+            "desc"
+          )
+        : 0) ||
+      compareSortValues(left.account_name, right.account_name, "asc")
+    );
+  }, [source, level, search, sort, tab]);
 
   const critical = active.filter((item) => item.level === "critical").length;
   const warning = active.filter((item) => item.level === "warning").length;
@@ -129,17 +164,28 @@ export default function AlertsPage() {
           <span style={{ marginLeft: "auto", color: "#999", fontSize: 11 }}>{rows.length} resultado(s)</span>
         </div>
 
-        {loading ? (
-          <Empty>Carregando alertas…</Empty>
-        ) : rows.length === 0 ? (
-          <Empty>{tab === "active" ? "Nenhum alerta ativo com esses filtros. ✓" : "Nenhum alerta no histórico."}</Empty>
-        ) : (
-          <div>
-            {rows.map((item) => {
-              const appearance = LEVEL[item.level] || LEVEL.info;
-              const date = item.resolved_at || item.acknowledged_at || item.last_seen_at;
-              return (
-                <article key={item.id} style={{ display: "grid", gridTemplateColumns: "110px minmax(180px,.75fr) minmax(280px,1.7fr) 150px", gap: 16, alignItems: "center", padding: "14px 16px", borderTop: "1px solid #f0f0ee", background: item.level === "critical" && tab === "active" ? "#fffafa" : "#fff" }}>
+        <div style={{ overflowX: "auto" }}>
+          <div style={{ minWidth: 980, display: "grid", gridTemplateColumns: ALERT_GRID, gap: 16, alignItems: "center", padding: "10px 16px", borderBottom: "1px solid #ececea", color: "#888", background: "#fafaf9", fontSize: 10, fontWeight: 750, textTransform: "uppercase", letterSpacing: 0.3 }}>
+            <SortButton column="level" sort={sort} onSort={setSort} align="left">Severidade</SortButton>
+            <SortButton column="account" sort={sort} onSort={setSort} align="left">Conta / tipo</SortButton>
+            <SortButton column="alert" sort={sort} onSort={setSort} align="left">Alerta</SortButton>
+            <SortButton column="updated" sort={sort} onSort={setSort} align="left" initialDirection="desc">Atualização</SortButton>
+            <span style={{ textAlign: "right" }}>Ação</span>
+          </div>
+
+          {loading ? (
+            <Empty>Carregando alertas…</Empty>
+          ) : rows.length === 0 ? (
+            <Empty>{tab === "active" ? "Nenhum alerta ativo com esses filtros. ✓" : "Nenhum alerta no histórico."}</Empty>
+          ) : (
+            <div style={{ minWidth: 980 }}>
+              {rows.map((item) => {
+                const appearance = LEVEL[item.level] || LEVEL.info;
+                const date = tab === "active"
+                  ? item.last_seen_at
+                  : item.resolved_at || item.acknowledged_at || item.last_seen_at;
+                return (
+                <article key={item.id} style={{ display: "grid", gridTemplateColumns: ALERT_GRID, gap: 16, alignItems: "center", padding: "14px 16px", borderTop: "1px solid #f0f0ee", background: item.level === "critical" && tab === "active" ? "#fffafa" : "#fff" }}>
                   <div>
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 8px", borderRadius: 999, background: appearance.bg, border: `1px solid ${appearance.border}`, color: appearance.color, fontSize: 10, fontWeight: 800, textTransform: "uppercase" }}>
                       <span style={{ width: 6, height: 6, borderRadius: "50%", background: appearance.color }} />
@@ -153,8 +199,8 @@ export default function AlertsPage() {
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 680 }}>{item.title}</div>
                     <div style={{ marginTop: 4, color: "#777", fontSize: 11.5, lineHeight: 1.45 }}>{item.detail}</div>
-                    {date && <div style={{ marginTop: 5, color: "#aaa", fontSize: 10 }}>Último registro: {new Date(date).toLocaleString("pt-BR")}</div>}
                   </div>
+                  <div style={{ color: "#888", fontSize: 10.5 }}>{date ? new Date(date).toLocaleString("pt-BR") : "—"}</div>
                   <div style={{ textAlign: "right" }}>
                     {tab === "active" ? (
                       <button disabled={busy === item.id} onClick={() => acknowledge(item, true)} style={buttonStyle}>{busy === item.id ? "Salvando…" : "Marcar ciente"}</button>
@@ -165,10 +211,11 @@ export default function AlertsPage() {
                     )}
                   </div>
                 </article>
-              );
-            })}
-          </div>
-        )}
+                );
+              })}
+            </div>
+          )}
+        </div>
       </section>
     </main>
   );
@@ -185,3 +232,4 @@ function Empty({ children }: { children: React.ReactNode }) {
 }
 const inputStyle: React.CSSProperties = { height: 34, border: "1px solid #dededb", borderRadius: 8, background: "#fff", padding: "0 10px", color: "#333", fontSize: 11.5 };
 const buttonStyle: React.CSSProperties = { border: "1px solid #dededb", borderRadius: 8, background: "#fff", color: "#333", padding: "8px 11px", fontSize: 11.5, fontWeight: 650, cursor: "pointer" };
+const ALERT_GRID = "110px minmax(180px,.75fr) minmax(280px,1.5fr) 135px 150px";

@@ -21,6 +21,11 @@ import {
   pickPrimaryResult, orderedResults, pickVal, delta, roas,
   PURCHASE_KEYS, ATC_KEYS, CHECKOUT_KEYS, LINKCLICK_KEYS,
 } from "@/lib/format";
+import {
+  compareSortValues,
+  SortButton,
+  SortState,
+} from "@/components/SortableHeader";
 
 interface Vals { results: Record<string, number>; values: Record<string, number> }
 interface Row extends Vals {
@@ -57,6 +62,15 @@ const ACCENT2 = "#f59e0b";
 const TEAL = "#2bb3a3";
 
 type MetricKey = "spend" | "impressions" | "clicks" | "ctr" | "cpm" | "results" | "cpr";
+type DetailSortKey =
+  | "name"
+  | "spend"
+  | "impressions"
+  | "clicks"
+  | "ctr"
+  | "result"
+  | "cpr"
+  | "roas";
 const METRIC_LABELS: Record<MetricKey, string> = {
   spend: "Investimento", impressions: "Impressões", clicks: "Cliques",
   ctr: "CTR", cpm: "CPM", results: "Resultados", cpr: "CPR",
@@ -73,6 +87,10 @@ export default function AccountDetail({
   const [result, setResult] = useState<string | null>(null);
   const [tab, setTab] = useState<"campaigns" | "adsets" | "ads">("campaigns");
   const [demoMetric, setDemoMetric] = useState<MetricKey>("spend");
+  const [tableSort, setTableSort] = useState<SortState<DetailSortKey>>({
+    key: "spend",
+    direction: "desc",
+  });
   const platformLabel = platform === "google" ? "Google Ads" : "Meta Ads";
 
   useEffect(() => {
@@ -145,7 +163,33 @@ export default function AccountDetail({
   const cpr = primaryRes ? k.spend / primaryRes : 0;
   const prevCpr = prevPrimaryRes ? p.spend / prevPrimaryRes : 0;
   const resultOptions = orderedResults(data.availableResults);
-  const rows = tab === "campaigns" ? data.campaigns : tab === "adsets" ? data.adsets : data.ads;
+  const sourceRows =
+    tab === "campaigns"
+      ? data.campaigns
+      : tab === "adsets"
+        ? data.adsets
+        : data.ads;
+  const rowValue = (row: Row) => {
+    const rowResult = result ? row.results[result] || 0 : 0;
+    const purchaseValue = pickVal(row.values, PURCHASE_KEYS);
+    switch (tableSort.key) {
+      case "name": return row.name;
+      case "spend": return row.spend;
+      case "impressions": return row.impressions;
+      case "clicks": return row.clicks;
+      case "ctr": return row.ctr;
+      case "result": return rowResult;
+      case "cpr": return rowResult > 0 ? row.spend / rowResult : null;
+      case "roas":
+        return purchaseValue > 0 && row.spend > 0
+          ? purchaseValue / row.spend
+          : null;
+    }
+  };
+  const rows = [...sourceRows].sort((left, right) =>
+    compareSortValues(rowValue(left), rowValue(right), tableSort.direction) ||
+    compareSortValues(left.name, right.name, "asc")
+  );
 
   // E-commerce
   const purchases = pickVal(k.results, PURCHASE_KEYS);
@@ -276,8 +320,14 @@ export default function AccountDetail({
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 760 }}>
             <thead>
               <tr style={{ color: "#999", textAlign: "right" }}>
-                <Th style={{ textAlign: "left" }}>{tab === "ads" ? "Anúncio" : tab === "adsets" ? "Conjunto" : "Campanha"}</Th>
-                <Th>Investimento</Th><Th>Impressões</Th><Th>Cliques</Th><Th>CTR</Th><Th>Resultado</Th><Th>CPR</Th><Th>ROAS</Th>
+                <Th sortKey="name" sort={tableSort} onSort={setTableSort} style={{ textAlign: "left" }}>{tab === "ads" ? "Anúncio" : tab === "adsets" ? "Conjunto" : "Campanha"}</Th>
+                <Th sortKey="spend" sort={tableSort} onSort={setTableSort} initialDirection="desc">Investimento</Th>
+                <Th sortKey="impressions" sort={tableSort} onSort={setTableSort} initialDirection="desc">Impressões</Th>
+                <Th sortKey="clicks" sort={tableSort} onSort={setTableSort} initialDirection="desc">Cliques</Th>
+                <Th sortKey="ctr" sort={tableSort} onSort={setTableSort} initialDirection="desc">CTR</Th>
+                <Th sortKey="result" sort={tableSort} onSort={setTableSort} initialDirection="desc">Resultado</Th>
+                <Th sortKey="cpr" sort={tableSort} onSort={setTableSort}>CPR</Th>
+                <Th sortKey="roas" sort={tableSort} onSort={setTableSort} initialDirection="desc">ROAS</Th>
               </tr>
             </thead>
             <tbody>
@@ -421,8 +471,38 @@ function ChartCard({ children, height, title }: { children: React.ReactNode; hei
   );
 }
 
-function Th({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
-  return <th style={{ padding: "10px 14px", fontWeight: 500, textAlign: "right", ...style }}>{children}</th>;
+function Th({
+  children,
+  style,
+  sortKey,
+  sort,
+  onSort,
+  initialDirection = "asc",
+}: {
+  children: React.ReactNode;
+  style?: React.CSSProperties;
+  sortKey: DetailSortKey;
+  sort: SortState<DetailSortKey>;
+  onSort: (next: SortState<DetailSortKey>) => void;
+  initialDirection?: "asc" | "desc";
+}) {
+  const align = style?.textAlign === "left" ? "left" : "right";
+  return (
+    <th
+      aria-sort={sort.key === sortKey ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}
+      style={{ padding: "10px 14px", fontWeight: 500, textAlign: "right", ...style }}
+    >
+      <SortButton
+        column={sortKey}
+        sort={sort}
+        onSort={onSort}
+        align={align}
+        initialDirection={initialDirection}
+      >
+        {children}
+      </SortButton>
+    </th>
+  );
 }
 function Td({ children, accent }: { children: React.ReactNode; accent?: boolean }) {
   return <td style={{ padding: "10px 14px", textAlign: "right", color: accent ? ACCENT : "#333", fontWeight: accent ? 600 : 400 }}>{children}</td>;

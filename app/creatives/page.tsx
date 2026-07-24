@@ -4,6 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import {
   CartesianGrid, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis,
 } from "recharts";
+import {
+  compareSortValues,
+  SortButton,
+  SortState,
+} from "@/components/SortableHeader";
 
 type AccountOption = { account_id: string; name: string; platform: string; hidden?: boolean; status: string };
 type Diagnostic = { code: string; tone: "positive" | "warning" | "critical" | "neutral"; title: string; detail: string; evidence: string[] };
@@ -33,6 +38,21 @@ type LabAccount = {
   account_id: string; account_name: string; currency: string;
   summary: any; creatives: Creative[];
 };
+type CreativeSortKey =
+  | "creative"
+  | "spend"
+  | "impressions"
+  | "frequency"
+  | "cpm"
+  | "hookRate"
+  | "holdRate"
+  | "actionCtr"
+  | "results"
+  | "lpvRate"
+  | "resultRate"
+  | "costPerResult"
+  | "roas"
+  | "diagnosis";
 
 const daysAgo = (n: number) => {
   const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10);
@@ -125,7 +145,10 @@ export default function CreativesPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [format, setFormat] = useState<"all" | "video" | "static">("all");
-  const [sort, setSort] = useState<"spend" | "hook" | "ctr" | "cpa" | "roas">("spend");
+  const [sort, setSort] = useState<SortState<CreativeSortKey>>({
+    key: "spend",
+    direction: "desc",
+  });
   const [search, setSearch] = useState("");
 
   useEffect(() => {
@@ -161,12 +184,94 @@ export default function CreativesPage() {
       const q = search.toLowerCase();
       rows = rows.filter((c) => `${c.adName} ${c.campaignName || ""} ${c.adsetName || ""}`.toLowerCase().includes(q));
     }
-    const value = (c: Creative) => sort === "spend" ? c.metrics.spend
-      : sort === "hook" ? c.metrics.video.hookRate ?? -1
-      : sort === "ctr" ? (c.goal === "messages" ? c.metrics.linkCtr : c.metrics.outboundCtr) ?? -1
-      : sort === "cpa" ? -((c.goal === "messages" ? c.metrics.costPerMessage : c.metrics.costPerConversion) ?? Number.MAX_SAFE_INTEGER)
-      : c.metrics.roas ?? -1;
-    return rows.sort((a, b) => value(b) - value(a));
+    const value = (creative: Creative) => {
+      const metrics = creative.metrics;
+      switch (sort.key) {
+        case "creative": return creative.adName;
+        case "spend": return metrics.spend;
+        case "impressions": return metrics.impressions;
+        case "frequency": return metrics.frequency;
+        case "cpm": return metrics.cpm;
+        case "hookRate": return metrics.video.isVideo ? metrics.video.hookRate : null;
+        case "holdRate": return metrics.video.isVideo ? metrics.video.holdRate : null;
+        case "actionCtr":
+          return creative.goal === "messages" ? metrics.linkCtr : metrics.outboundCtr;
+        case "results":
+          return creative.goal === "messages"
+            ? metrics.messageConversations
+            : metrics.conversions;
+        case "lpvRate":
+          return creative.goal === "messages" ? null : metrics.landingPageViewRate;
+        case "resultRate":
+          return creative.goal === "messages"
+            ? metrics.messageRate
+            : metrics.conversionRate;
+        case "costPerResult":
+          if (
+            (creative.goal === "messages"
+              ? metrics.messageConversations
+              : metrics.conversions) < 3
+          ) return null;
+          return creative.goal === "messages"
+            ? metrics.costPerMessage
+            : metrics.costPerConversion;
+        case "roas":
+          return creative.goal === "messages" || metrics.conversions < 3
+            ? null
+            : metrics.roas;
+        case "diagnosis": {
+          const tone = creative.primaryDiagnosis?.tone;
+          if (tone === "critical") return 0;
+          if (tone === "warning") return 1;
+          if (creative.sampleStatus === "no_delivery") return 2;
+          if (creative.sampleStatus === "insufficient") return 3;
+          if (tone === "positive") return 4;
+          if (tone === "neutral") return 5;
+          return 6;
+        }
+      }
+    };
+    const decisionMetric = new Set<CreativeSortKey>([
+      "hookRate",
+      "holdRate",
+      "actionCtr",
+      "results",
+      "lpvRate",
+      "resultRate",
+      "costPerResult",
+      "roas",
+    ]);
+    const sampleRank = (creative: Creative) =>
+      ({
+        reliable: 0,
+        learning: 1,
+        insufficient: 2,
+        no_delivery: 3,
+      })[creative.sampleStatus];
+    return rows.sort((left, right) => {
+      const leftValue = value(left);
+      const rightValue = value(right);
+      const leftMissing =
+        leftValue == null ||
+        (typeof leftValue === "number" && Number.isNaN(leftValue));
+      const rightMissing =
+        rightValue == null ||
+        (typeof rightValue === "number" && Number.isNaN(rightValue));
+      if (leftMissing !== rightMissing) return leftMissing ? 1 : -1;
+      if (decisionMetric.has(sort.key) && !leftMissing && !rightMissing) {
+        const sampleOrder = sampleRank(left) - sampleRank(right);
+        if (sampleOrder) return sampleOrder;
+      }
+      return (
+        compareSortValues(leftValue, rightValue, sort.direction) ||
+        compareSortValues(
+          left.metrics.impressions,
+          right.metrics.impressions,
+          "desc"
+        ) ||
+        compareSortValues(left.adName, right.adName, "asc")
+      );
+    });
   }, [lab, format, search, sort]);
 
   const scatter = useMemo(() => creatives.filter((c) =>
@@ -231,13 +336,14 @@ export default function CreativesPage() {
               </div>
               <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar criativo…" style={{ ...inputStyle, minWidth: 180 }} />
               <span style={{ flex: 1 }} />
-              <Field label="Ordenar">
-                <select value={sort} onChange={(e) => setSort(e.target.value as any)} style={inputStyle}>
-                  <option value="spend">Investimento</option><option value="hook">Hook</option><option value="ctr">Outbound CTR</option><option value="cpa">Menor CPA</option><option value="roas">ROAS</option>
-                </select>
-              </Field>
+              <span style={{ color: "#999", fontSize: 10.5 }}>Clique em uma coluna para ordenar ↕ · amostras utilizáveis primeiro</span>
             </div>
-            <CreativeTable creatives={creatives} account={lab} />
+            <CreativeTable
+              creatives={creatives}
+              account={lab}
+              sort={sort}
+              onSort={setSort}
+            />
           </section>
         </>
       )}
@@ -322,15 +428,42 @@ function VideoFunnel({ account }: { account: LabAccount }) {
   );
 }
 
-function CreativeTable({ creatives, account }: { creatives: Creative[]; account: LabAccount }) {
+function CreativeTable({
+  creatives,
+  account,
+  sort,
+  onSort,
+}: {
+  creatives: Creative[];
+  account: LabAccount;
+  sort: SortState<CreativeSortKey>;
+  onSort: (next: SortState<CreativeSortKey>) => void;
+}) {
   const b = account.summary.benchmarks || {};
   const messagesOnly = creatives.length > 0 && creatives.every((c) => c.goal === "messages");
+  useEffect(() => {
+    if (messagesOnly && sort.key === "lpvRate") {
+      onSort({ key: "results", direction: "desc" });
+    }
+  }, [messagesOnly, sort.key, onSort]);
   return (
     <div style={{ overflowX: "auto" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1280 }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1380 }}>
         <thead><tr style={{ color: "#888", fontSize: 10, textTransform: "uppercase", letterSpacing: 0.25 }}>
-          <Th align="left">Criativo</Th><Th>Spend</Th><Th>Impr.</Th><Th>Freq.</Th><Th>CPM</Th>
-          <Th>Hook</Th><Th>Hold</Th><Th>{messagesOnly ? "CTR no link" : "CTR de ação"}</Th><Th>{messagesOnly ? "Conversas" : "LPV rate"}</Th><Th>{messagesOnly ? "Taxa conversa" : "CVR"}</Th><Th>{messagesOnly ? "Custo/conversa" : "CPA"}</Th><Th>ROAS</Th><Th align="left">Leitura</Th>
+          <Th sortKey="creative" sort={sort} onSort={onSort} align="left">Criativo</Th>
+          <Th sortKey="spend" sort={sort} onSort={onSort} initialDirection="desc">Spend</Th>
+          <Th sortKey="impressions" sort={sort} onSort={onSort} initialDirection="desc">Impr.</Th>
+          <Th sortKey="frequency" sort={sort} onSort={onSort} initialDirection="desc">Freq.</Th>
+          <Th sortKey="cpm" sort={sort} onSort={onSort} initialDirection="desc">CPM</Th>
+          <Th sortKey="hookRate" sort={sort} onSort={onSort} initialDirection="desc">Hook</Th>
+          <Th sortKey="holdRate" sort={sort} onSort={onSort} initialDirection="desc">Hold</Th>
+          <Th sortKey="actionCtr" sort={sort} onSort={onSort} initialDirection="desc">{messagesOnly ? "CTR no link" : "CTR de ação"}</Th>
+          <Th sortKey="results" sort={sort} onSort={onSort} initialDirection="desc">{messagesOnly ? "Conversas" : "Resultados"}</Th>
+          {!messagesOnly && <Th sortKey="lpvRate" sort={sort} onSort={onSort} initialDirection="desc">LPV rate</Th>}
+          <Th sortKey="resultRate" sort={sort} onSort={onSort} initialDirection="desc">{messagesOnly ? "Taxa conversa" : "Taxa resultado"}</Th>
+          <Th sortKey="costPerResult" sort={sort} onSort={onSort}>{messagesOnly ? "Custo/conversa" : "Custo/resultado"}</Th>
+          <Th sortKey="roas" sort={sort} onSort={onSort} initialDirection="desc">ROAS</Th>
+          <Th sortKey="diagnosis" sort={sort} onSort={onSort} align="left">Leitura</Th>
         </tr></thead>
         <tbody>{creatives.map((c) => {
           const m = c.metrics, video = m.video;
@@ -346,7 +479,8 @@ function CreativeTable({ creatives, account }: { creatives: Creative[]; account:
               <Heat value={video.hookRate} benchmark={b.hookRate} sample={c.sampleStatus}>{video.isVideo ? pct(video.hookRate) : "—"}</Heat>
               <Heat value={video.holdRate} benchmark={b.holdRate} sample={c.sampleStatus}>{video.isVideo ? pct(video.holdRate) : "—"}</Heat>
               <Heat value={c.goal === "messages" ? m.linkCtr : m.outboundCtr} benchmark={c.goal === "messages" ? b.linkCtr : b.outboundCtr} sample={c.sampleStatus}>{pct(c.goal === "messages" ? m.linkCtr : m.outboundCtr, 2)}</Heat>
-              {c.goal === "messages" ? <Td>{number(m.messageConversations)}</Td> : <Heat value={m.landingPageViewRate} benchmark={b.landingPageViewRate} sample={c.sampleStatus}>{pct(m.landingPageViewRate)}</Heat>}
+              <Td>{number(c.goal === "messages" ? m.messageConversations : m.conversions)}</Td>
+              {!messagesOnly && <Heat value={c.goal === "messages" ? null : m.landingPageViewRate} benchmark={b.landingPageViewRate} sample={c.sampleStatus}>{c.goal === "messages" ? "—" : pct(m.landingPageViewRate)}</Heat>}
               <Heat value={c.goal === "messages" ? m.messageRate : m.conversionRate} benchmark={c.goal === "messages" ? b.messageRate : b.conversionRate} sample={c.sampleStatus}>{pct(c.goal === "messages" ? m.messageRate : m.conversionRate)}</Heat>
               <Heat value={c.goal === "messages" ? m.costPerMessage : m.costPerConversion} benchmark={c.goal === "messages" ? b.costPerMessage : b.costPerConversion} sample={c.sampleStatus} invert>{money(c.goal === "messages" ? m.costPerMessage : m.costPerConversion, account.currency)}</Heat>
               <Heat value={c.goal === "messages" ? null : m.roas} benchmark={b.roas} sample={c.sampleStatus}>{c.goal === "messages" || m.roas == null ? "—" : `${m.roas.toFixed(2)}x`}</Heat>
@@ -382,7 +516,38 @@ function Metric({ label, value, accent }: { label: string; value: string; accent
 function PanelTitle({ title, subtitle }: { title: string; subtitle: string }) { return <div><div style={{ fontSize: 13, fontWeight: 720 }}>{title}</div><div style={{ fontSize: 10.5, color: "#999", marginTop: 2 }}>{subtitle}</div></div>; }
 function Field({ label, children }: { label: string; children: React.ReactNode }) { return <label style={{ display: "grid", gap: 4 }}><span style={{ fontSize: 9.5, fontWeight: 750, color: "#888", textTransform: "uppercase" }}>{label}</span>{children}</label>; }
 function Toggle({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) { return <button onClick={onClick} style={{ border: 0, borderRadius: 7, padding: "6px 10px", background: active ? "#fff" : "transparent", color: active ? "#111" : "#777", boxShadow: active ? "0 1px 2px #0001" : "none", fontSize: 11, fontWeight: 650, cursor: "pointer" }}>{children}</button>; }
-function Th({ children, align = "right" }: { children: React.ReactNode; align?: "left" | "right" }) { return <th style={{ padding: "10px 8px", textAlign: align, fontWeight: 700, background: "#fafaf9", borderTop: "1px solid #eee" }}>{children}</th>; }
+function Th({
+  children,
+  align = "right",
+  sortKey,
+  sort,
+  onSort,
+  initialDirection = "asc",
+}: {
+  children: React.ReactNode;
+  align?: "left" | "right";
+  sortKey: CreativeSortKey;
+  sort: SortState<CreativeSortKey>;
+  onSort: (next: SortState<CreativeSortKey>) => void;
+  initialDirection?: "asc" | "desc";
+}) {
+  return (
+    <th
+      aria-sort={sort.key === sortKey ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}
+      style={{ padding: "10px 8px", textAlign: align, fontWeight: 700, background: "#fafaf9", borderTop: "1px solid #eee" }}
+    >
+      <SortButton
+        column={sortKey}
+        sort={sort}
+        onSort={onSort}
+        align={align}
+        initialDirection={initialDirection}
+      >
+        {children}
+      </SortButton>
+    </th>
+  );
+}
 function Td({ children }: { children: React.ReactNode }) { return <td style={{ padding: "9px 8px", textAlign: "right", fontSize: 11.5, color: "#444", whiteSpace: "nowrap" }}>{children}</td>; }
 function Empty({ text }: { text: string }) { return <div style={{ height: "100%", minHeight: 100, display: "grid", placeItems: "center", color: "#aaa", fontSize: 12 }}>{text}</div>; }
 const inputStyle: React.CSSProperties = { height: 34, boxSizing: "border-box", border: "1px solid #dededb", borderRadius: 8, background: "#fff", padding: "0 9px", color: "#333", fontSize: 11.5 };

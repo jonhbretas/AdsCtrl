@@ -9,6 +9,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import AccountDetail from "@/components/AccountDetail";
+import {
+  compareSortValues,
+  SortButton,
+  SortState,
+} from "@/components/SortableHeader";
 import { brl, num, delta, RESULT_FAMILIES, RESULT_FAMILY_BY_SLUG } from "@/lib/format";
 
 interface Metrics {
@@ -78,6 +83,13 @@ const LEVEL_STYLE: Record<string, { bg: string; fg: string; dot: string; label: 
 };
 
 type Period = "today" | "7d" | "14d" | "30d" | "custom";
+type AccountSortKey =
+  | "name"
+  | "channels"
+  | "trend"
+  | "spend"
+  | "result"
+  | "balance";
 const PRESETS: { key: Period; label: string }[] = [
   { key: "today", label: "Hoje" },
   { key: "7d", label: "7D" },
@@ -137,6 +149,10 @@ export default function Dashboard() {
   const [acking, setAcking] = useState<number | null>(null);
   const [live, setLive] = useState<LiveOverview | null>(null);
   const [liveLoading, setLiveLoading] = useState(false);
+  const [tableSort, setTableSort] = useState<SortState<AccountSortKey>>({
+    key: "spend",
+    direction: "desc",
+  });
 
   useEffect(() => {
     if (window.location.hash === "#alerts") window.location.replace("/alerts");
@@ -353,9 +369,56 @@ export default function Dashboard() {
       const q = search.trim().toLowerCase();
       list = list.filter((a) => a.name.toLowerCase().includes(q));
     }
-    return [...list].sort((a, b) => accMetrics(b).spend - accMetrics(a).spend);
+    const value = (account: Account) => {
+      const metrics = accMetrics(account);
+      const previous = accPrev(account);
+      const unavailable =
+        isLive &&
+        Boolean(
+          live?.errors?.some(
+            (item) => item.account_id === account.account_id
+          )
+        );
+      switch (tableSort.key) {
+        case "name": return account.name;
+        case "channels":
+          return account.platform === "meta"
+            ? 1 + Number(
+                accounts.some(
+                  (candidate) =>
+                    candidate.platform === "google" &&
+                    candidate.linked_meta_account_id === account.account_id &&
+                    !candidate.hidden
+                )
+              )
+            : 1;
+        case "trend":
+          return !unavailable && previous.spend > 0
+            ? ((metrics.spend - previous.spend) / previous.spend) * 100
+            : null;
+        case "spend": return unavailable ? null : metrics.spend;
+        case "result": return unavailable ? null : metrics.result;
+        case "balance":
+          return account.platform === "meta" ? account.balance : null;
+      }
+    };
+    return [...list].sort((left, right) => {
+      if (
+        (tableSort.key === "spend" || tableSort.key === "balance") &&
+        left.currency !== right.currency
+      ) {
+        return compareSortValues(left.currency, right.currency, "asc");
+      }
+      return (
+        compareSortValues(
+          value(left),
+          value(right),
+          tableSort.direction
+        ) || compareSortValues(left.name, right.name, "asc")
+      );
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accounts, groupFilter, platformFilter, onlyActive, search, showHidden, period, live]);
+  }, [accounts, groupFilter, platformFilter, onlyActive, search, showHidden, period, live, tableSort, focus]);
 
   const totals = useMemo(() => {
     let spend = 0, res = 0, val = 0;
@@ -605,14 +668,14 @@ export default function Dashboard() {
         </aside>
 
         {/* TABELA */}
-        <main style={{ border: "1px solid #eee", borderRadius: 14, overflow: "hidden", background: "#fff" }}>
-          <div style={{ display: "grid", gridTemplateColumns: GRID, padding: "12px 16px", borderBottom: "1px solid #f0f0f0", fontSize: 12, color: "#999", fontWeight: 600, alignItems: "center" }}>
-            <span>Cliente</span>
-            <span>Canais</span>
-            <span style={{ textAlign: "center" }}>Tendência</span>
-            <span style={{ textAlign: "right" }}>Investimento ({short})</span>
-            <span style={{ textAlign: "right" }}>{fam.label.split(" ")[0]}</span>
-            <span style={{ textAlign: "right" }}>Saldo Meta</span>
+        <main style={{ border: "1px solid #eee", borderRadius: 14, overflowX: "auto", background: "#fff" }}>
+          <div style={{ minWidth: 900, display: "grid", gridTemplateColumns: GRID, padding: "12px 16px", borderBottom: "1px solid #f0f0f0", fontSize: 12, color: "#999", fontWeight: 600, alignItems: "center" }}>
+            <GridSortHeader sortKey="name" sort={tableSort} onSort={setTableSort} align="left">Cliente</GridSortHeader>
+            <GridSortHeader sortKey="channels" sort={tableSort} onSort={setTableSort} align="left" initialDirection="desc">Canais</GridSortHeader>
+            <GridSortHeader sortKey="trend" sort={tableSort} onSort={setTableSort} align="center" initialDirection="desc">Tendência</GridSortHeader>
+            <GridSortHeader sortKey="spend" sort={tableSort} onSort={setTableSort} initialDirection="desc">Investimento ({short})</GridSortHeader>
+            <GridSortHeader sortKey="result" sort={tableSort} onSort={setTableSort} initialDirection="desc">{fam.label.split(" ")[0]}</GridSortHeader>
+            <GridSortHeader sortKey="balance" sort={tableSort} onSort={setTableSort} initialDirection="desc">Saldo Meta</GridSortHeader>
             <span />
             <span />
           </div>
@@ -622,7 +685,11 @@ export default function Dashboard() {
             const g = groupById(a.group_id);
             const open = !a.hidden && expanded === a.account_id;
             const m = accMetrics(a);
+            const previous = accPrev(a);
             const liveError = isLive ? live?.errors?.find((item) => item.account_id === a.account_id) : undefined;
+            const spendTrend = !liveError && previous.spend > 0
+              ? ((m.spend - previous.spend) / previous.spend) * 100
+              : null;
             const linkedMeta = a.platform === "google" && a.linked_meta_account_id
               ? accounts.find((meta) => meta.account_id === a.linked_meta_account_id)
               : null;
@@ -637,7 +704,7 @@ export default function Dashboard() {
               <div id={`account-${a.account_id}`} key={a.account_id} style={{ borderBottom: "1px solid #f4f4f4", opacity: a.hidden ? 0.55 : 1 }}>
                 <div
                   onClick={() => { if (!a.hidden) setExpanded(open ? null : a.account_id); }}
-                  style={{ display: "grid", gridTemplateColumns: GRID, padding: "12px 16px", alignItems: "center", cursor: a.hidden ? "default" : "pointer", background: open ? "#fafafa" : "#fff" }}
+                  style={{ minWidth: 900, display: "grid", gridTemplateColumns: GRID, padding: "12px 16px", alignItems: "center", cursor: a.hidden ? "default" : "pointer", background: open ? "#fafafa" : "#fff" }}
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
                     <span style={{ width: 30, height: 30, borderRadius: "50%", background: g?.color || "#cbd5e1", color: "#fff", display: "grid", placeItems: "center", fontSize: 13, fontWeight: 700, flexShrink: 0 }}>
@@ -663,8 +730,11 @@ export default function Dashboard() {
                       <span title={`${linkedGoogle.length} conta(s) Google vinculada(s)`} style={{ fontSize: 11, width: 22, height: 22, borderRadius: 6, background: "#f5f7fa", color: "#4285f4", display: "grid", placeItems: "center", fontWeight: 700 }}>G</span>
                     )}
                   </div>
-                  <div style={{ display: "flex", justifyContent: "center" }}>
-                    <Sparkline points={(m.daily || []).map((d) => d.spend)} color={g?.color || "#3987e5"} />
+                  <div style={{ display: "grid", justifyItems: "center", gap: 2 }}>
+                    <Sparkline points={(m.daily || []).map((d) => d.spend)} color={g?.color || "#3987e5"} width={72} height={22} />
+                    <span style={{ fontSize: 9.5, fontWeight: 650, color: spendTrend == null ? "#aaa" : spendTrend >= 0 ? "#27874e" : "#c54a4a" }}>
+                      {spendTrend == null ? "—" : `${spendTrend >= 0 ? "+" : ""}${spendTrend.toFixed(1)}%`}
+                    </span>
                   </div>
                   <div title={liveError?.message} style={{ textAlign: "right", fontSize: 14, fontWeight: 600, color: liveError ? "#a16207" : undefined }}>
                     {liveError ? "Indisponível" : brl(m.spend)}
@@ -765,7 +835,35 @@ export default function Dashboard() {
 
 // ---------- subcomponentes ----------
 
-const GRID = "1fr 40px 68px 120px 96px 100px 26px 24px";
+const GRID = "1fr 40px 92px 120px 96px 100px 26px 24px";
+
+function GridSortHeader({
+  children,
+  sortKey,
+  sort,
+  onSort,
+  align = "right",
+  initialDirection = "asc",
+}: {
+  children: React.ReactNode;
+  sortKey: AccountSortKey;
+  sort: SortState<AccountSortKey>;
+  onSort: (next: SortState<AccountSortKey>) => void;
+  align?: "left" | "center" | "right";
+  initialDirection?: "asc" | "desc";
+}) {
+  return (
+    <SortButton
+      column={sortKey}
+      sort={sort}
+      onSort={onSort}
+      align={align}
+      initialDirection={initialDirection}
+    >
+      {children}
+    </SortButton>
+  );
+}
 
 const btnStyle: React.CSSProperties = {
   padding: "8px 14px",

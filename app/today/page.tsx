@@ -1,6 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import {
+  compareSortValues,
+  SortButton,
+  SortState,
+} from "@/components/SortableHeader";
 
 type Priority = {
   client_id: string; client_name: string; type: string;
@@ -35,6 +40,14 @@ type Cockpit = {
   error?: string;
   migration_required?: boolean;
 };
+type ClientSortKey =
+  | "priority"
+  | "client"
+  | "pacing"
+  | "kpiAttainment"
+  | "trend"
+  | "forecast"
+  | "dataStatus";
 
 const currencyMoney = (value: number, currency: string, digits = 0) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: currency || "BRL", minimumFractionDigits: digits, maximumFractionDigits: digits }).format(value || 0);
@@ -45,6 +58,10 @@ export default function TodayPage() {
   const [data, setData] = useState<Cockpit | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sort, setSort] = useState<SortState<ClientSortKey>>({
+    key: "priority",
+    direction: "asc",
+  });
 
   async function load() {
     setLoading(true); setError(null);
@@ -70,10 +87,82 @@ export default function TodayPage() {
     ? (data.summary.spend / data.summary.budget) * 100 : 0;
   const portfolioCurrency = data?.summary.currency || "BRL";
 
-  const clients = useMemo(() => [...(data?.clients || [])].sort((a, b) => {
-    const severity = (c: Client) => c.priorities.some((p) => p.level === "critical") ? 0 : c.priorities.length ? 1 : 2;
-    return severity(a) - severity(b) || b.metrics.mtd.spend - a.metrics.mtd.spend;
-  }), [data]);
+  const clients = useMemo(() => {
+    const rows = [...(data?.clients || [])];
+    const value = (client: Client) => {
+      switch (sort.key) {
+        case "priority":
+          return client.priorities.some(
+            (priority) => priority.level === "critical"
+          )
+            ? 0
+            : client.priorities.length
+              ? 1
+              : 2;
+        case "client": return client.name;
+        case "pacing": return client.pacing.percentOfBudget;
+        case "kpiAttainment": {
+          const target = Number(client.target_value || 0);
+          const current = client.metrics.kpiValue;
+          if (!client.primary_kpi || target <= 0 || current < 0) return null;
+          const kpiType = client.primary_kpi.toLowerCase();
+          const monetaryKpi = [
+            "roas",
+            "revenue",
+            "cpc",
+            "cpm",
+            "cpa",
+            "cpl",
+          ].includes(kpiType);
+          if (client.mixedCurrencies && monetaryKpi) return null;
+          const lowerIsBetter = [
+            "cpc",
+            "cpm",
+            "cpa",
+            "cpl",
+            "cost_per_result",
+          ].includes(kpiType);
+          if (lowerIsBetter && current <= 0) return null;
+          return lowerIsBetter ? target / current : current / target;
+        }
+        case "trend":
+          return client.metrics.prev7.spend > 0
+            ? ((client.metrics.last7.spend - client.metrics.prev7.spend) /
+                client.metrics.prev7.spend) *
+                100
+            : null;
+        case "forecast":
+          return !client.mixedCurrencies && client.pacing.forecast > 0
+            ? client.pacing.forecast
+            : null;
+        case "dataStatus":
+          return { fresh: 0, stale: 1, empty: 2 }[client.dataStatus] ?? 3;
+      }
+    };
+    return rows.sort((left, right) => {
+      if (
+        sort.key === "forecast" &&
+        left.currency !== right.currency
+      ) {
+        return compareSortValues(left.currency, right.currency, "asc");
+      }
+      if (sort.key === "priority") {
+        return (
+          compareSortValues(value(left), value(right), "asc") ||
+          compareSortValues(
+            left.metrics.mtd.spend,
+            right.metrics.mtd.spend,
+            "desc"
+          ) ||
+          compareSortValues(left.name, right.name, "asc")
+        );
+      }
+      return (
+        compareSortValues(value(left), value(right), sort.direction) ||
+        compareSortValues(left.name, right.name, "asc")
+      );
+    });
+  }, [data, sort]);
 
   if (loading) return <State title="Preparando seu cockpit…" detail="Consolidando clientes, pacing e prioridades." />;
   if (error) return (
@@ -129,13 +218,28 @@ export default function TodayPage() {
           </div>
         </aside>
 
-        <main style={{ border: "1px solid #e8e8e5", borderRadius: 14, overflow: "hidden", background: "#fff" }}>
+        <main style={{ border: "1px solid #e8e8e5", borderRadius: 14, overflowX: "auto", background: "#fff" }}>
+          <div style={{ minWidth: 820 }}>
+          <div style={{ display: "flex", justifyContent: "flex-end", padding: "7px 12px", borderBottom: "1px solid #eee", background: "#fff" }}>
+            <button
+              type="button"
+              onClick={() => setSort({ key: "priority", direction: "asc" })}
+              style={{ border: 0, background: sort.key === "priority" ? "#eef5ff" : "transparent", color: sort.key === "priority" ? "#286fc9" : "#888", borderRadius: 7, padding: "5px 8px", fontSize: 10.5, fontWeight: 700, cursor: "pointer" }}
+            >
+              Prioridade operacional
+            </button>
+          </div>
           <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr .85fr .85fr .9fr 70px", gap: 12, padding: "12px 16px", background: "#fafaf9", borderBottom: "1px solid #eee", color: "#888", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.3 }}>
-            <span>Cliente</span><span>Pacing MTD</span><span style={{ textAlign: "right" }}>KPI / meta</span>
-            <span style={{ textAlign: "right" }}>7d vs ant.</span><span style={{ textAlign: "right" }}>Projeção</span><span style={{ textAlign: "center" }}>Dados</span>
+            <SortButton column="client" sort={sort} onSort={setSort} align="left">Cliente</SortButton>
+            <SortButton column="pacing" sort={sort} onSort={setSort} align="left" initialDirection="desc">Pacing MTD</SortButton>
+            <SortButton column="kpiAttainment" sort={sort} onSort={setSort} initialDirection="desc">KPI / meta</SortButton>
+            <SortButton column="trend" sort={sort} onSort={setSort} initialDirection="desc">7d vs ant.</SortButton>
+            <SortButton column="forecast" sort={sort} onSort={setSort} initialDirection="desc">Projeção</SortButton>
+            <SortButton column="dataStatus" sort={sort} onSort={setSort} align="center" initialDirection="desc">Dados</SortButton>
           </div>
           {clients.map((client) => <ClientRow key={client.id} client={client} />)}
           {!clients.length && <div style={{ padding: 30, color: "#888", textAlign: "center" }}>Nenhum cliente ativo.</div>}
+          </div>
         </main>
       </div>
     </div>

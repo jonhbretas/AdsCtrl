@@ -1,6 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import {
+  compareSortValues,
+  SortButton,
+  SortState,
+} from "@/components/SortableHeader";
 
 type Connection = {
   index: number;
@@ -66,6 +71,16 @@ type CatalogAccount = {
   hidden: boolean;
   currency: string;
 };
+type MetaSortKey =
+  | "account"
+  | "status"
+  | "today"
+  | "spend7d"
+  | "billing"
+  | "amountSpent"
+  | "spendCap"
+  | "payment"
+  | "connection";
 
 const statusLabel: Record<string, string> = {
   ACTIVE: "Ativa",
@@ -103,6 +118,10 @@ export default function MetaAssetsPage() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"all" | "active" | "issues">("all");
   const [connection, setConnection] = useState("all");
+  const [sort, setSort] = useState<SortState<MetaSortKey>>({
+    key: "account",
+    direction: "asc",
+  });
   const [copied, setCopied] = useState<string | null>(null);
 
   async function load(target?: string | "all") {
@@ -183,8 +202,60 @@ export default function MetaAssetsPage() {
           .includes(query)
       );
     }
-    return rows;
-  }, [data, status, connection, search]);
+    const statusRank: Record<string, number> = {
+      ACTIVE: 0,
+      IN_GRACE_PERIOD: 1,
+      PENDING_SETTLEMENT: 2,
+      UNSETTLED: 3,
+      PENDING_RISK_REVIEW: 4,
+      DISABLED: 5,
+      PENDING_CLOSURE: 6,
+      CLOSED: 7,
+      UNKNOWN: 8,
+    };
+    const value = (account: MetaAccount) => {
+      switch (sort.key) {
+        case "account": return account.name;
+        case "status": return statusRank[account.status] ?? 99;
+        case "today":
+          return account.metrics_available ? account.spend_today : null;
+        case "spend7d":
+          return account.metrics_available ? account.spend_7d : null;
+        case "billing":
+          return account.is_prepaid
+            ? account.available_balance
+            : account.billing_balance;
+        case "amountSpent": return account.amount_spent;
+        case "spendCap": return account.spend_cap;
+        case "payment": return account.payment_summary;
+        case "connection": return account.connection_indexes[0] ?? null;
+      }
+    };
+    const monetary = new Set<MetaSortKey>([
+      "today",
+      "spend7d",
+      "billing",
+      "amountSpent",
+      "spendCap",
+    ]);
+    return rows.sort((left, right) => {
+      if (monetary.has(sort.key)) {
+        if (sort.key === "billing" && left.is_prepaid !== right.is_prepaid) {
+          return Number(right.is_prepaid) - Number(left.is_prepaid);
+        }
+        const currencyOrder = compareSortValues(
+          left.currency,
+          right.currency,
+          "asc"
+        );
+        if (currencyOrder) return currencyOrder;
+      }
+      return (
+        compareSortValues(value(left), value(right), sort.direction) ||
+        compareSortValues(left.name, right.name, "asc")
+      );
+    });
+  }, [data, status, connection, search, sort]);
 
   const totals = useMemo(() => {
     const rows = data?.accounts || [];
@@ -395,7 +466,16 @@ export default function MetaAssetsPage() {
               <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1460 }}>
                 <thead>
                   <tr style={{ background: "#fafaf9", color: "#888", fontSize: 9.5, textTransform: "uppercase", letterSpacing: 0.3 }}>
-                    <Th align="left">Conta / BM</Th><Th>Status</Th><Th>Hoje</Th><Th>7 dias</Th><Th>Cobrança</Th><Th>Gasto acumulado</Th><Th>Limite total</Th><Th>Pagamento</Th><Th>Conexão</Th><Th align="left">Abrir</Th>
+                    <Th sortKey="account" sort={sort} onSort={setSort} align="left">Conta / BM</Th>
+                    <Th sortKey="status" sort={sort} onSort={setSort}>Status</Th>
+                    <Th sortKey="today" sort={sort} onSort={setSort} initialDirection="desc">Hoje</Th>
+                    <Th sortKey="spend7d" sort={sort} onSort={setSort} initialDirection="desc">7 dias</Th>
+                    <Th sortKey="billing" sort={sort} onSort={setSort} initialDirection="desc">Cobrança</Th>
+                    <Th sortKey="amountSpent" sort={sort} onSort={setSort} initialDirection="desc">Gasto acumulado</Th>
+                    <Th sortKey="spendCap" sort={sort} onSort={setSort} initialDirection="desc">Limite total</Th>
+                    <Th sortKey="payment" sort={sort} onSort={setSort}>Pagamento</Th>
+                    <Th sortKey="connection" sort={sort} onSort={setSort}>Conexão</Th>
+                    <Th align="left">Abrir</Th>
                   </tr>
                 </thead>
                 <tbody>
@@ -489,8 +569,40 @@ function QuickLink({ label, href, accent }: { label: string; href: string; accen
   return <a href={href} target="_blank" rel="noreferrer" style={{ padding: "5px 7px", borderRadius: 7, border: `1px solid ${accent ? "#b8d5fa" : "#e1e1de"}`, background: accent ? "#eef5ff" : "#fafaf9", color: accent ? "#1768ca" : "#555", fontSize: 10, fontWeight: 700, textDecoration: "none" }}>{label} ↗</a>;
 }
 
-function Th({ children, align = "right" }: { children: React.ReactNode; align?: "left" | "right" }) {
-  return <th style={{ padding: "9px 8px", textAlign: align, fontWeight: 750 }}>{children}</th>;
+function Th({
+  children,
+  align = "right",
+  sortKey,
+  sort,
+  onSort,
+  initialDirection = "asc",
+}: {
+  children: React.ReactNode;
+  align?: "left" | "right";
+  sortKey?: MetaSortKey;
+  sort?: SortState<MetaSortKey>;
+  onSort?: (next: SortState<MetaSortKey>) => void;
+  initialDirection?: "asc" | "desc";
+}) {
+  const active = Boolean(sortKey && sort?.key === sortKey);
+  return (
+    <th
+      aria-sort={active ? (sort?.direction === "asc" ? "ascending" : "descending") : undefined}
+      style={{ padding: "9px 8px", textAlign: align, fontWeight: 750 }}
+    >
+      {sortKey && sort && onSort ? (
+        <SortButton
+          column={sortKey}
+          sort={sort}
+          onSort={onSort}
+          align={align}
+          initialDirection={initialDirection}
+        >
+          {children}
+        </SortButton>
+      ) : children}
+    </th>
+  );
 }
 
 function Td({ children, strong }: { children: React.ReactNode; strong?: boolean }) {

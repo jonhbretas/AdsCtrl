@@ -4,6 +4,11 @@
 // Administração de grupos: criar/editar/excluir grupos e atribuir contas a grupos.
 
 import { useEffect, useMemo, useState } from "react";
+import {
+  compareSortValues,
+  SortButton,
+  SortState,
+} from "@/components/SortableHeader";
 
 interface Group {
   id: string;
@@ -34,6 +39,22 @@ interface ClientRecord {
   budget_start_day: number;
   accounts: Account[];
 }
+type ClientAdminSortKey =
+  | "name"
+  | "objective"
+  | "budget"
+  | "result"
+  | "kpi"
+  | "target"
+  | "cycle";
+type GroupSortKey = "name" | "accounts";
+type AccountAdminSortKey =
+  | "platform"
+  | "name"
+  | "status"
+  | "client"
+  | "group"
+  | "visibility";
 
 const PALETTE = ["#3987e5", "#16a34a", "#db2777", "#f59e0b", "#7c3aed", "#0891b2", "#dc2626", "#4b5563"];
 
@@ -43,11 +64,24 @@ export default function Admin() {
   const [clients, setClients] = useState<ClientRecord[]>([]);
   const [clientsUnavailable, setClientsUnavailable] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadRevision, setLoadRevision] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const [newName, setNewName] = useState("");
   const [newColor, setNewColor] = useState(PALETTE[0]);
+  const [clientSort, setClientSort] = useState<SortState<ClientAdminSortKey>>({
+    key: "name",
+    direction: "asc",
+  });
+  const [groupSort, setGroupSort] = useState<SortState<GroupSortKey>>({
+    key: "name",
+    direction: "asc",
+  });
+  const [accountSort, setAccountSort] = useState<SortState<AccountAdminSortKey>>({
+    key: "name",
+    direction: "asc",
+  });
 
   async function load() {
     setError(null);
@@ -73,6 +107,7 @@ export default function Admin() {
     } catch (e: any) {
       setError(e?.message ?? "Erro ao carregar.");
     } finally {
+      setLoadRevision((revision) => revision + 1);
       setLoading(false);
     }
   }
@@ -92,6 +127,106 @@ export default function Admin() {
       .sort((a, b) => a.name.localeCompare(b.name)),
     [accounts]
   );
+  const sortedClients = useMemo(() => {
+    const objectiveLabel: Record<string, string> = {
+      leads: "Leads",
+      sales: "Vendas",
+      traffic: "Tráfego",
+      engagement: "Engajamento",
+      awareness: "Reconhecimento",
+    };
+    const resultLabel: Record<string, string> = {
+      conversoes: "Conversões",
+      vendas: "Vendas",
+      leads: "Leads",
+      mensagens: "Mensagens",
+      cadastros: "Cadastros",
+      cliques: "Cliques",
+      lpv: "LPV",
+      engajamento: "Engajamento",
+    };
+    const value = (client: ClientRecord) => {
+      switch (clientSort.key) {
+        case "name": return client.name;
+        case "objective":
+          return client.objective
+            ? objectiveLabel[client.objective] || client.objective
+            : null;
+        case "budget": return client.monthly_budget;
+        case "result":
+          return client.result_family
+            ? resultLabel[client.result_family] || client.result_family
+            : null;
+        case "kpi": return client.primary_kpi?.toUpperCase() || null;
+        case "target": return client.target_value;
+        case "cycle": return client.budget_start_day;
+      }
+    };
+    return [...clients].sort((left, right) => {
+      if (
+        clientSort.key === "budget" &&
+        left.currency !== right.currency
+      ) {
+        return compareSortValues(left.currency, right.currency, "asc");
+      }
+      if (
+        clientSort.key === "target" &&
+        left.primary_kpi !== right.primary_kpi
+      ) {
+        return compareSortValues(
+          left.primary_kpi,
+          right.primary_kpi,
+          "asc"
+        );
+      }
+      return (
+        compareSortValues(
+          value(left),
+          value(right),
+          clientSort.direction
+        ) || compareSortValues(left.name, right.name, "asc")
+      );
+    });
+  }, [clients, clientSort]);
+  const sortedGroups = useMemo(() => {
+    const value = (group: Group) =>
+      groupSort.key === "name"
+        ? group.name
+        : countByGroup[group.id] || 0;
+    return [...groups].sort((left, right) =>
+      compareSortValues(value(left), value(right), groupSort.direction) ||
+      compareSortValues(left.name, right.name, "asc")
+    );
+  }, [groups, countByGroup, groupSort]);
+  const sortedAccounts = useMemo(() => {
+    const groupName = (account: Account) =>
+      groups.find((group) => group.id === account.group_id)?.name || null;
+    const clientName = (account: Account) =>
+      account.platform === "google"
+        ? accounts.find(
+            (candidate) =>
+              candidate.account_id === account.linked_meta_account_id
+          )?.name || null
+        : "Conta principal";
+    const value = (account: Account) => {
+      switch (accountSort.key) {
+        case "platform": return account.platform;
+        case "name": return account.name;
+        case "status":
+          return `${account.status === "ACTIVE" ? "0" : "1"}-${account.status}`;
+        case "client": return clientName(account);
+        case "group": return groupName(account);
+        case "visibility": return account.hidden ? 1 : 0;
+      }
+    };
+    return [...accounts].sort((left, right) =>
+      compareSortValues(
+        value(left),
+        value(right),
+        accountSort.direction
+      ) || compareSortValues(left.name, right.name, "asc")
+    );
+  }, [accounts, groups, accountSort]);
 
   async function api(url: string, opts: RequestInit): Promise<any> {
     setBusy(true);
@@ -124,6 +259,7 @@ export default function Admin() {
       await api("/api/groups", { method: "PATCH", body: JSON.stringify({ id, ...patch }) });
       await load();
     } catch (e: any) {
+      await load();
       setError(e?.message);
     }
   }
@@ -205,10 +341,19 @@ export default function Admin() {
         method: "PATCH",
         body: JSON.stringify(patch),
       });
-      setClients((prev) => prev.map((client) => client.id === id ? result.client : client));
+      const confirmed = Object.keys(patch).reduce((next, key) => {
+        const field = key as keyof ClientRecord;
+        (next as any)[field] = result.client?.[field] ?? patch[field];
+        return next;
+      }, {} as Partial<ClientRecord>);
+      setClients((prev) =>
+        prev.map((client) =>
+          client.id === id ? { ...client, ...confirmed } : client
+        )
+      );
     } catch (e: any) {
-      setError(e?.message);
       await load();
+      setError(e?.message);
     }
   }
 
@@ -244,9 +389,19 @@ export default function Admin() {
             Fundação de clientes ainda não aplicada: {clientsUnavailable}
           </div>
         ) : (
-          <div style={{ display: "grid", gap: 9 }}>
-            {clients.map((client) => (
-              <div key={client.id} style={{ display: "grid", gridTemplateColumns: "minmax(160px,1.2fr) 110px 135px 130px 120px 100px 86px", gap: 9, alignItems: "end", border: "1px solid #e9e9e6", borderRadius: 12, padding: "12px 14px", background: "#fff" }}>
+          <div style={{ overflowX: "auto" }}>
+            <div style={{ minWidth: 940, display: "grid", gap: 9 }}>
+              <div style={{ display: "grid", gridTemplateColumns: CLIENT_GRID, gap: 9, alignItems: "center", padding: "9px 14px", color: "#888", background: "#fafaf9", border: "1px solid #e9e9e6", borderRadius: 10, fontSize: 10, fontWeight: 750, textTransform: "uppercase", letterSpacing: 0.25 }}>
+                <SortButton column="name" sort={clientSort} onSort={setClientSort} align="left">Cliente / canais</SortButton>
+                <SortButton column="objective" sort={clientSort} onSort={setClientSort} align="left">Objetivo</SortButton>
+                <SortButton column="budget" sort={clientSort} onSort={setClientSort} align="left" initialDirection="desc">Orçamento</SortButton>
+                <SortButton column="result" sort={clientSort} onSort={setClientSort} align="left">Resultado</SortButton>
+                <SortButton column="kpi" sort={clientSort} onSort={setClientSort} align="left">KPI</SortButton>
+                <SortButton column="target" sort={clientSort} onSort={setClientSort} align="left" initialDirection="desc">Meta</SortButton>
+                <SortButton column="cycle" sort={clientSort} onSort={setClientSort} align="left">Ciclo</SortButton>
+              </div>
+            {sortedClients.map((client) => (
+              <div key={client.id} style={{ display: "grid", gridTemplateColumns: CLIENT_GRID, gap: 9, alignItems: "end", border: "1px solid #e9e9e6", borderRadius: 12, padding: "12px 14px", background: "#fff" }}>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 14, fontWeight: 650, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{client.name}</div>
                   <div style={{ display: "flex", gap: 5, marginTop: 5 }}>
@@ -266,7 +421,7 @@ export default function Admin() {
                   </select>
                 </Field>
                 <Field label="Orçamento mensal">
-                  <input type="number" min="0" step="10" defaultValue={client.monthly_budget ?? ""} placeholder="R$ 0" onBlur={(e) => updateClient(client.id, { monthly_budget: e.target.value ? Number(e.target.value) : null })} style={compactInput} />
+                  <input key={`${client.id}-budget-${loadRevision}-${client.monthly_budget ?? ""}`} type="number" min="0" step="10" defaultValue={client.monthly_budget ?? ""} placeholder="R$ 0" onBlur={(e) => updateClient(client.id, { monthly_budget: e.target.value ? Number(e.target.value) : null })} style={compactInput} />
                 </Field>
                 <Field label="Resultado">
                   <select value={client.result_family || ""} onChange={(e) => updateClient(client.id, { result_family: e.target.value || null })} style={compactInput}>
@@ -293,7 +448,7 @@ export default function Admin() {
                   </select>
                 </Field>
                 <Field label="Meta do KPI">
-                  <input type="number" min="0" step="0.01" defaultValue={client.target_value ?? ""} placeholder="0,00" onBlur={(e) => updateClient(client.id, { target_value: e.target.value ? Number(e.target.value) : null })} style={compactInput} />
+                  <input key={`${client.id}-target-${loadRevision}-${client.target_value ?? ""}`} type="number" min="0" step="0.01" defaultValue={client.target_value ?? ""} placeholder="0,00" onBlur={(e) => updateClient(client.id, { target_value: e.target.value ? Number(e.target.value) : null })} style={compactInput} />
                 </Field>
                 <Field label="Início do ciclo">
                   <select value={client.budget_start_day || 1} onChange={(e) => updateClient(client.id, { budget_start_day: Number(e.target.value) })} style={compactInput}>
@@ -305,6 +460,7 @@ export default function Admin() {
               </div>
             ))}
             {!clients.length && <div style={{ color: "#999", fontSize: 13 }}>Nenhum cliente ativo.</div>}
+            </div>
           </div>
         )}
       </section>
@@ -377,13 +533,20 @@ export default function Admin() {
           <p style={{ color: "#888", fontSize: 14 }}>Nenhum grupo ainda. Crie o primeiro acima.</p>
         ) : (
           <div style={{ border: "1px solid #eee", borderRadius: 12, overflow: "hidden" }}>
-            {groups.map((g, i) => (
+            <div style={{ display: "grid", gridTemplateColumns: GROUP_GRID, alignItems: "center", gap: 12, padding: "9px 16px", color: "#888", background: "#fafaf9", borderBottom: "1px solid #eee", fontSize: 10, fontWeight: 750, textTransform: "uppercase", letterSpacing: 0.25 }}>
+              <span>Cor</span>
+              <SortButton column="name" sort={groupSort} onSort={setGroupSort} align="left">Grupo</SortButton>
+              <SortButton column="accounts" sort={groupSort} onSort={setGroupSort} initialDirection="desc">Contas</SortButton>
+              <span style={{ textAlign: "right" }}>Ação</span>
+            </div>
+            {sortedGroups.map((g) => (
               <div
                 key={g.id}
                 style={{
                   padding: "12px 16px",
-                  borderTop: i === 0 ? "none" : "1px solid #f0f0f0",
-                  display: "flex",
+                  borderTop: "1px solid #f0f0f0",
+                  display: "grid",
+                  gridTemplateColumns: GROUP_GRID,
                   alignItems: "center",
                   gap: 12,
                 }}
@@ -395,14 +558,15 @@ export default function Admin() {
                   style={{ width: 28, height: 28, border: "none", background: "none", cursor: "pointer", padding: 0 }}
                 />
                 <input
+                  key={`${g.id}-name-${loadRevision}-${g.name}`}
                   defaultValue={g.name}
                   onBlur={(e) => {
                     const v = e.target.value.trim();
                     if (v && v !== g.name) updateGroup(g.id, { name: v });
                   }}
-                  style={{ flex: 1, padding: "6px 10px", borderRadius: 6, border: "1px solid #eee", fontSize: 14 }}
+                  style={{ width: "100%", boxSizing: "border-box", padding: "6px 10px", borderRadius: 6, border: "1px solid #eee", fontSize: 14 }}
                 />
-                <span style={{ fontSize: 13, color: "#888", minWidth: 90, textAlign: "right" }}>
+                <span style={{ fontSize: 13, color: "#888", textAlign: "right" }}>
                   {countByGroup[g.id] || 0} conta(s)
                 </span>
                 <button
@@ -424,44 +588,54 @@ export default function Admin() {
         <p style={{ color: "#777", fontSize: 13, margin: "0 0 12px" }}>
           Ativa = aparece no dashboard e tem dados coletados. Oculta = não gera chamadas à API.
         </p>
-        <div style={{ border: "1px solid #eee", borderRadius: 12, overflow: "hidden" }}>
-          {[...accounts]
-            .sort((a, b) => a.name.localeCompare(b.name))
-            .map((a, i) => (
+        <div style={{ border: "1px solid #eee", borderRadius: 12, overflowX: "auto" }}>
+          <div style={{ minWidth: 1020 }}>
+            <div style={{ display: "grid", gridTemplateColumns: ACCOUNT_GRID, alignItems: "center", gap: 12, padding: "9px 16px", color: "#888", background: "#fafaf9", borderBottom: "1px solid #eee", fontSize: 10, fontWeight: 750, textTransform: "uppercase", letterSpacing: 0.25 }}>
+              <SortButton column="platform" sort={accountSort} onSort={setAccountSort} align="left">Plataforma</SortButton>
+              <SortButton column="name" sort={accountSort} onSort={setAccountSort} align="left">Conta</SortButton>
+              <SortButton column="status" sort={accountSort} onSort={setAccountSort} align="left">Status</SortButton>
+              <SortButton column="client" sort={accountSort} onSort={setAccountSort} align="left">Cliente Meta</SortButton>
+              <SortButton column="group" sort={accountSort} onSort={setAccountSort} align="left">Grupo</SortButton>
+              <SortButton column="visibility" sort={accountSort} onSort={setAccountSort}>Coleta</SortButton>
+            </div>
+          {sortedAccounts.map((a) => (
               <div
                 key={a.account_id}
                 style={{
                   padding: "10px 16px",
-                  borderTop: i === 0 ? "none" : "1px solid #f0f0f0",
-                  display: "flex",
+                  borderTop: "1px solid #f0f0f0",
+                  display: "grid",
+                  gridTemplateColumns: ACCOUNT_GRID,
                   alignItems: "center",
                   gap: 12,
                 }}
               >
-                <span style={{ width: 58, fontSize: 11, fontWeight: 700, color: a.platform === "google" ? "#4285f4" : "#1877f2", textTransform: "uppercase" }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: a.platform === "google" ? "#4285f4" : "#1877f2", textTransform: "uppercase" }}>
                   {a.platform}
                 </span>
-                <span style={{ flex: 1, fontSize: 14 }}>{a.name}</span>
-                {a.status !== "ACTIVE" && (
-                  <span style={{ fontSize: 11, color: "#a32d2d" }}>● {a.status}</span>
-                )}
-                {a.platform === "google" && (
+                <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 14 }} title={a.name}>{a.name}</span>
+                <span style={{ fontSize: 11, color: a.status === "ACTIVE" ? "#27874e" : "#a32d2d" }}>
+                  ● {a.status}
+                </span>
+                {a.platform === "google" ? (
                   <select
                     value={a.linked_meta_account_id || ""}
                     onChange={(e) => linkGoogle(a.account_id, e.target.value)}
                     title="Conta Meta que representa este cliente"
-                    style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid #cfdcf1", fontSize: 13, minWidth: 220, color: "#315b91" }}
+                    style={{ width: "100%", boxSizing: "border-box", padding: "6px 10px", borderRadius: 6, border: "1px solid #cfdcf1", fontSize: 13, color: "#315b91" }}
                   >
                     <option value="">— vincular ao cliente Meta —</option>
                     {metaAccounts.map((meta) => (
                       <option key={meta.account_id} value={meta.account_id}>{meta.name}</option>
                     ))}
                   </select>
+                ) : (
+                  <span style={{ color: "#999", fontSize: 12 }}>Conta principal</span>
                 )}
                 <select
                   value={a.group_id || ""}
                   onChange={(e) => assignAccount(a.account_id, e.target.value)}
-                  style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid #ddd", fontSize: 14, minWidth: 200 }}
+                  style={{ width: "100%", boxSizing: "border-box", padding: "6px 10px", borderRadius: 6, border: "1px solid #ddd", fontSize: 14 }}
                 >
                   <option value="">— sem grupo —</option>
                   {groups.map((g) => (
@@ -474,7 +648,7 @@ export default function Admin() {
                   onClick={() => toggleAccount(a.account_id, !a.hidden)}
                   disabled={busy}
                   style={{
-                    minWidth: 92, padding: "6px 10px", borderRadius: 7,
+                    width: "100%", padding: "6px 10px", borderRadius: 7,
                     border: a.hidden ? "1px solid #ddd" : "1px solid #b7e0c4",
                     background: a.hidden ? "#f7f7f7" : "#effaf2",
                     color: a.hidden ? "#777" : "#167a37", fontSize: 12, cursor: "pointer",
@@ -484,6 +658,7 @@ export default function Admin() {
                 </button>
               </div>
             ))}
+          </div>
         </div>
       </section>
     </div>
@@ -510,3 +685,9 @@ const compactInput: React.CSSProperties = {
   color: "#333",
   fontSize: 12,
 };
+
+const CLIENT_GRID =
+  "minmax(160px,1.2fr) 110px 135px 130px 120px 100px 86px";
+const GROUP_GRID = "40px minmax(180px,1fr) 110px 84px";
+const ACCOUNT_GRID =
+  "76px minmax(180px,1fr) 120px 230px 190px 92px";
