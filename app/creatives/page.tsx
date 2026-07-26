@@ -228,7 +228,7 @@ const money = (v: number | null | undefined, currency = "BRL") =>
   v == null ? "—" : new Intl.NumberFormat("pt-BR", { style: "currency", currency, maximumFractionDigits: 2 }).format(v);
 const pct = (v: number | null | undefined, digits = 1) => v == null ? "—" : `${v.toFixed(digits)}%`;
 const number = (v: number | null | undefined) => v == null ? "—" : v.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
-type BenchmarkSource = "AdsCtrl" | "Meta / CRM" | "Site / Analytics" | "Gestão";
+type BenchmarkSource = "Assertivus Dash" | "Meta / CRM" | "Site / Analytics" | "Gestão";
 type BenchmarkStage = "Mídia" | "Criativo" | "Funil" | "Operação";
 const CREATIVE_BENCHMARKS: readonly {
   stage: BenchmarkStage;
@@ -237,23 +237,23 @@ const CREATIVE_BENCHMARKS: readonly {
   reading: string;
   source: BenchmarkSource;
 }[] = [
-  { stage: "Mídia", metric: "CTR no link", reference: "2%–5%", reading: "< 2%: revisar ângulo, oferta, headline e CTA.", source: "AdsCtrl" },
-  { stage: "Mídia", metric: "Outbound CTR", reference: "≥ 1% saudável · ≥ 1,5% forte", reading: "Mede intenção de saída; compare anúncios do mesmo objetivo.", source: "AdsCtrl" },
+  { stage: "Mídia", metric: "CTR no link", reference: "2%–5%", reading: "< 2%: revisar ângulo, oferta, headline e CTA.", source: "Assertivus Dash" },
+  { stage: "Mídia", metric: "Outbound CTR", reference: "≥ 1% saudável · ≥ 1,5% forte", reading: "Mede intenção de saída; compare anúncios do mesmo objetivo.", source: "Assertivus Dash" },
   { stage: "Mídia", metric: "CPC de link", reference: "≤ meta · até +15% da mediana", reading: "Não existe faixa monetária universal; país, nicho e leilão dominam o custo.", source: "Meta / CRM" },
-  { stage: "Mídia", metric: "CPM", reference: "Dentro de ±15% da mediana", reading: "CPM alto isolado não condena o criativo; cruze com CTR e CPA.", source: "AdsCtrl" },
-  { stage: "Mídia", metric: "LPV rate", reference: "≥ 70% saudável · ≥ 85% forte", reading: "< 60%: suspeite de velocidade, redirecionamento ou tracking.", source: "AdsCtrl" },
-  { stage: "Funil", metric: "CVR · leads / formulário", reference: "5%–15%", reading: "Clique chega, mas não converte: revisar oferta, página e formulário.", source: "AdsCtrl" },
-  { stage: "Funil", metric: "CVR · e-commerce", reference: "1%–3%", reading: "Avaliar junto a ticket, margem, qualidade do tráfego e dispositivo.", source: "AdsCtrl" },
-  { stage: "Funil", metric: "Clique → conversa", reference: "≥ mediana da conta", reading: "Muitos cliques sem conversa: CTA, destino ou abordagem inicial com atrito.", source: "AdsCtrl" },
-  { stage: "Funil", metric: "CPL", reference: "≤ meta do cliente", reading: "Qualidade do lead e taxa de fechamento valem mais que uma faixa genérica.", source: "AdsCtrl" },
-  { stage: "Funil", metric: "CPA / custo por compra", reference: "≤ meta baseada na margem", reading: "O CPA máximo deve respeitar margem, recompra e taxa de aprovação.", source: "AdsCtrl" },
-  { stage: "Funil", metric: "ROAS", reference: "≥ ponto de equilíbrio / meta", reading: "A faixa 2x–4x serve só como triagem; margem e recompra definem a meta real.", source: "AdsCtrl" },
-  { stage: "Mídia", metric: "Frequência · público frio", reference: "1,5–2,5x por 7 dias", reading: "Acima da faixa com CTR caindo e CPA subindo sugere fadiga.", source: "AdsCtrl" },
-  { stage: "Mídia", metric: "Frequência · remarketing", reference: "3–6x por 7 dias", reading: "Tolera mais repetição, mas exige vigilância de rejeição e custo.", source: "AdsCtrl" },
-  { stage: "Criativo", metric: "Video hook rate · 3s", reference: "25%–40%+", reading: "< 20%: a abertura não interrompe o scroll.", source: "AdsCtrl" },
-  { stage: "Criativo", metric: "Video hold rate · ThruPlay", reference: "15%–30%", reading: "< 15%: o hook chama atenção, mas o conteúdo não sustenta.", source: "AdsCtrl" },
-  { stage: "Criativo", metric: "Conclusão do vídeo · 100%", reference: "15%–30%+ direcional", reading: "Depende muito da duração; compare vídeos com duração e formato semelhantes.", source: "AdsCtrl" },
-  { stage: "Criativo", metric: "Taxa de engajamento", reference: "3%–8%", reading: "Engajamento sem clique pode indicar entretenimento sem intenção.", source: "AdsCtrl" },
+  { stage: "Mídia", metric: "CPM", reference: "Dentro de ±15% da mediana", reading: "CPM alto isolado não condena o criativo; cruze com CTR e CPA.", source: "Assertivus Dash" },
+  { stage: "Mídia", metric: "LPV rate", reference: "≥ 70% saudável · ≥ 85% forte", reading: "< 60%: suspeite de velocidade, redirecionamento ou tracking.", source: "Assertivus Dash" },
+  { stage: "Funil", metric: "CVR · leads / formulário", reference: "5%–15%", reading: "Clique chega, mas não converte: revisar oferta, página e formulário.", source: "Assertivus Dash" },
+  { stage: "Funil", metric: "CVR · e-commerce", reference: "1%–3%", reading: "Avaliar junto a ticket, margem, qualidade do tráfego e dispositivo.", source: "Assertivus Dash" },
+  { stage: "Funil", metric: "Clique → conversa", reference: "≥ mediana da conta", reading: "Muitos cliques sem conversa: CTA, destino ou abordagem inicial com atrito.", source: "Assertivus Dash" },
+  { stage: "Funil", metric: "CPL", reference: "≤ meta do cliente", reading: "Qualidade do lead e taxa de fechamento valem mais que uma faixa genérica.", source: "Assertivus Dash" },
+  { stage: "Funil", metric: "CPA / custo por compra", reference: "≤ meta baseada na margem", reading: "O CPA máximo deve respeitar margem, recompra e taxa de aprovação.", source: "Assertivus Dash" },
+  { stage: "Funil", metric: "ROAS", reference: "≥ ponto de equilíbrio / meta", reading: "A faixa 2x–4x serve só como triagem; margem e recompra definem a meta real.", source: "Assertivus Dash" },
+  { stage: "Mídia", metric: "Frequência · público frio", reference: "1,5–2,5x por 7 dias", reading: "Acima da faixa com CTR caindo e CPA subindo sugere fadiga.", source: "Assertivus Dash" },
+  { stage: "Mídia", metric: "Frequência · remarketing", reference: "3–6x por 7 dias", reading: "Tolera mais repetição, mas exige vigilância de rejeição e custo.", source: "Assertivus Dash" },
+  { stage: "Criativo", metric: "Video hook rate · 3s", reference: "25%–40%+", reading: "< 20%: a abertura não interrompe o scroll.", source: "Assertivus Dash" },
+  { stage: "Criativo", metric: "Video hold rate · ThruPlay", reference: "15%–30%", reading: "< 15%: o hook chama atenção, mas o conteúdo não sustenta.", source: "Assertivus Dash" },
+  { stage: "Criativo", metric: "Conclusão do vídeo · 100%", reference: "15%–30%+ direcional", reading: "Depende muito da duração; compare vídeos com duração e formato semelhantes.", source: "Assertivus Dash" },
+  { stage: "Criativo", metric: "Taxa de engajamento", reference: "3%–8%", reading: "Engajamento sem clique pode indicar entretenimento sem intenção.", source: "Assertivus Dash" },
   { stage: "Funil", metric: "Add to cart rate", reference: "5%–12%", reading: "Abaixo: revisar oferta, preço, prova, prazo e confiança.", source: "Meta / CRM" },
   { stage: "Funil", metric: "Initiate checkout rate", reference: "≥ 50% dos ATCs", reading: "Queda entre carrinho e checkout aponta fricção comercial ou técnica.", source: "Meta / CRM" },
   { stage: "Funil", metric: "Purchase conversion rate", reference: "40%–60% dos checkouts", reading: "Queda no pagamento: frete, meios de pagamento, erro ou confiança.", source: "Meta / CRM" },
@@ -277,13 +277,13 @@ const BENCHMARK_STAGE_STYLE: Record<BenchmarkStage, { color: string; background:
 };
 
 const BENCHMARK_SOURCE_STYLE: Record<BenchmarkSource, { color: string; background: string }> = {
-  AdsCtrl: { color: "#176cd2", background: "#edf4fe" },
+  "Assertivus Dash": { color: "#176cd2", background: "#edf4fe" },
   "Meta / CRM": { color: "#6e54a3", background: "#f3effa" },
   "Site / Analytics": { color: "#8a5b16", background: "#fff6e6" },
   Gestão: { color: "#287746", background: "#edf8f0" },
 };
 const BENCHMARK_SOURCE_LABEL: Record<BenchmarkSource, string> = {
-  AdsCtrl: "No AdsCtrl",
+  "Assertivus Dash": "No Assertivus Dash",
   "Meta / CRM": "Meta / CRM",
   "Site / Analytics": "Site / Analytics",
   Gestão: "Gestão",

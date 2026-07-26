@@ -7,6 +7,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import ReportDocument, { ReportPayload } from "@/components/ReportDocument";
+import BrandMark from "@/components/BrandMark";
 
 export default function PublicReportPage() {
   const params = useParams<{ token: string }>();
@@ -40,8 +41,9 @@ export default function PublicReportPage() {
       <style>{`@media print { body { background: #fff !important; } .page-shell { box-shadow: none !important; padding: 0 !important; } .no-print { display: none !important; } }`}</style>
 
       <div className="no-print" style={{ maxWidth: 740, margin: "0 auto 16px", display: "flex", alignItems: "center", gap: 8 }}>
+        <BrandMark size={22} />
         <span style={{ fontSize: 12, color: "#8a919e" }}>
-          Relatório de mídia paga · gerado por AdsCtrl
+          Relatório de mídia paga · Assertivus
         </span>
         <span style={{ flex: 1 }} />
         <button

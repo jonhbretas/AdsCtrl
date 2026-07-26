@@ -14,7 +14,7 @@
 import { NextResponse } from "next/server";
 import { buildReport, lastFullWeek } from "@/lib/report-data";
 import { renderReportEmail } from "@/lib/report-email";
-import { reportLink, reportLinkConfigured } from "@/lib/report-token";
+import { dashboardLink, reportLink, reportLinkConfigured } from "@/lib/report-token";
 import { looksLikeEmail, resendIssues, sendEmail } from "@/lib/resend";
 import { getServiceClient, supabaseEnvMissing } from "@/lib/supabase";
 import { AUTH_COOKIE_NAME, constantTimeEqual, verifySessionToken } from "@/lib/auth";
@@ -184,8 +184,16 @@ async function handle(req: Request) {
           continue;
         }
 
-        const link = await reportLink(accountId, range.since, range.until);
-        const email = renderReportEmail(report, { clientName: client.name, link, dryRun });
+        const [link, dashboard] = await Promise.all([
+          reportLink(accountId, range.since, range.until),
+          dashboardLink(client.id),
+        ]);
+        const email = renderReportEmail(report, {
+          clientName: client.name,
+          link,
+          dashboardLink: dashboard,
+          dryRun,
+        });
         const sent = await sendEmail({
           to: recipient,
           subject: email.subject,

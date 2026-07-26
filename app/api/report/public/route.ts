@@ -5,7 +5,7 @@
 // consultar qualquer conta do catálogo.
 
 import { NextResponse } from "next/server";
-import { buildReport, ReportError } from "@/lib/report-data";
+import { buildReportCached, ReportError } from "@/lib/report-data";
 import { verifyReportToken } from "@/lib/report-token";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +21,9 @@ export async function GET(req: Request) {
         { status: 401, headers: { "Cache-Control": "no-store" } }
       );
     }
-    const report = await buildReport(payload.accountId, payload.since, payload.until);
+    // Cache: o mesmo link pode ser aberto várias vezes (e período fechado não
+    // muda mais). Sem isso, cada recarga custaria dezenas de chamadas de API.
+    const { report } = await buildReportCached(payload.accountId, payload.since, payload.until);
     return NextResponse.json(report, { headers: { "Cache-Control": "no-store" } });
   } catch (e: any) {
     const status = e instanceof ReportError ? e.status : 500;

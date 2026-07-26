@@ -145,3 +145,61 @@ export async function buildReport(requestedAccountId: string, since: string, unt
 }
 
 export type ReportPayloadData = Awaited<ReturnType<typeof buildReport>>;
+
+// ---------- cache ----------
+// Período fechado (terminou ontem ou antes) não muda mais: vale por um dia.
+// Período que inclui hoje ainda recebe dados: vale por poucos minutos.
+const FRESH_CLOSED_MS = 24 * 60 * 60 * 1000;
+const FRESH_OPEN_MS = 15 * 60 * 1000;
+
+function cacheWindow(until: string): number {
+  const today = new Date().toISOString().slice(0, 10);
+  return until < today ? FRESH_CLOSED_MS : FRESH_OPEN_MS;
+}
+
+export interface CachedReport {
+  report: ReportPayloadData;
+  cached: boolean;
+  fetched_at: string;
+}
+
+// Mesma montagem do relatório, servida do banco quando ainda está fresca.
+// Protege as APIs de anúncio de recargas repetidas no link do cliente.
+export async function buildReportCached(
+  accountId: string,
+  since: string,
+  until: string,
+  opts: { force?: boolean } = {}
+): Promise<CachedReport> {
+  if (supabaseEnvMissing()) throw new ReportError("Supabase não configurado.", 503);
+  const supabase = getServiceClient();
+  const key = { account_id: accountId.replace(/^act_/, ""), range_since: since, range_until: until };
+
+  if (!opts.force) {
+    const { data: cached } = await supabase
+      .from("report_cache")
+      .select("payload,fetched_at,hits")
+      .match(key)
+      .maybeSingle();
+    if (cached?.payload) {
+      const age = Date.now() - new Date(cached.fetched_at).getTime();
+      if (age < cacheWindow(until)) {
+        // Contador só para enxergar uso; falha aqui não pode derrubar a leitura.
+        supabase
+          .from("report_cache")
+          .update({ hits: (cached.hits || 0) + 1 })
+          .match(key)
+          .then(() => undefined, () => undefined);
+        return { report: cached.payload as ReportPayloadData, cached: true, fetched_at: cached.fetched_at };
+      }
+    }
+  }
+
+  const report = await buildReport(accountId, since, until);
+  const fetched_at = new Date().toISOString();
+  await supabase
+    .from("report_cache")
+    .upsert({ ...key, payload: report, fetched_at, hits: 0 })
+    .then(() => undefined, () => undefined);
+  return { report, cached: false, fetched_at };
+}

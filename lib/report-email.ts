@@ -118,6 +118,33 @@ function barChart(rows: { label: string; value: number; right: string }[], color
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${body}</table>`;
 }
 
+// Logo em HTML puro: quadrado preto com o "A" desenhado com bordas.
+// Nada de <img> — Gmail e Outlook bloqueiam imagem remota de remetente novo,
+// e SVG inline é removido pelo Gmail. Uma célula com fundo e a letra é o que
+// aparece em todo cliente de e-mail, inclusive com imagens desligadas.
+function brandMark(size = 34): string {
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0"
+            style="border-collapse:separate;">
+            <tr>
+              <td width="${size}" height="${size}" align="center" valign="middle" bgcolor="${INK}"
+                  style="width:${size}px;height:${size}px;border-radius:9px;background:${INK};
+                         color:#ffffff;font-family:${FONT};font-size:${Math.round(size * 0.55)}px;
+                         font-weight:bold;line-height:${size}px;text-align:center;">A</td>
+            </tr>
+          </table>`;
+}
+
+function brandHeader(): string {
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td valign="middle">${brandMark(34)}</td>
+              <td valign="middle" style="padding-left:9px;font-family:${FONT};font-size:15px;font-weight:bold;color:${INK};letter-spacing:-.2px;">
+                Assertivus
+              </td>
+            </tr>
+          </table>`;
+}
+
 function sectionTitle(text: string): string {
   return `<div style="font-size:11px;font-weight:bold;letter-spacing:.6px;text-transform:uppercase;color:${MUTED};font-family:${FONT};padding:16px 0 8px;">${escapeHtml(
     text
@@ -140,7 +167,7 @@ export interface ReportEmail {
 // Monta o e-mail a partir do MESMO payload que alimenta o relatório completo.
 export function renderReportEmail(
   report: ReportPayloadData,
-  options: { clientName: string; link: string; dryRun?: boolean }
+  options: { clientName: string; link: string; dashboardLink?: string; dryRun?: boolean }
 ): ReportEmail {
   const currency = report.account.currency || "BRL";
   const m = (v: number) => money(v, currency);
@@ -268,7 +295,8 @@ export function renderReportEmail(
         ${options.dryRun
           ? `<div style="background:#fff8e9;border:1px solid #edd49f;color:#8a6117;font-size:11px;font-family:${FONT};padding:7px 10px;border-radius:6px;margin-bottom:12px;">Envio de teste — o cliente não recebeu esta mensagem.</div>`
           : ""}
-        <div style="font-size:10px;font-weight:bold;letter-spacing:1.2px;text-transform:uppercase;color:${MUTED};font-family:${FONT};">Relatório de mídia paga</div>
+        ${brandHeader()}
+        <div style="font-size:10px;font-weight:bold;letter-spacing:1.2px;text-transform:uppercase;color:${MUTED};font-family:${FONT};padding-top:16px;">Relatório de mídia paga</div>
         <div style="font-size:23px;font-weight:bold;color:${INK};font-family:${FONT};padding:6px 0 2px;">${escapeHtml(
           options.clientName
         )}</div>
@@ -303,12 +331,22 @@ export function renderReportEmail(
         <div style="font-size:11px;color:${MUTED};font-family:${FONT};padding-top:10px;">
           Campanhas, conjuntos, anúncios, públicos e horários — com opção de salvar em PDF.
         </div>
+        ${options.dashboardLink
+          ? `<div style="font-size:11.5px;font-family:${FONT};padding-top:14px;">
+               <a href="${escapeHtml(options.dashboardLink)}" style="color:${BLUE};font-weight:bold;text-decoration:none;">
+                 Acompanhar as métricas ao vivo &rarr;
+               </a>
+               <div style="color:${MUTED};font-size:10.5px;padding-top:3px;">
+                 Painel sempre disponível, com os períodos de 7, 14 e 30 dias.
+               </div>
+             </div>`
+          : ""}
       </td></tr>
 
       <tr><td style="padding:18px 22px 22px;">
         <div style="border-top:1px solid ${LINE};padding-top:12px;font-size:10.5px;color:${MUTED};font-family:${FONT};line-height:1.6;">
           Dados consultados diretamente nas plataformas de anúncio.
-          O link acima vale por 60 dias.<br>Relatório automático enviado por AdsCtrl.
+          O link acima vale por 60 dias.<br>Relatório automático enviado pela Assertivus.
         </div>
       </td></tr>
     </table>

@@ -897,7 +897,7 @@ function diagnose(
       tone: "neutral",
       title: "Aguarde mais dados",
       detail:
-        "O AdsCtrl preservou as métricas, mas não recomenda uma decisão com esta amostra.",
+        "O Assertivus Dash preservou as métricas, mas não recomenda uma decisão com esta amostra.",
       evidence: [
         `${metrics.impressions.toLocaleString("pt-BR")} impressões`,
         video.isVideo

@@ -832,6 +832,26 @@ function ReportDelivery({
   const [feedback, setFeedback] = useState<string | null>(null);
   const hasEmail = Boolean((client.report_email || "").trim());
 
+  // Link permanente do painel do cliente. Só é gerado quando pedido: é um
+  // acesso sem senha e não deve ficar espalhado pela tela à toa.
+  async function copyDashboardLink() {
+    try {
+      const response = await fetch(`/api/clients/${client.id}/dashboard-link`);
+      const payload = await response.json();
+      if (!response.ok || payload.error) throw new Error(payload.error || "Falha ao gerar o link.");
+      try {
+        await navigator.clipboard.writeText(payload.url);
+        setFeedback("Link do painel copiado.");
+      } catch {
+        window.prompt("Link do painel deste cliente:", payload.url);
+      }
+    } catch (e: any) {
+      onError(e?.message || "Falha ao gerar o link do painel.");
+    } finally {
+      window.setTimeout(() => setFeedback(null), 8000);
+    }
+  }
+
   async function sendTest() {
     setSending(true);
     setFeedback(null);
@@ -900,6 +920,22 @@ function ReportDelivery({
         }}
       >
         {sending ? "Enviando…" : "Enviar teste para mim"}
+      </button>
+      <button
+        onClick={copyDashboardLink}
+        title="Link permanente do painel deste cliente — ele vê as métricas quando quiser, sem login"
+        style={{
+          padding: "6px 11px",
+          borderRadius: 8,
+          border: "1px dashed #cfd3da",
+          background: "#fff",
+          color: "#5c6373",
+          fontSize: 11,
+          fontWeight: 650,
+          cursor: "pointer",
+        }}
+      >
+        Copiar link do painel
       </button>
       {feedback && <span style={{ fontSize: 11, color: "#2b7143" }}>{feedback}</span>}
       {client.report_last_sent_at && (

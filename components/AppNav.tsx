@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { useRouter } from "next/navigation";
+import BrandMark from "@/components/BrandMark";
 
 const ITEMS = [
   { href: "/today", label: "Hoje", icon: "✦" },
@@ -12,6 +13,17 @@ const ITEMS = [
   { href: "/admin", label: "Configurações", icon: "⚙" },
 ];
 
+// Páginas sem a navegação do sistema. As três últimas são vistas por CLIENTE:
+// ali não pode existir menu nem botão de sair — ele não é usuário do app.
+// Toda rota nova aberta por link assinado precisa entrar nesta lista.
+const CHROMELESS_PREFIXES = ["/login", "/report/", "/r/", "/c/"];
+
+function isChromeless(pathname: string): boolean {
+  return CHROMELESS_PREFIXES.some((prefix) =>
+    prefix.endsWith("/") ? pathname.startsWith(prefix) : pathname === prefix
+  );
+}
+
 export default function AppNav() {
   const pathname = usePathname();
   const router = useRouter();
@@ -20,7 +32,7 @@ export default function AppNav() {
     router.replace("/login");
     router.refresh();
   }
-  if (pathname === "/login" || pathname.startsWith("/report/")) return null;
+  if (isChromeless(pathname)) return null;
   return (
     <nav style={{
       position: "sticky", top: 0, zIndex: 50, height: 58, display: "flex",
@@ -29,8 +41,8 @@ export default function AppNav() {
       fontFamily: "system-ui, -apple-system, sans-serif",
     }}>
       <a href="/today" style={{ display: "flex", alignItems: "center", gap: 9, color: "#111", textDecoration: "none", marginRight: 34 }}>
-        <span style={{ width: 30, height: 30, borderRadius: 9, background: "#111", color: "#fff", display: "grid", placeItems: "center", fontWeight: 800, fontSize: 13 }}>AC</span>
-        <span style={{ fontWeight: 750, letterSpacing: -0.3 }}>AdsCtrl</span>
+        <BrandMark size={30} />
+        <span style={{ fontWeight: 750, letterSpacing: -0.3 }}>Assertivus Dash</span>
       </a>
       <div style={{ display: "flex", gap: 4, height: "100%", alignItems: "center" }}>
         {ITEMS.map((item) => {

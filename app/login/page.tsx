@@ -6,7 +6,7 @@ import { getAuthConfiguration, mayBypassAuthInDevelopment, safeInternalPath } fr
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Entrar | AdsCtrl",
+  title: "Entrar | Assertivus Dash",
   robots: { index: false, follow: false },
 };
 
@@ -66,8 +66,8 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
             A
           </div>
           <div>
-            <div style={{ fontSize: 19, fontWeight: 800, letterSpacing: "-.02em" }}>AdsCtrl</div>
-            <div style={{ color: "#667085", fontSize: 12 }}>Performance command center</div>
+            <div style={{ fontSize: 19, fontWeight: 800, letterSpacing: "-.02em" }}>Assertivus Dash</div>
+            <div style={{ color: "#667085", fontSize: 12 }}>Cockpit de performance em mídia paga</div>
           </div>
         </div>
 

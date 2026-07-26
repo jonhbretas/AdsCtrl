@@ -16,6 +16,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import BrandMark from "@/components/BrandMark";
 import {
   money,
   moneyShort,
@@ -194,6 +195,10 @@ export default function ReportDocument({ data }: { data: ReportPayload }) {
 
       {/* ---------------- CAPA ---------------- */}
       <section style={{ paddingBottom: 18, borderBottom: `2px solid ${INK}`, marginBottom: 20 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 14 }}>
+          <BrandMark size={26} />
+          <span style={{ fontSize: 13, fontWeight: 750, letterSpacing: -0.2, color: INK }}>Assertivus</span>
+        </div>
         <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1.4, color: MUTED, textTransform: "uppercase" }}>
           Relatório de mídia paga
         </div>
@@ -263,7 +268,7 @@ export default function ReportDocument({ data }: { data: ReportPayload }) {
           {new Date(data.generated_at).toLocaleString("pt-BR")}.
         </div>
         {data.organic_note && <div style={{ marginTop: 3 }}>{data.organic_note}</div>}
-        <div style={{ marginTop: 3 }}>Gerado por AdsCtrl.</div>
+        <div style={{ marginTop: 3 }}>Gerado por Assertivus Dash.</div>
       </footer>
     </div>
   );
@@ -323,7 +328,7 @@ function MetaSection({ detail, currency, accountName }: { detail: MetaDetail; cu
 
   return (
     <>
-      <Block breakBefore>
+      <Block>
         <SectionTitle color={META} kicker="Meta Ads · Facebook e Instagram">{detail.name || accountName}</SectionTitle>
 
         <Grid cols={4}>
@@ -430,7 +435,7 @@ function MetaSection({ detail, currency, accountName }: { detail: MetaDetail; cu
 
       {actions.length > 0 && (
         <Block>
-          <Card title="Conversões e ações por tipo">
+          <Card title="Conversões e ações por tipo" keep={false}>
             <DataTable
               head={[
                 { label: "Tipo de ação" },
@@ -447,7 +452,7 @@ function MetaSection({ detail, currency, accountName }: { detail: MetaDetail; cu
         </Block>
       )}
 
-      <Block breakBefore>
+      <Block>
         <Row2>
           {b.age && b.age.length > 0 && (
             <Card title="Impressões e alcance por idade" width={HALF}>
@@ -466,29 +471,6 @@ function MetaSection({ detail, currency, accountName }: { detail: MetaDetail; cu
               </BarChart>
             </Card>
           )}
-          {b.gender && b.gender.length > 0 && (
-            <Card title="Impressões e alcance por gênero" width={HALF}>
-              <BarList
-                rows={b.gender.map((r) => ({
-                  key: genderLabel(r.key),
-                  value: r.impressions,
-                  right: `${num(r.impressions)} impr · ${num(r.reach)} alc`,
-                }))}
-                color={BLUE}
-              />
-            </Card>
-          )}
-        </Row2>
-      </Block>
-
-      <Block>
-        <Row2>
-          <Card title="Alcance por dispositivo" width={HALF}>
-            <BarList
-              rows={b.device.map((r) => ({ key: deviceLabel(r.key), value: r.reach || r.impressions, right: num(r.reach || r.impressions) }))}
-              color={TEAL}
-            />
-          </Card>
           <Card title="Alcance por região (top 8)" width={HALF}>
             <BarList
               rows={[...b.region]
@@ -501,9 +483,32 @@ function MetaSection({ detail, currency, accountName }: { detail: MetaDetail; cu
         </Row2>
       </Block>
 
+      <Block>
+        <Row2>
+          {b.gender && b.gender.length > 0 && (
+            <Card title="Impressões e alcance por gênero" width={HALF}>
+              <BarList
+                rows={b.gender.map((r) => ({
+                  key: genderLabel(r.key),
+                  value: r.impressions,
+                  right: `${num(r.impressions)} impr · ${num(r.reach)} alc`,
+                }))}
+                color={BLUE}
+              />
+            </Card>
+          )}
+          <Card title="Alcance por dispositivo" width={HALF}>
+            <BarList
+              rows={b.device.map((r) => ({ key: deviceLabel(r.key), value: r.reach || r.impressions, right: num(r.reach || r.impressions) }))}
+              color={TEAL}
+            />
+          </Card>
+        </Row2>
+      </Block>
+
       {platform.length > 0 && (
         <Block>
-          <Card title="Facebook × Instagram">
+          <Card title="Facebook × Instagram" keep={false}>
             <DataTable
               head={[
                 { label: "Plataforma" },
@@ -528,20 +533,20 @@ function MetaSection({ detail, currency, accountName }: { detail: MetaDetail; cu
         </Block>
       )}
 
-      <Block breakBefore>
-        <Card title="Campanhas em destaque">
+      <Block>
+        <Card title="Campanhas em destaque" keep={false}>
           <RowsTable rows={detail.campaigns.slice(0, 10)} currency={currency} />
         </Card>
       </Block>
 
       <Block>
-        <Card title="Conjuntos de anúncios em destaque">
+        <Card title="Conjuntos de anúncios em destaque" keep={false}>
           <RowsTable rows={detail.adsets.slice(0, 10)} currency={currency} />
         </Card>
       </Block>
 
       <Block>
-        <Card title="Anúncios em destaque">
+        <Card title="Anúncios em destaque" keep={false}>
           <RowsTable rows={detail.ads.slice(0, 10)} currency={currency} thumbs />
         </Card>
       </Block>
@@ -587,27 +592,28 @@ function RowsTable({ rows, currency, thumbs }: { rows: Row[]; currency: string; 
   return (
     <DataTable
       head={[
-        { label: "Nome", width: thumbs ? 190 : 210 },
-        { label: "Resultado", align: "right" },
-        { label: "Custo/result.", align: "right" },
-        { label: "Investido", align: "right" },
-        { label: "CTR", align: "right" },
-        { label: "CPC", align: "right" },
-        { label: "CPM", align: "right" },
-        { label: "Alcance", align: "right" },
-        { label: "Impressões", align: "right" },
-        { label: "Freq.", align: "right" },
+        // Larguras somadas cabem na página: dez colunas em A4 não têm folga.
+        { label: "Nome", width: 132 },
+        { label: "Resultado", align: "right", width: 66 },
+        { label: "Custo/res.", align: "right", width: 52 },
+        { label: "Investido", align: "right", width: 62 },
+        { label: "CTR", align: "right", width: 36 },
+        { label: "CPC", align: "right", width: 44 },
+        { label: "CPM", align: "right", width: 44 },
+        { label: "Alcance", align: "right", width: 50 },
+        { label: "Impr.", align: "right", width: 50 },
+        { label: "Freq.", align: "right", width: 34 },
       ]}
       rows={rows.map((r) => {
         const res = primaryRowResult(r);
         const freq = r.frequency || (r.reach ? r.impressions / r.reach : 0);
         return [
-          <span key="n" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span key="n" style={{ display: "flex", alignItems: "center", gap: 5, minWidth: 0 }}>
             {thumbs && r.thumbnail && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={r.thumbnail} alt="" width={22} height={22} style={{ borderRadius: 4, objectFit: "cover", flexShrink: 0 }} />
+              <img src={r.thumbnail} alt="" width={20} height={20} style={{ borderRadius: 4, objectFit: "cover", flexShrink: 0 }} />
             )}
-            <span style={{ display: "block", maxWidth: thumbs ? 160 : 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.name}>
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.name}>
               {r.name}
             </span>
           </span>,
@@ -643,7 +649,7 @@ function GoogleSection({ block }: { block: GoogleBlock }) {
 
   if (detail?.error) {
     return (
-      <Block breakBefore>
+      <Block>
         <SectionTitle color={GOOGLE} kicker="Google Ads">{block.name}</SectionTitle>
         <Warn>Não foi possível carregar os dados do Google Ads: {detail.error}</Warn>
       </Block>
@@ -669,7 +675,7 @@ function GoogleSection({ block }: { block: GoogleBlock }) {
 
   return (
     <>
-      <Block breakBefore>
+      <Block>
         <SectionTitle color={GOOGLE} kicker="Google Ads">{block.name}</SectionTitle>
         <Grid cols={4}>
           <Kpi label="Custo" value={m(k.spend)} cur={k.spend} prev={p?.spend} prevText={p ? m(p.spend) : undefined} neutral />
@@ -721,7 +727,7 @@ function GoogleSection({ block }: { block: GoogleBlock }) {
 
       {extras && extras.campaigns.length > 0 && (
         <Block>
-          <Card title="Todas as campanhas">
+          <Card title="Todas as campanhas" keep={false}>
             <GoogleTable rows={extras.campaigns} currency={currency} label="Campanha" share />
           </Card>
         </Block>
@@ -729,15 +735,15 @@ function GoogleSection({ block }: { block: GoogleBlock }) {
 
       {extras && extras.adGroups.length > 0 && (
         <Block>
-          <Card title="Grupos de anúncios">
+          <Card title="Grupos de anúncios" keep={false}>
             <GoogleTable rows={extras.adGroups.slice(0, 10)} currency={currency} label="Grupo" share />
           </Card>
         </Block>
       )}
 
       {extras && extras.keywords.length > 0 && (
-        <Block breakBefore>
-          <Card title="Palavras-chave de pesquisa">
+        <Block>
+          <Card title="Palavras-chave de pesquisa" keep={false}>
             <GoogleTable rows={extras.keywords.slice(0, 15)} currency={currency} label="Palavra-chave" share />
           </Card>
         </Block>
@@ -809,18 +815,18 @@ function GoogleTable({
   return (
     <DataTable
       head={[
-        { label, width: 170 },
-        { label: "Custo", align: "right" },
-        { label: "Impressões", align: "right" },
-        { label: "Cliques", align: "right" },
-        { label: "CTR", align: "right" },
-        { label: "CPC", align: "right" },
-        { label: "Conversões", align: "right" },
-        { label: "Custo/conv.", align: "right" },
-        ...(share ? [{ label: "1ª posição", align: "right" as const }] : []),
+        { label, width: 168 },
+        { label: "Custo", align: "right", width: 62 },
+        { label: "Impr.", align: "right", width: 52 },
+        { label: "Cliques", align: "right", width: 50 },
+        { label: "CTR", align: "right", width: 40 },
+        { label: "CPC", align: "right", width: 44 },
+        { label: "Conv.", align: "right", width: 44 },
+        { label: "Custo/conv.", align: "right", width: 56 },
+        ...(share ? [{ label: "1ª pos.", align: "right" as const, width: 44 }] : []),
       ]}
       rows={rows.map((r) => [
-        <span key="k" style={{ display: "block", maxWidth: 165, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.key}>
+        <span key="k" style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.key}>
           {r.key}
         </span>,
         m(r.cost),
@@ -847,8 +853,17 @@ function PrintStyles() {
       @media print {
         html, body { background: #fff !important; }
         .no-print { display: none !important; }
-        .rpt-block { break-inside: avoid; page-break-inside: avoid; }
-        .rpt-break { break-before: page; page-break-before: always; }
+        /* Fluidez: o documento corre entre as páginas em vez de forçar quebra
+           a cada seção — quebra forçada deixa meia página vazia e parece erro.
+           Só não se parte o que fica ilegível cortado: gráficos, listas e
+           cartões de indicador. Tabela longa pode dividir, e o cabeçalho dela
+           se repete na página seguinte, que é o que faz a divisão parecer
+           intencional. */
+        .rpt-keep { break-inside: avoid; page-break-inside: avoid; }
+        .rpt-title { break-after: avoid; page-break-after: avoid; }
+        table { break-inside: auto; }
+        thead { display: table-header-group; }
+        tr { break-inside: avoid; page-break-inside: avoid; }
         .rpt-card { box-shadow: none !important; }
       }
       * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -856,12 +871,14 @@ function PrintStyles() {
   );
 }
 
-function Block({ children, breakBefore }: { children: React.ReactNode; breakBefore?: boolean }) {
-  return <div className={`rpt-block${breakBefore ? " rpt-break" : ""}`} style={{ marginBottom: 14 }}>{children}</div>;
+function Block({ children }: { children: React.ReactNode }) {
+  return <div style={{ marginBottom: 14 }}>{children}</div>;
 }
 
+// Cada card fica com a altura do próprio conteúdo. Esticar os dois até a
+// altura do maior deixava caixas com metade do corpo vazio.
 function Row2({ children }: { children: React.ReactNode }) {
-  return <div style={{ display: "flex", gap: 14, alignItems: "stretch" }}>{children}</div>;
+  return <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>{children}</div>;
 }
 
 function Grid({ cols, children }: { cols: number; children: React.ReactNode }) {
@@ -870,7 +887,7 @@ function Grid({ cols, children }: { cols: number; children: React.ReactNode }) {
 
 function SectionTitle({ children, kicker, color }: { children: React.ReactNode; kicker: string; color: string }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "0 0 12px" }}>
+    <div className="rpt-title" style={{ display: "flex", alignItems: "center", gap: 10, margin: "0 0 12px" }}>
       <span style={{ width: 5, height: 34, borderRadius: 3, background: color, flexShrink: 0 }} />
       <div>
         <div style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: 1, textTransform: "uppercase", color }}>{kicker}</div>
@@ -890,20 +907,25 @@ function SourceChip({ platform, name, color }: { platform: string; name: string;
   );
 }
 
+// keep = o cartão não pode ser dividido entre duas páginas. É o padrão:
+// gráfico ou lista cortada ao meio parece defeito. Cartões de tabela passam
+// keep={false} para a tabela poder fluir, repetindo o cabeçalho.
 function Card({
   title,
   children,
   width,
   style,
+  keep = true,
 }: {
   title?: string;
   children: React.ReactNode;
   width?: number;
   style?: React.CSSProperties;
+  keep?: boolean;
 }) {
   return (
     <div
-      className="rpt-card"
+      className={`rpt-card${keep ? " rpt-keep" : ""}`}
       style={{
         width,
         flex: width ? "0 0 auto" : undefined,
@@ -915,7 +937,10 @@ function Card({
       }}
     >
       {title && (
-        <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: 0.5, textTransform: "uppercase", color: MUTED, marginBottom: 10 }}>
+        <div
+          className="rpt-title"
+          style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: 0.5, textTransform: "uppercase", color: MUTED, marginBottom: 10 }}
+        >
           {title}
         </div>
       )}
@@ -946,7 +971,7 @@ function Kpi({
   const good = invert ? !up : up;
   const color = !d || !d.hasPrev || neutral || Math.abs(d.pct) < 0.05 ? MUTED : good ? GREEN : RED;
   return (
-    <div style={{ border: `1px solid ${LINE}`, borderRadius: 10, padding: "10px 11px", background: "#fff" }}>
+    <div className="rpt-keep" style={{ border: `1px solid ${LINE}`, borderRadius: 10, padding: "10px 11px", background: "#fff" }}>
       <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.3, color: MUTED, textTransform: "uppercase", lineHeight: 1.3, minHeight: 22 }}>
         {label}
       </div>
@@ -1064,8 +1089,11 @@ function DataTable({
   rows: React.ReactNode[][];
 }) {
   if (rows.length === 0) return <Empty>Sem dados no período.</Empty>;
+  // Tabela com dez colunas em uma página A4 não perdoa: os valores ficam com
+  // nowrap (número quebrado é ilegível), mas o cabeçalho pode quebrar em duas
+  // linhas e o respiro é curto — senão a tabela vaza para fora do card.
   return (
-    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 10 }}>
+    <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse", fontSize: 9.5 }}>
       <thead>
         <tr>
           {head.map((h, i) => (
@@ -1074,14 +1102,14 @@ function DataTable({
               style={{
                 textAlign: h.align === "right" ? "right" : "left",
                 width: h.width,
-                padding: "0 6px 7px",
-                fontSize: 8.5,
+                padding: "0 5px 6px",
+                fontSize: 8,
                 fontWeight: 800,
-                letterSpacing: 0.3,
+                letterSpacing: 0.2,
                 textTransform: "uppercase",
                 color: MUTED,
                 borderBottom: `1px solid ${LINE}`,
-                whiteSpace: "nowrap",
+                lineHeight: 1.2,
               }}
             >
               {h.label}
@@ -1097,11 +1125,13 @@ function DataTable({
                 key={j}
                 style={{
                   textAlign: head[j]?.align === "right" ? "right" : "left",
-                  padding: "6px",
+                  padding: "5px",
                   borderBottom: `1px solid ${LINE}`,
                   color: j === 0 ? INK : "#39404e",
                   fontWeight: j === 0 ? 600 : 400,
                   whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
                 }}
               >
                 {cell}

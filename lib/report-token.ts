@@ -68,6 +68,49 @@ function equalStrings(left: string, right: string): boolean {
   return diff === 0;
 }
 
+// Token do painel do cliente: preso a um cliente, sem período fixo (ele
+// escolhe 7/14/30 dias na tela) e com validade longa, porque é o link que
+// fica salvo com ele. Vale só para /c/ — não abre relatório de outra conta.
+export const DASHBOARD_LINK_TTL_DAYS = 365;
+
+export interface DashboardTokenPayload {
+  clientId: string;
+  exp: number;
+}
+
+export async function createDashboardToken(
+  clientId: string,
+  ttlDays = DASHBOARD_LINK_TTL_DAYS
+): Promise<string> {
+  if (!reportLinkConfigured()) {
+    throw new Error("REPORT_LINK_SECRET (ou SESSION_SECRET) precisa ter pelo menos 32 caracteres.");
+  }
+  const exp = Math.floor(Date.now() / 1000) + ttlDays * 86400;
+  const body = textToBase64Url(JSON.stringify({ v: "d1", c: clientId, e: exp }));
+  return `${body}.${await sign(body)}`;
+}
+
+export async function verifyDashboardToken(token: string | undefined): Promise<DashboardTokenPayload | null> {
+  if (!token || !reportLinkConfigured()) return null;
+  const [body, signature] = token.split(".");
+  if (!body || !signature) return null;
+  if (!equalStrings(signature, await sign(body))) return null;
+  const json = base64UrlToText(body);
+  if (!json) return null;
+  try {
+    const parsed = JSON.parse(json);
+    if (parsed?.v !== "d1" || typeof parsed.c !== "string") return null;
+    if (typeof parsed.e !== "number" || parsed.e < Math.floor(Date.now() / 1000)) return null;
+    return { clientId: parsed.c, exp: parsed.e };
+  } catch {
+    return null;
+  }
+}
+
+export async function dashboardLink(clientId: string): Promise<string> {
+  return `${appBaseUrl()}/c/${await createDashboardToken(clientId)}`;
+}
+
 export async function createReportToken(
   accountId: string,
   since: string,

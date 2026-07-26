@@ -14,17 +14,23 @@ const LOGIN_API = "/api/auth/login";
 // Toda entrada nova em vercel.json precisa estar aqui, senão o middleware
 // barra o cron antes de a rota rodar.
 const CRON_APIS = ["/api/collect", "/api/reports/send"];
-// Relatório que o cliente abre pelo link assinado: a autorização é o token
+// Páginas que o cliente abre pelo link assinado: a autorização é o token
 // dentro da própria URL, verificado na rota (lib/report-token.ts).
+// /r/ = relatório de um período fechado · /c/ = painel do cliente.
 const PUBLIC_REPORT_PAGE = "/r/";
-const PUBLIC_REPORT_API = "/api/report/public";
+const PUBLIC_DASHBOARD_PAGE = "/c/";
+const PUBLIC_APIS = ["/api/report/public", "/api/dashboard/public"];
 
 function isApiPath(pathname: string): boolean {
   return pathname === "/api" || pathname.startsWith("/api/");
 }
 
 function isSignedReportPath(pathname: string): boolean {
-  return pathname.startsWith(PUBLIC_REPORT_PAGE) || pathname === PUBLIC_REPORT_API;
+  return (
+    pathname.startsWith(PUBLIC_REPORT_PAGE) ||
+    pathname.startsWith(PUBLIC_DASHBOARD_PAGE) ||
+    PUBLIC_APIS.includes(pathname)
+  );
 }
 
 function configurationError() {
@@ -97,7 +103,7 @@ export async function proxy(request: NextRequest) {
         status: 401,
         headers: {
           "Cache-Control": "no-store",
-          "WWW-Authenticate": 'Cookie realm="AdsCtrl"',
+          "WWW-Authenticate": 'Cookie realm="Assertivus Dash"',
         },
       }
     );
