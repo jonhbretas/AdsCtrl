@@ -60,7 +60,21 @@ interface Detail {
   };
   availableResults: string[];
   result_family?: string | null;
+  // Só Google, e só campanhas de Pesquisa: o que a pessoa digitou de fato.
+  searchTerms?: SearchTerm[];
   error?: string;
+}
+
+interface SearchTerm {
+  term: string;
+  campaign: string | null;
+  state: "novo" | "palavra-chave" | "negativado" | "ambos";
+  impressions: number;
+  clicks: number;
+  cost: number;
+  conversions: number;
+  ctr: number;
+  costPerConversion: number | null;
 }
 
 // ---------- seleção de "Resultado" ----------
@@ -564,6 +578,9 @@ export default function AccountDetail({
         </div>
       </div>
 
+      {/* TERMOS DE BUSCA (Google, campanhas de Pesquisa) */}
+      {platform === "google" && <SearchTerms terms={data.searchTerms} currency={currency} />}
+
       {/* OBJETIVOS */}
       <SectionTitle>Detalhamento dos objetivos</SectionTitle>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 24 }}>
@@ -713,6 +730,113 @@ function Th({
 }
 function Td({ children, accent }: { children: React.ReactNode; accent?: boolean }) {
   return <td style={{ padding: "10px 14px", textAlign: "right", color: accent ? ACCENT : "#333", fontWeight: accent ? 600 : 400 }}>{children}</td>;
+}
+
+// Termos de busca do Google.
+//
+// A ordem é por CUSTO, não por volume: a pergunta que a tabela responde é
+// "estou pagando por busca que não interessa?". O estado à esquerda diz o que
+// já foi tratado — quem está "novo" e gastou é o que espera decisão.
+//
+// Não há botão de negativar: negativar pela API mexe na estrutura da conta
+// (lista de negativas, nível de campanha ou de grupo) e isso é escrita de outra
+// natureza. A tabela mostra o que decidir; a decisão sai no Google Ads.
+const TERM_STATE: Record<SearchTerm["state"], { tone: "ok" | "danger" | "neutral" | "warn"; label: string }> = {
+  "palavra-chave": { tone: "ok", label: "já é chave" },
+  negativado: { tone: "neutral", label: "negativado" },
+  ambos: { tone: "warn", label: "chave e negativa" },
+  novo: { tone: "warn", label: "sem tratar" },
+};
+
+function SearchTerms({ terms, currency }: { terms?: SearchTerm[]; currency: string }) {
+  const [showAll, setShowAll] = useState(false);
+  const list = terms || [];
+  const untreated = list.filter((t) => t.state === "novo");
+  const wasted = untreated.filter((t) => t.conversions === 0 && t.cost > 0);
+  const visible = showAll ? list : list.slice(0, 12);
+
+  return (
+    <>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "8px 0 12px", flexWrap: "wrap" }}>
+        <SectionTitle noMargin>Termos de busca</SectionTitle>
+        {list.length > 0 && (
+          <>
+            <span style={{ fontSize: 11.5, color: "var(--text-muted)" }}>
+              {list.length} termos, por custo
+            </span>
+            {wasted.length > 0 && (
+              <span className="ec-badge" data-tone="warn">
+                {wasted.length} sem conversão e sem tratamento
+              </span>
+            )}
+          </>
+        )}
+      </div>
+
+      {list.length === 0 ? (
+        <div className="ec-card ec-card--padded" style={{ marginBottom: 24 }}>
+          <div className="ec-inline-empty" style={{ minHeight: 0 }}>
+            Nenhum termo de busca no período. O Google só expõe o que a pessoa digitou em campanhas de
+            <strong> Pesquisa</strong> — em Performance Max, Display e Vídeo essa lista vem vazia mesmo com entrega.
+          </div>
+        </div>
+      ) : (
+        <div className="ec-card ec-scroll-x" style={{ marginBottom: 24 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 720 }}>
+            <thead>
+              <tr style={{ color: "var(--text-muted)", textAlign: "right" }}>
+                <th style={{ padding: "10px 14px", textAlign: "left", fontWeight: 500, width: 116 }}>Situação</th>
+                <th style={{ padding: "10px 14px", textAlign: "left", fontWeight: 500 }}>Termo digitado</th>
+                <th style={{ padding: "10px 14px", fontWeight: 500 }}>Custo</th>
+                <th style={{ padding: "10px 14px", fontWeight: 500 }}>Impr.</th>
+                <th style={{ padding: "10px 14px", fontWeight: 500 }}>Cliques</th>
+                <th style={{ padding: "10px 14px", fontWeight: 500 }}>CTR</th>
+                <th style={{ padding: "10px 14px", fontWeight: 500 }}>Conv.</th>
+                <th style={{ padding: "10px 14px", fontWeight: 500 }}>Custo/conv.</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((term, index) => {
+                const state = TERM_STATE[term.state];
+                // Gastou e não converteu, sem tratamento: é o candidato a negativar.
+                const suspect = term.state === "novo" && term.conversions === 0 && term.cost > 0;
+                return (
+                  <tr key={`${term.term}-${index}`} style={{ borderTop: "1px solid var(--border)" }}>
+                    <td style={{ padding: "10px 14px" }}>
+                      <span className="ec-badge" data-tone={suspect ? "danger" : state.tone}>
+                        {state.label}
+                      </span>
+                    </td>
+                    <td style={{ padding: "10px 14px", textAlign: "left" }}>
+                      <div style={{ fontWeight: 600, overflowWrap: "anywhere" }}>{term.term}</div>
+                      {term.campaign && (
+                        <div style={{ fontSize: 10.5, color: "var(--text-muted)", marginTop: 2 }}>{term.campaign}</div>
+                      )}
+                    </td>
+                    <Td accent={suspect}>{money(term.cost, currency)}</Td>
+                    <Td>{num(term.impressions)}</Td>
+                    <Td>{num(term.clicks)}</Td>
+                    <Td>{pct(term.ctr)}</Td>
+                    {/* Conversão do Google vem fracionada (modelo de
+                        atribuição), então uma casa decimal em vez de num(). */}
+                    <Td>{term.conversions > 0 ? term.conversions.toFixed(1).replace(".", ",") : "—"}</Td>
+                    <Td>{term.costPerConversion != null ? money(term.costPerConversion, currency) : "—"}</Td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {list.length > 12 && (
+            <div style={{ padding: "10px 14px", borderTop: "1px solid var(--border)" }}>
+              <button onClick={() => setShowAll((v) => !v)} className="ec-btn" data-variant="ghost" data-size="sm">
+                {showAll ? "Mostrar só os 12 maiores" : `Ver todos os ${list.length} termos`}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </>
+  );
 }
 
 // Estado de veiculação + o botão que o inverte.

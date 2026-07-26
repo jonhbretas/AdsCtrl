@@ -466,6 +466,92 @@ async function resolveGeoNames(customerId: string, resourceNames: string[]): Pro
   return out;
 }
 
+// ---------- termos de busca ----------
+// O que a pessoa REALMENTE digitou, que não é o que se comprou. É de onde saem
+// as negativações e as descobertas de intenção.
+//
+// search_term_view.status já diz se o termo virou palavra-chave (ADDED) ou foi
+// negativado (EXCLUDED), então não é preciso uma segunda consulta em
+// campaign_criterion para saber o que já foi tratado.
+//
+// Só existe em campanhas de PESQUISA. Em Performance Max e Display o Google não
+// expõe o termo pela API — a consulta volta vazia, e é isso que a interface diz.
+export type SearchTermState = "novo" | "palavra-chave" | "negativado" | "ambos";
+
+export interface GoogleSearchTerm {
+  term: string;
+  campaign: string | null;
+  state: SearchTermState;
+  impressions: number;
+  clicks: number;
+  cost: number;
+  conversions: number;
+  ctr: number;
+  costPerConversion: number | null;
+}
+
+function searchTermState(status: string | undefined): SearchTermState {
+  switch (status) {
+    case "ADDED":
+      return "palavra-chave";
+    case "EXCLUDED":
+      return "negativado";
+    case "ADDED_EXCLUDED":
+      return "ambos";
+    default:
+      return "novo";
+  }
+}
+
+export async function getGoogleSearchTerms(
+  customerId: string,
+  since: string,
+  until: string,
+  limit = 60
+): Promise<GoogleSearchTerm[]> {
+  const id = googleCustomerId(customerId);
+  // Ordenado por custo: a decisão de negativar começa pelo que está gastando.
+  // O teto existe porque search_term_view devolve cauda longa e a tela não
+  // ganha nada com centenas de linhas de uma impressão.
+  const rows = await search(
+    id,
+    `
+      SELECT
+        search_term_view.search_term,
+        search_term_view.status,
+        campaign.name,
+        metrics.impressions,
+        metrics.clicks,
+        metrics.cost_micros,
+        metrics.conversions
+      FROM search_term_view
+      WHERE segments.date BETWEEN '${since}' AND '${until}' AND metrics.impressions > 0
+      ORDER BY metrics.cost_micros DESC
+      LIMIT ${Math.max(1, Math.min(200, limit))}
+    `
+  );
+
+  return rows.map((row: any) => {
+    const view = row.searchTermView || {};
+    const metrics = row.metrics || {};
+    const impressions = Number(metrics.impressions || 0);
+    const clicks = Number(metrics.clicks || 0);
+    const cost = Number(metrics.costMicros || 0) / 1e6;
+    const conversions = Number(metrics.conversions || 0);
+    return {
+      term: view.searchTerm || "(sem termo)",
+      campaign: row.campaign?.name ?? null,
+      state: searchTermState(view.status),
+      impressions,
+      clicks,
+      cost,
+      conversions,
+      ctr: impressions ? (clicks / impressions) * 100 : 0,
+      costPerConversion: conversions > 0 ? cost / conversions : null,
+    };
+  });
+}
+
 export interface GoogleReportExtras {
   campaigns: GoogleReportRow[];
   adGroups: GoogleReportRow[];
@@ -587,12 +673,15 @@ function mergeReportRow(acc: GoogleReportRow[], key: string, raw: any): GoogleRe
 export async function getGoogleAccountDetail(customerId: string, since: string, until: string): Promise<any> {
   const id = googleCustomerId(customerId);
   const prev = previousRange(since, until);
-  const [daily, prevDaily, campaigns, adsets, ads] = await Promise.all([
+  const [daily, prevDaily, campaigns, adsets, ads, searchTerms] = await Promise.all([
     getGoogleDailyMetrics(id, since, until),
     getGoogleDailyMetrics(id, prev.since, prev.until),
     detailLevel(id, "campaign", since, until),
     detailLevel(id, "ad_group", since, until),
     detailLevel(id, "ad_group_ad", since, until),
+    // Falha ou conta sem Pesquisa devolve lista vazia: o detalhe não pode
+    // depender de um recurso que só existe em parte das campanhas.
+    getGoogleSearchTerms(id, since, until).catch(() => [] as GoogleSearchTerm[]),
   ]);
   const aggregate = (items: GoogleDailyMetric[]) => {
     const spend = items.reduce((n, d) => n + d.spend, 0);
@@ -620,6 +709,7 @@ export async function getGoogleAccountDetail(customerId: string, since: string, 
       values: { conversions: d.conversionValue },
     })),
     campaigns, adsets, ads,
+    searchTerms,
     breakdowns: { age_gender: [], region: [], platform: [], position: [], device: [], hour: [] },
     availableResults: ["conversions"],
   };
