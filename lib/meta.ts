@@ -409,6 +409,13 @@ export interface RowInsight {
   values: Record<string, number>;
   objective?: string;
   thumbnail?: string;
+  // Estado de veiculação. Insights não trazem isso — vem de uma consulta
+  // separada, porque sem ela o painel não sabe se deve oferecer pausar ou
+  // reativar. status = o que está configurado no objeto; effective_status =
+  // o que a Meta está de fato fazendo (pode estar pausado pelo pai, reprovado
+  // ou fora do período de veiculação).
+  status?: string;
+  effective_status?: string;
 }
 
 export interface BreakdownRow {
@@ -643,6 +650,71 @@ export async function getDailyMetrics(
   }));
 }
 
+// ---------- ligar/desligar veiculação ----------
+
+export type MetaLevel = "campaign" | "adset" | "ad";
+export type MetaObjectStatus = "ACTIVE" | "PAUSED";
+
+const LEVEL_EDGE: Record<MetaLevel, string> = {
+  campaign: "campaigns",
+  adset: "adsets",
+  ad: "ads",
+};
+
+// Estado de veiculação por id, para um nível da conta. Só três campos: é uma
+// consulta barata e serve para o painel saber o que oferecer em cada linha.
+export async function fetchStatuses(
+  actId: string,
+  level: MetaLevel,
+  token: string = TOKEN
+): Promise<Record<string, { status: string; effective_status: string }>> {
+  if (!actId.startsWith("act_")) actId = `act_${actId}`;
+  const url = `${GRAPH}/${actId}/${LEVEL_EDGE[level]}?fields=id,status,effective_status&limit=500&access_token=${token}`;
+  const rows = await fbGetAll<any>(url);
+  const out: Record<string, { status: string; effective_status: string }> = {};
+  for (const row of rows) {
+    out[String(row.id)] = {
+      status: row.status || "",
+      effective_status: row.effective_status || "",
+    };
+  }
+  return out;
+}
+
+// Pausa ou reativa UM objeto. A Meta usa o mesmo endpoint para os três níveis:
+// POST no id do objeto com o novo status.
+//
+// Só ACTIVE e PAUSED são aceitos de propósito. DELETED e ARCHIVED passam pelo
+// mesmo campo e não têm volta pelo painel — não é coisa para um clique.
+export async function setObjectStatus(
+  objectId: string,
+  status: MetaObjectStatus,
+  token: string = TOKEN
+): Promise<void> {
+  if (status !== "ACTIVE" && status !== "PAUSED") {
+    throw new Error("Status inválido: use ACTIVE ou PAUSED.");
+  }
+  if (!/^\d+$/.test(objectId)) {
+    throw new Error("Identificador inválido.");
+  }
+  const res = await fetch(`${GRAPH}/${objectId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ status, access_token: token }),
+    cache: "no-store",
+  });
+  const body = await res.text();
+  if (!res.ok) {
+    let message = body;
+    try {
+      message = JSON.parse(body)?.error?.message || body;
+    } catch {
+      // resposta não-JSON: fica o texto cru
+    }
+    throw new Error(`Meta API ${res.status}: ${message}`);
+  }
+}
+
 // Diagnóstico: devolve o payload cru de UMA conta (todos os campos financeiros
 // que a Meta expõe). Usado para investigar o saldo pré-pago.
 export async function getAccountRaw(actId: string, token: string = TOKEN): Promise<any> {
@@ -690,6 +762,9 @@ export async function getAccountDetail(
     device,
     hour,
     thumbs,
+    campaignStatus,
+    adsetStatus,
+    adStatus,
   ] = await Promise.all([
     fetchAccountKpis(actId, since, until, token),
     fetchAccountKpis(actId, prev.since, prev.until, token).catch(() => EMPTY_KPIS),
@@ -721,10 +796,28 @@ export async function getAccountDetail(
       false
     ).catch(() => []),
     fetchAdThumbnails(actId, token).catch(() => ({} as Record<string, string>)),
+    // Estado de veiculação dos três níveis, no MESMO paralelo das demais: num
+    // Promise.all separado somaria ~0,7s ao detalhe em vez de acompanhar.
+    // Falha aqui não derruba nada — sem status o painel só não oferece o botão.
+    fetchStatuses(actId, "campaign", token).catch(() => ({})),
+    fetchStatuses(actId, "adset", token).catch(() => ({})),
+    fetchStatuses(actId, "ad", token).catch(() => ({})),
   ]);
 
   // Anexa thumbnails aos anúncios.
   for (const ad of ads) ad.thumbnail = thumbs[ad.id];
+
+  const applyStatus = (rows: RowInsight[], map: Record<string, { status: string; effective_status: string }>) => {
+    for (const row of rows) {
+      const found = map[row.id];
+      if (!found) continue;
+      row.status = found.status;
+      row.effective_status = found.effective_status;
+    }
+  };
+  applyStatus(campaigns, campaignStatus);
+  applyStatus(adsets, adsetStatus);
+  applyStatus(ads, adStatus);
 
   const [age, gender] = opts.extended
     ? await Promise.all([

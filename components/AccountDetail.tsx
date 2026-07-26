@@ -32,6 +32,9 @@ interface Vals { results: Record<string, number>; values: Record<string, number>
 interface Row extends Vals {
   id: string; name: string; spend: number; impressions: number; clicks: number;
   ctr: number; cpm: number; objective?: string; thumbnail?: string;
+  // status = configurado no objeto; effective_status = o que a Meta faz de
+  // fato (pode estar pausado pelo pai, reprovado ou fora do período).
+  status?: string; effective_status?: string;
 }
 interface Daily extends Vals {
   date: string; spend: number; impressions: number; clicks: number; ctr: number; cpm: number; reach: number;
@@ -98,6 +101,9 @@ export default function AccountDetail({
   const [result, setResult] = useState<string | null>(null);
   const [tab, setTab] = useState<"campaigns" | "adsets" | "ads">("campaigns");
   const [demoMetric, setDemoMetric] = useState<MetricKey>("spend");
+  // Alteração de veiculação: id em andamento e o último recado ao usuário.
+  const [changing, setChanging] = useState<string | null>(null);
+  const [changeNote, setChangeNote] = useState<{ text: string; bad?: boolean } | null>(null);
   const [tableSort, setTableSort] = usePersistentSort<DetailSortKey>(
     "adsctrl:sort:account-detail",
     { key: "spend", direction: "desc" },
@@ -122,6 +128,58 @@ export default function AccountDetail({
       .finally(() => alive && setLoading(false));
     return () => { alive = false; };
   }, [accountId, platform, since, until]);
+
+  // Pausar/reativar. Só Meta — a rota recusa Google com 501.
+  // Confirmação explícita com o nome do objeto: é dinheiro do cliente rodando,
+  // e um clique errado numa tabela ordenável é fácil demais.
+  const LEVEL_BY_TAB = { campaigns: "campaign", adsets: "adset", ads: "ad" } as const;
+  const NOUN_BY_TAB = { campaigns: "a campanha", adsets: "o conjunto", ads: "o anúncio" } as const;
+
+  async function toggleDelivery(row: Row) {
+    if (platform !== "meta" || !row.status) return;
+    const next = row.status === "ACTIVE" ? "PAUSED" : "ACTIVE";
+    const verb = next === "PAUSED" ? "Pausar" : "Reativar";
+    const extra =
+      next === "PAUSED" && tab === "campaigns"
+        ? "\n\nOs conjuntos e anúncios dentro dela param de rodar, mas seguem marcados como ativos — ao reativar a campanha, tudo volta."
+        : "";
+    if (!window.confirm(`${verb} ${NOUN_BY_TAB[tab]} "${row.name}"?${extra}`)) return;
+
+    setChanging(row.id);
+    setChangeNote(null);
+    try {
+      const response = await fetch("/api/account/status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ account_id: accountId, level: LEVEL_BY_TAB[tab], id: row.id, status: next }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || payload.error) throw new Error(payload.error || `Falha (HTTP ${response.status}).`);
+
+      // Atualiza só a linha alterada: recarregar o detalhe inteiro custa uma
+      // dezena de chamadas à Meta por causa de um clique.
+      setData((current) => {
+        if (!current) return current;
+        const key = tab;
+        const rows = current[key].map((item) =>
+          item.id === row.id
+            ? { ...item, status: next, effective_status: next === "PAUSED" ? "PAUSED" : item.effective_status }
+            : item
+        );
+        return { ...current, [key]: rows };
+      });
+      setChangeNote({
+        text: payload.unchanged
+          ? `"${row.name}" já estava ${next === "PAUSED" ? "pausado" : "ativo"}.`
+          : `${next === "PAUSED" ? "Pausado" : "Reativado"}: "${row.name}".`,
+      });
+    } catch (e: any) {
+      setChangeNote({ text: e?.message || "Não foi possível alterar.", bad: true });
+    } finally {
+      setChanging(null);
+      window.setTimeout(() => setChangeNote(null), 9000);
+    }
+  }
 
   const metricOf = (o: Breakdown | Kpis | Daily, m: MetricKey) => {
     const res = result ? o.results[result] || 0 : 0;
@@ -328,6 +386,22 @@ export default function AccountDetail({
 
       {/* TABELA CAMPANHAS/CONJUNTOS/ANÚNCIOS */}
       <SectionTitle>Tabela de campanhas</SectionTitle>
+      {changeNote && (
+        <div
+          style={{
+            margin: "0 0 10px",
+            padding: "9px 12px",
+            borderRadius: 9,
+            fontSize: 12.5,
+            background: changeNote.bad ? "#fdf0ef" : "#eef7f1",
+            border: `1px solid ${changeNote.bad ? "#f0cfcc" : "#cfe6d8"}`,
+            color: changeNote.bad ? "#a3372f" : "#2b7143",
+          }}
+        >
+          {changeNote.text}
+          {!changeNote.bad && " A alteração aparece em Últimas edições."}
+        </div>
+      )}
       <div style={{ border: "1px solid #eee", borderRadius: 12, background: "#fff", overflow: "hidden", marginBottom: 24 }}>
         <div style={{ display: "flex", gap: 4, padding: 10, borderBottom: "1px solid #f0f0f0" }}>
           {(["campaigns", "adsets", "ads"] as const).map((t) => (
@@ -349,10 +423,11 @@ export default function AccountDetail({
                 <Th sortKey="result" sort={tableSort} onSort={setTableSort} initialDirection="desc">Resultado</Th>
                 <Th sortKey="cpr" sort={tableSort} onSort={setTableSort}>CPR</Th>
                 <Th sortKey="roas" sort={tableSort} onSort={setTableSort} initialDirection="desc">ROAS</Th>
+                {platform === "meta" && <th style={{ padding: "10px 14px", textAlign: "right", fontWeight: 500 }}>Veiculação</th>}
               </tr>
             </thead>
             <tbody>
-              {rows.length === 0 && <tr><td colSpan={8} style={{ padding: 20, textAlign: "center", color: "#aaa" }}>Sem dados no período.</td></tr>}
+              {rows.length === 0 && <tr><td colSpan={platform === "meta" ? 9 : 8} style={{ padding: 20, textAlign: "center", color: "#aaa" }}>Sem dados no período.</td></tr>}
               {rows.map((r) => {
                 const res = result ? r.results[result] || 0 : 0;
                 const rv = pickVal(r.values, PURCHASE_KEYS);
@@ -370,6 +445,15 @@ export default function AccountDetail({
                     <Td>{formatMoney(r.spend)}</Td><Td>{num(r.impressions)}</Td><Td>{num(r.clicks)}</Td><Td>{pct(r.ctr)}</Td>
                     <Td accent>{num(res)}</Td><Td>{res ? formatMoney(r.spend / res) : "—"}</Td>
                     <Td>{rv > 0 && r.spend > 0 ? `${(rv / r.spend).toFixed(2)}x` : "—"}</Td>
+                    {platform === "meta" && (
+                      <td style={{ padding: "10px 14px", textAlign: "right", whiteSpace: "nowrap" }}>
+                        <DeliveryCell
+                          row={r}
+                          busy={changing === r.id}
+                          onToggle={() => toggleDelivery(r)}
+                        />
+                      </td>
+                    )}
                   </tr>
                 );
               })}
@@ -527,6 +611,72 @@ function Th({
 }
 function Td({ children, accent }: { children: React.ReactNode; accent?: boolean }) {
   return <td style={{ padding: "10px 14px", textAlign: "right", color: accent ? ACCENT : "#333", fontWeight: accent ? 600 : 400 }}>{children}</td>;
+}
+
+// Estado de veiculação + o botão que o inverte.
+//
+// Dois status importam e podem divergir: o do objeto e o efetivo. Um anúncio
+// ATIVO dentro de campanha pausada não está rodando, e mostrar só "Ativo" ali
+// faria o painel mentir. Quando divergem, o efetivo aparece embaixo.
+const EFFECTIVE_LABEL: Record<string, string> = {
+  ACTIVE: "rodando",
+  PAUSED: "pausado",
+  CAMPAIGN_PAUSED: "campanha pausada",
+  ADSET_PAUSED: "conjunto pausado",
+  DISAPPROVED: "reprovado",
+  WITH_ISSUES: "com problemas",
+  PENDING_REVIEW: "em análise",
+  PREAPPROVED: "pré-aprovado",
+  PENDING_BILLING_INFO: "pendente de pagamento",
+  IN_PROCESS: "processando",
+  ARCHIVED: "arquivado",
+  DELETED: "excluído",
+};
+
+function DeliveryCell({ row, busy, onToggle }: { row: Row; busy: boolean; onToggle: () => void }) {
+  if (!row.status) return <span style={{ color: "#bbb", fontSize: 12 }}>—</span>;
+
+  const active = row.status === "ACTIVE";
+  // Arquivado/excluído não voltam por um clique: mostra o estado e nada mais.
+  const frozen = row.status === "ARCHIVED" || row.status === "DELETED";
+  const effective = row.effective_status && row.effective_status !== row.status
+    ? EFFECTIVE_LABEL[row.effective_status] || row.effective_status.toLowerCase().replace(/_/g, " ")
+    : null;
+
+  return (
+    <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
+      <div style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
+        <span
+          title={`status: ${row.status}${row.effective_status ? ` · efetivo: ${row.effective_status}` : ""}`}
+          style={{
+            display: "inline-flex", alignItems: "center", gap: 5,
+            fontSize: 11.5, fontWeight: 600, color: active ? "#2b7143" : "#8a6116",
+          }}
+        >
+          <span style={{ width: 7, height: 7, borderRadius: "50%", background: active ? "#2bb36b" : "#e0a83a" }} />
+          {active ? "Ativo" : frozen ? EFFECTIVE_LABEL[row.status] : "Pausado"}
+        </span>
+        {!frozen && (
+          <button
+            onClick={onToggle}
+            disabled={busy}
+            title={active ? "Pausar a veiculação na Meta" : "Reativar a veiculação na Meta"}
+            style={{
+              padding: "4px 10px", borderRadius: 7,
+              border: `1px solid ${active ? "#f0d8b4" : "#cfe0f5"}`,
+              background: busy ? "#f4f4f5" : "#fff",
+              color: busy ? "#aaa" : active ? "#8a6116" : "#1768ca",
+              fontSize: 11, fontWeight: 650,
+              cursor: busy ? "default" : "pointer",
+            }}
+          >
+            {busy ? "…" : active ? "Pausar" : "Reativar"}
+          </button>
+        )}
+      </div>
+      {effective && <span style={{ fontSize: 10, color: "#a0a4ad" }}>na Meta: {effective}</span>}
+    </div>
+  );
 }
 
 function DemoCard({ title, rows, metric, metricOf, fmt }: {
