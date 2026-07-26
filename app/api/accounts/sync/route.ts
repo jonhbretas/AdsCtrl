@@ -2,7 +2,14 @@
 // que o usuário escolha explicitamente quais terão métricas coletadas.
 
 import { NextResponse } from "next/server";
-import { listAdAccountsAll, mapAccountStatus, availableBalance, centsToUnit } from "@/lib/meta";
+import {
+  listAdAccountsAll,
+  mapAccountStatus,
+  availableBalance,
+  isPrepaidAccount,
+  unbilledAmount,
+  centsToUnit,
+} from "@/lib/meta";
 import {
   googleAdsConfigured,
   googleStorageId,
@@ -25,13 +32,23 @@ async function syncMeta(known: Set<string>) {
       platform: "meta",
       currency: acc.currency,
       status: mapAccountStatus(acc.account_status),
+      // Saldo só em conta pré-paga; pós-paga guarda a fatura em aberto.
       balance: availableBalance(acc),
+      is_prepaid: isPrepaidAccount(acc),
+      unbilled_amount: unbilledAmount(acc),
       spend_cap: centsToUnit(acc.spend_cap),
       token_ref: tokenIndex,
       updated_at: new Date().toISOString(),
     };
     if (isNew) row.hidden = true;
-    const { error } = await sb.from("ad_accounts").upsert(row, { onConflict: "account_id" });
+    let { error } = await sb.from("ad_accounts").upsert(row, { onConflict: "account_id" });
+    // supabase-migration-balance.sql pode não ter sido rodada ainda: sincronizar
+    // contas importa mais que classificar o tipo de pagamento.
+    if (error && /is_prepaid|unbilled_amount/.test(error.message || "")) {
+      delete row.is_prepaid;
+      delete row.unbilled_amount;
+      ({ error } = await sb.from("ad_accounts").upsert(row, { onConflict: "account_id" }));
+    }
     if (error) throw error;
     // Contas Meta descobertas após a migração também originam um cliente.
     const { data: existingClient, error: clientLookupError } = await sb.from("clients")

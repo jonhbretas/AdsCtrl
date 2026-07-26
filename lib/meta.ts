@@ -328,26 +328,45 @@ function parseBrlFromString(s?: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-// Saldo disponível "de verdade". Para contas PRÉ-PAGAS a Meta não expõe o
-// valor num campo numérico — ele vem no funding_source_details.display_string
-// (ex.: "Saldo disponível (R$331,60 BRL)"). O campo `balance` é o valor em
-// aberto (não faturado), que NÃO é o saldo disponível.
+// Saldo disponível "de verdade", e SÓ para conta pré-paga.
+//
+// A Meta não expõe o saldo num campo numérico: ele vem no texto de
+// funding_source_details.display_string ("Saldo disponível (R$331,60 BRL)").
+// O campo `balance` é outra coisa — o gasto ainda não faturado.
+//
+// Antes havia um fallback para `balance` quando o texto não trazia saldo. Era
+// o que fazia toda conta de cartão aparecer com "saldo": nas contas verificadas,
+// `balance` de conta pós-paga é a fatura em aberto (uma delas com R$ 1.865,12
+// devidos aparecia como se tivesse esse tanto disponível). Sem o fallback, a
+// interface omite em vez de afirmar o contrário do que é.
 export function availableBalance(acc: AdAccountRaw): number | null {
+  if (!isPrepaidAccount(acc)) return null;
   const ds = acc.funding_source_details?.display_string || "";
   if (/dispon[ií]vel|available/i.test(ds)) {
     const v = parseBrlFromString(ds);
     if (v != null) return v;
   }
-  // Fallback: campo balance (contas que de fato expõem saldo ali).
+  // Pré-paga que expõe o saldo no campo numérico.
   const b = centsToUnit(acc.balance);
   return b > 0 ? b : null;
 }
 
-// Heurística de conta pré-paga (para alertas de saldo baixo).
+// Gasto já realizado e ainda não cobrado. Só significa algo em conta pós-paga —
+// é dívida acumulada no ciclo, não dinheiro disponível.
+export function unbilledAmount(acc: AdAccountRaw): number | null {
+  if (isPrepaidAccount(acc)) return null;
+  const value = centsToUnit(acc.balance);
+  return value > 0 ? value : null;
+}
+
+// Conta pré-paga. O campo oficial da Meta manda; nas contas verificadas ele
+// vem sempre acompanhado de type=20 e do texto "Saldo disponível", então a
+// heurística antiga fica só como reserva para quando o campo não vier.
 export function isPrepaidAccount(acc: AdAccountRaw): boolean {
+  if (typeof acc.is_prepay_account === "boolean") return acc.is_prepay_account;
   const ds = acc.funding_source_details?.display_string || "";
   if (/dispon[ií]vel|available/i.test(ds)) return true;
-  return [1, 20].includes(acc.funding_source_details?.type ?? -1);
+  return acc.funding_source_details?.type === 20;
 }
 
 // ==========================================================================

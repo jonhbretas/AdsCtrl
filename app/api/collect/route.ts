@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import {
   listAdAccountsAll, getRejectedAds, getDailyMetrics, DailyMetric,
   AccountInsight, mapAccountStatus, centsToUnit, availableBalance, tokenByIndex,
+  isPrepaidAccount, unbilledAmount,
 } from "@/lib/meta";
 import {
   getGoogleDailyMetrics, googleAdsConfigured, googleCustomerId, GoogleDailyMetric,
@@ -223,11 +224,23 @@ async function runCollect(triggerSource: "manual" | "cron") {
     seenMeta.add(acc.account_id);
     const token = tokenByIndex(tokenIndex);
     const status = mapAccountStatus(acc.account_status);
-    await sb.from("ad_accounts").update({
+    // Saldo só existe em conta pré-paga. Em conta de cartão/PayPal o que a
+    // Meta chama de `balance` é fatura em aberto e vai em campo próprio.
+    const base = {
       name: acc.name, currency: acc.currency,
-      status, balance: availableBalance(acc), spend_cap: centsToUnit(acc.spend_cap),
+      status, spend_cap: centsToUnit(acc.spend_cap),
+      balance: availableBalance(acc),
       token_ref: tokenIndex, updated_at: new Date().toISOString(),
-    }).eq("account_id", acc.account_id);
+    };
+    const { error: updateError } = await sb
+      .from("ad_accounts")
+      .update({ ...base, is_prepaid: isPrepaidAccount(acc), unbilled_amount: unbilledAmount(acc) })
+      .eq("account_id", acc.account_id);
+    // supabase-migration-balance.sql pode não ter sido rodada ainda: a coleta
+    // diária não pode parar por causa de duas colunas novas.
+    if (updateError && /is_prepaid|unbilled_amount/.test(updateError.message || "")) {
+      await sb.from("ad_accounts").update(base).eq("account_id", acc.account_id);
+    }
     const accountRun = runId ? await sb.from("collection_account_runs").insert({
       run_id: runId, account_id: acc.account_id, platform: "meta",
     }).select("id").maybeSingle() : { data: null as any };

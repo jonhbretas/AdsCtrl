@@ -56,6 +56,11 @@ interface Account {
   currency: string;
   status: string;
   balance: number | null;
+  // Separa o que é saldo do que é dívida: em conta pré-paga vale `balance`
+  // (saldo restante); em conta de cartão/PayPal vale `unbilled_amount`
+  // (gasto ainda não faturado). Nulo = ainda não classificada pela coleta.
+  is_prepaid?: boolean | null;
+  unbilled_amount?: number | null;
   group_id: string | null;
   hidden?: boolean;
   linked_meta_account_id?: string | null;
@@ -764,7 +769,7 @@ export default function Dashboard() {
             <GridSortHeader sortKey="trend" sort={tableSort} onSort={setTableSort} align="center" initialDirection="desc">Tendência</GridSortHeader>
             <GridSortHeader sortKey="spend" sort={tableSort} onSort={setTableSort} initialDirection="desc">Investimento ({short})</GridSortHeader>
             <GridSortHeader sortKey="result" sort={tableSort} onSort={setTableSort} initialDirection="desc">{fam.label.split(" ")[0]}</GridSortHeader>
-            <GridSortHeader sortKey="balance" sort={tableSort} onSort={setTableSort} initialDirection="desc">Saldo Meta</GridSortHeader>
+            <GridSortHeader sortKey="balance" sort={tableSort} onSort={setTableSort} initialDirection="desc">Saldo / fatura</GridSortHeader>
             <span />
             <span />
           </div>
@@ -836,26 +841,7 @@ export default function Dashboard() {
                       <div style={{ fontSize: 10.5, color: "#16a34a" }}>{(m.value / m.spend).toFixed(1)}x ROAS</div>
                     )}
                   </div>
-                  <div
-                    style={{
-                      textAlign: "right",
-                      fontSize: 14,
-                      fontWeight:
-                        a.platform === "meta" && a.balance != null && a.balance <= 0
-                          ? 700
-                          : 400,
-                      color:
-                        a.platform !== "meta" || a.balance == null
-                          ? "#bbb"
-                          : a.balance <= 0
-                            ? "#c54a4a"
-                            : "#111",
-                    }}
-                  >
-                    {a.platform === "meta" && a.balance != null
-                      ? money(a.balance, a.currency)
-                      : "—"}
-                  </div>
+                  <BalanceCell account={a} />
                   <button
                     onClick={(e) => { e.stopPropagation(); toggleHidden(a.account_id, !a.hidden); }}
                     title={a.hidden ? "Reexibir esta conta" : "Ocultar esta conta do dashboard"}
@@ -955,6 +941,59 @@ export default function Dashboard() {
 // ---------- subcomponentes ----------
 
 const GRID = "1fr 40px 92px 120px 96px 100px 26px 24px";
+
+// Saldo e fatura na mesma coluna, mas nunca com a mesma cara.
+//
+// A Meta devolve um campo `balance` para toda conta, com significados opostos:
+// em conta pré-paga é quanto ainda há para gastar; em conta de cartão ou PayPal
+// é quanto já se gastou e ainda vai ser cobrado. Mostrar os dois como "saldo"
+// levava à leitura invertida — uma conta devendo R$ 1.865 parecia ter esse
+// tanto disponível. Aqui o número vem sempre com o que ele é.
+function BalanceCell({ account }: { account: Account }) {
+  if (account.platform !== "meta") {
+    return <div style={{ textAlign: "right", fontSize: 14, color: "#bbb" }}>—</div>;
+  }
+
+  const prepaid = account.is_prepaid;
+  const balance = account.balance;
+  const unbilled = account.unbilled_amount ?? null;
+
+  // Pré-paga: saldo restante. Zerado ou baixo é urgente — a veiculação para.
+  if (prepaid === true && balance != null) {
+    const empty = balance <= 0;
+    return (
+      <div style={{ textAlign: "right", lineHeight: 1.2 }}>
+        <div style={{ fontSize: 14, fontWeight: empty ? 700 : 500, color: empty ? "#c54a4a" : "#111" }}>
+          {money(balance, account.currency)}
+        </div>
+        <div style={{ fontSize: 9.5, color: empty ? "#c54a4a" : "#9aa1ad" }}>
+          {empty ? "sem saldo" : "saldo"}
+        </div>
+      </div>
+    );
+  }
+
+  // Pós-paga: fatura em aberto. Não é dinheiro disponível, então não compete
+  // visualmente com o saldo — fica em cinza e com o rótulo dizendo o que é.
+  if (prepaid === false) {
+    return (
+      <div style={{ textAlign: "right", lineHeight: 1.2 }} title="Gasto já realizado que ainda será cobrado no cartão ou no PayPal. Não é saldo disponível.">
+        <div style={{ fontSize: 13, fontWeight: 400, color: "#7c8493" }}>
+          {unbilled != null ? money(unbilled, account.currency) : "—"}
+        </div>
+        <div style={{ fontSize: 9.5, color: "#a8adb7" }}>a faturar</div>
+      </div>
+    );
+  }
+
+  // Ainda não classificada (antes da primeira coleta com a migração).
+  return (
+    <div style={{ textAlign: "right", lineHeight: 1.2 }} title="A próxima coleta identifica se a conta é pré-paga ou pós-paga.">
+      <div style={{ fontSize: 14, color: "#bbb" }}>—</div>
+      <div style={{ fontSize: 9.5, color: "#c4c8ce" }}>sem classificação</div>
+    </div>
+  );
+}
 
 function GridSortHeader({
   children,
