@@ -178,28 +178,52 @@ const ACTIONABLE_ALERTS: Alert["type"][] = [
 ];
 
 // Abre tarefa para o que precisa de mão. Enquanto o problema durar, a coleta
-// reencontra o mesmo alerta todos os dias — o índice único por
-// alert_fingerprint garante uma tarefa só, e o ON CONFLICT não reabre o que já
-// foi concluído.
+// reencontra o mesmo alerta todos os dias e isso continua sendo UMA tarefa.
+//
+// A primeira versão usava upsert com onConflict: "alert_fingerprint" e falhava
+// sempre — o índice é parcial (where alert_fingerprint is not null) e o
+// Postgres não consegue inferi-lo num ON CONFLICT (erro 42P10). O erro era
+// engolido, então nenhuma tarefa automática nascia e nada denunciava.
+//
+// Agora: consulta o que já existe, insere só o que falta, uma por vez. São
+// poucas linhas por coleta, e inserir individualmente impede que um conflito de
+// corrida derrube o lote inteiro e leve as tarefas novas com ele.
 async function openTasksForAlerts(allAlerts: Alert[]) {
   const actionable = allAlerts.filter((alert) => ACTIONABLE_ALERTS.includes(alert.type));
   if (!actionable.length) return;
   const sb = getServiceClient();
-  const rows = actionable.map((alert) => ({
-    title: `${alert.account_name}: ${alert.title}`,
-    notes: alert.detail,
-    status: "todo",
-    priority: alert.level === "critical" ? "high" : "normal",
-    account_id: alert.account_id,
-    source: "auto",
-    alert_fingerprint: `${alert.account_id}:${alert.type}`,
-  }));
-  // Falha aqui não pode derrubar a coleta: a tabela pode não existir ainda
-  // (supabase-migration-tasks.sql) e tarefa é consequência, não a coleta.
-  await sb
-    .from("tasks")
-    .upsert(rows, { onConflict: "alert_fingerprint", ignoreDuplicates: true })
-    .then(() => undefined, () => undefined);
+  const fingerprintOf = (alert: Alert) => `${alert.account_id}:${alert.type}`;
+
+  try {
+    // Tarefa concluída conta como existente: alerta que persiste não reabre o
+    // que já foi resolvido por mim.
+    const { data: existing, error } = await sb
+      .from("tasks")
+      .select("alert_fingerprint")
+      .in("alert_fingerprint", actionable.map(fingerprintOf));
+    if (error) return; // tabela ausente (migração não rodada) ou indisponível
+    const known = new Set((existing || []).map((row: any) => row.alert_fingerprint));
+
+    for (const alert of actionable) {
+      const fingerprint = fingerprintOf(alert);
+      if (known.has(fingerprint)) continue;
+      await sb
+        .from("tasks")
+        .insert({
+          title: `${alert.account_name}: ${alert.title}`,
+          notes: alert.detail,
+          status: "todo",
+          priority: alert.level === "critical" ? "high" : "normal",
+          account_id: alert.account_id,
+          source: "auto",
+          alert_fingerprint: fingerprint,
+        })
+        // Corrida com outra coleta: o índice único barra e está tudo bem.
+        .then(() => undefined, () => undefined);
+    }
+  } catch {
+    // Tarefa é consequência da coleta, nunca condição dela.
+  }
 }
 
 async function runCollect(triggerSource: "manual" | "cron") {

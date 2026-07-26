@@ -33,8 +33,10 @@ create table if not exists tasks (
   done_at timestamptz
 );
 
-create unique index if not exists uq_tasks_alert
-  on tasks(alert_fingerprint) where alert_fingerprint is not null;
+-- Índice NÃO parcial de propósito: no Postgres, unique já aceita vários NULLs
+-- (as tarefas manuais), e um índice parcial não é inferível num ON CONFLICT
+-- (erro 42P10), o que amarra o código a fazer verificação manual.
+create unique index if not exists uq_tasks_alert on tasks(alert_fingerprint);
 
 -- O quadro lê por status e ordena por prazo; o histórico lê por data de baixa.
 create index if not exists idx_tasks_status on tasks(status, due_date);
