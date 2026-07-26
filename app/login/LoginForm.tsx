@@ -43,12 +43,11 @@ export default function LoginForm({ configured, nextPath }: LoginFormProps) {
   return (
     <form onSubmit={submit} style={{ display: "grid", gap: 18 }}>
       <div>
-        <label
-          htmlFor="dashboard-password"
-          style={{ display: "block", marginBottom: 8, color: "#344054", fontSize: 14, fontWeight: 650 }}
-        >
+        <label htmlFor="dashboard-password" className="ec-login__label">
           Senha do dashboard
         </label>
+        {/* 16px de fonte não é estética: abaixo disso o Safari no iPhone dá
+            zoom automático ao focar o campo. */}
         <input
           id="dashboard-password"
           name="password"
@@ -57,36 +56,16 @@ export default function LoginForm({ configured, nextPath }: LoginFormProps) {
           autoFocus={configured}
           disabled={!configured || submitting}
           required
+          aria-invalid={error ? true : undefined}
           value={password}
           onChange={(event) => setPassword(event.target.value)}
-          style={{
-            boxSizing: "border-box",
-            width: "100%",
-            height: 48,
-            padding: "0 14px",
-            border: `1px solid ${error ? "#f04438" : "#d0d5dd"}`,
-            borderRadius: 10,
-            outline: "none",
-            background: configured ? "#fff" : "#f2f4f7",
-            color: "#101828",
-            fontSize: 16,
-          }}
+          className="ec-input ec-login__input"
+          data-error={error ? "true" : undefined}
         />
       </div>
 
       {error && (
-        <div
-          role="alert"
-          style={{
-            padding: "11px 13px",
-            border: "1px solid #fecdca",
-            borderRadius: 9,
-            background: "#fef3f2",
-            color: "#b42318",
-            fontSize: 13,
-            lineHeight: 1.45,
-          }}
-        >
+        <div role="alert" className="ec-notice" data-tone="danger">
           {error}
         </div>
       )}
@@ -94,17 +73,9 @@ export default function LoginForm({ configured, nextPath }: LoginFormProps) {
       <button
         type="submit"
         disabled={!configured || submitting}
-        style={{
-          height: 48,
-          border: 0,
-          borderRadius: 10,
-          background: !configured || submitting ? "#98a2b3" : "#155eef",
-          color: "#fff",
-          cursor: !configured || submitting ? "not-allowed" : "pointer",
-          fontSize: 15,
-          fontWeight: 700,
-          boxShadow: "0 1px 2px rgba(16, 24, 40, .08)",
-        }}
+        className="ec-btn ec-btn--full ec-login__submit"
+        data-variant="primary"
+        data-size="md"
       >
         {submitting ? "Entrando…" : "Entrar"}
       </button>

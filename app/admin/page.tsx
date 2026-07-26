@@ -11,6 +11,7 @@ import {
   usePersistentSort,
 } from "@/components/SortableHeader";
 import { RESULT_FAMILY_BY_SLUG } from "@/lib/format";
+import { Badge, Notice, PageHeader, Skeleton, SkeletonCard } from "@/components/ui";
 
 interface Group {
   id: string;
@@ -452,41 +453,47 @@ export default function Admin() {
     }
   }
 
-  if (loading) return <div style={{ padding: 40, fontFamily: "system-ui" }}>Carregando administração…</div>;
+  if (loading) {
+    return (
+      <div className="ec-page" style={{ maxWidth: 1100 }}>
+        <div style={{ display: "grid", gap: "var(--sp-3)", maxWidth: 420, marginBottom: "var(--sp-5)" }}>
+          <Skeleton h={28} w="50%" />
+          <Skeleton h={14} w="78%" />
+        </div>
+        <SkeletonCard lines={5} />
+      </div>
+    );
+  }
 
   return (
-    <div style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 24px", fontFamily: "system-ui, sans-serif" }}>
-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 28 }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: 24, fontWeight: 600 }}>Contas e grupos</h1>
-          <p style={{ margin: "4px 0 0", color: "#6b6b6b", fontSize: 14 }}>
-            Escolha quais contas coletar e organize as {accounts.length} contas em grupos.
-          </p>
-        </div>
-        <a href="/" style={{ fontSize: 14, color: "#3987e5", textDecoration: "none" }}>
-          ← Voltar ao overview
-        </a>
-      </header>
+    <div className="ec-page" style={{ maxWidth: 1100 }}>
+      <PageHeader
+        title="Configurações"
+        subtitle={`Metas, orçamento e envio semanal. ${accounts.length} contas no catálogo.`}
+        actions={
+          <a href="/" className="ec-btn" data-variant="ghost" data-size="sm">
+            ← Voltar ao overview
+          </a>
+        }
+      />
 
       {error && (
-        <div style={{ background: "#fceceb", color: "#a32d2d", padding: "10px 14px", borderRadius: 8, marginBottom: 20, fontSize: 14 }}>
-          {error}
+        <div style={{ marginBottom: "var(--sp-4)" }}>
+          <Notice tone="danger" onDismiss={() => setError(null)}>{error}</Notice>
         </div>
       )}
 
-      <section id="clients" style={{ marginBottom: 36, scrollMarginTop: 80 }}>
-        <h2 style={{ fontSize: 16, fontWeight: 650, margin: "0 0 6px" }}>Metas e orçamento por cliente</h2>
-        <p style={{ color: "#777", fontSize: 13, margin: "0 0 14px" }}>
+      <section id="clients" className="ec-section">
+        <h2 className="ec-section__title">Metas e orçamento por cliente</h2>
+        <p className="ec-section__hint">
           Esses valores alimentam o pacing, a projeção mensal e os alertas do Cockpit Hoje.
         </p>
         {clientsUnavailable ? (
-          <div style={{ background: "#fff8eb", border: "1px solid #f1dfbd", borderRadius: 10, padding: "12px 14px", color: "#8a5b16", fontSize: 13 }}>
-            Fundação de clientes ainda não aplicada: {clientsUnavailable}
-          </div>
+          <Notice tone="warn">Fundação de clientes ainda não aplicada: {clientsUnavailable}</Notice>
         ) : (
-          <div style={{ overflowX: "auto" }}>
+          <div className="ec-scroll-x">
             <div style={{ minWidth: 940, display: "grid", gap: 9 }}>
-              <div style={{ display: "grid", gridTemplateColumns: CLIENT_GRID, gap: 9, alignItems: "center", padding: "9px 14px", color: "#888", background: "#fafaf9", border: "1px solid #e9e9e6", borderRadius: 10, fontSize: 10, fontWeight: 750, textTransform: "uppercase", letterSpacing: 0.25 }}>
+              <div className="ec-thead" style={{ gridTemplateColumns: CLIENT_GRID, gap: 9, borderRadius: "var(--r-sm)", border: "1px solid var(--border)" }}>
                 <SortButton column="name" sort={clientSort} onSort={setClientSort} align="left">Cliente / canais</SortButton>
                 <SortButton column="objective" sort={clientSort} onSort={setClientSort} align="left">Objetivo</SortButton>
                 <SortButton column="budget" sort={clientSort} onSort={setClientSort} align="left" initialDirection="desc">Orçamento</SortButton>
@@ -956,48 +963,36 @@ function ReportDelivery({
 function FocusChip({ family }: { family: string | null }) {
   const known = family ? RESULT_FAMILY_BY_SLUG[family] : null;
   if (known) {
-    return (
-      <span style={{ fontSize: 10.5, color: "#5c6373" }}>
-        foco: <strong style={{ color: "#2b7143" }}>{known.label}</strong>
-      </span>
-    );
+    return <Badge tone="ok">foco: {known.label}</Badge>;
   }
   return (
-    <span
-      title="Defina o Resultado do relatório nos dados do cliente para o relatório medir o que importa"
-      style={{
-        fontSize: 10.5,
-        fontWeight: 650,
-        color: "#8a6116",
-        background: "#fdf6e6",
-        border: "1px solid #f0dfb4",
-        borderRadius: 7,
-        padding: "3px 7px",
-      }}
-    >
+    <Badge tone="warn" title="Defina o Resultado do relatório nos dados do cliente para o relatório medir o que importa">
       foco automático
-    </span>
+    </Badge>
   );
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <label style={{ display: "grid", gap: 5 }}>
-      <span style={{ fontSize: 10, color: "#888", fontWeight: 650, textTransform: "uppercase", letterSpacing: 0.25 }}>{label}</span>
+    <label className="ec-field">
+      <span className="ec-field__label">{label}</span>
       {children}
     </label>
   );
 }
 
+// Campo compacto desta tela, agora apontando para os tokens: uma troca aqui
+// alcança as dezenas de inputs e selects do formulário de clientes.
 const compactInput: React.CSSProperties = {
   boxSizing: "border-box",
   width: "100%",
   height: 34,
   padding: "0 9px",
-  border: "1px solid #dededb",
-  borderRadius: 7,
-  background: "#fff",
-  color: "#333",
+  border: "1px solid var(--border-strong)",
+  borderRadius: "var(--r-sm)",
+  background: "var(--surface)",
+  color: "var(--text-strong)",
+  fontFamily: "var(--font-text)",
   fontSize: 12,
 };
 
