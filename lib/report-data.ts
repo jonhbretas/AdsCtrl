@@ -157,6 +157,22 @@ function cacheWindow(until: string): number {
   return until < today ? FRESH_CLOSED_MS : FRESH_OPEN_MS;
 }
 
+// A chave do cache inclui o período, e os períodos do painel são rolantes:
+// "últimos 7 dias" vira um intervalo novo todo dia. Sem limpeza a tabela só
+// cresce — cada linha guarda o relatório inteiro (~35 KB), e o plano gratuito
+// do Supabase para em 500 MB. Linha mais velha que a janela máxima (24h) nunca
+// mais vai ser servida; guardamos alguns dias só para poder inspecionar.
+const CACHE_RETENTION_DAYS = 7;
+
+async function purgeStaleCache(supabase: ReturnType<typeof getServiceClient>): Promise<void> {
+  const cutoff = new Date(Date.now() - CACHE_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  await supabase
+    .from("report_cache")
+    .delete()
+    .lt("fetched_at", cutoff)
+    .then(() => undefined, () => undefined);
+}
+
 export interface CachedReport {
   report: ReportPayloadData;
   cached: boolean;
@@ -201,5 +217,7 @@ export async function buildReportCached(
     .from("report_cache")
     .upsert({ ...key, payload: report, fetched_at, hits: 0 })
     .then(() => undefined, () => undefined);
+  // Só na escrita: a leitura quente não paga por isso, e escrita é rara.
+  await purgeStaleCache(supabase);
   return { report, cached: false, fetched_at };
 }
