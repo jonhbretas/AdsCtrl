@@ -1,0 +1,584 @@
+/* ==========================================================================
+   Componentes do painel (identidade Ectolab).
+
+   Fica em CSS, e não em objeto inline, exatamente pelo que faltava antes:
+   :hover, :active, :disabled, :focus-visible e media query. Cor sempre por
+   token — nenhum literal hexadecimal neste arquivo.
+   ========================================================================== */
+
+/* ------------------------------------------------------------------ botão --- */
+.ec-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  font-family: var(--font-display);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease),
+    color var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
+}
+.ec-btn--full {
+  width: 100%;
+}
+.ec-btn[data-size="md"] {
+  padding: 9px 16px;
+  font-size: 13px;
+}
+.ec-btn[data-size="sm"] {
+  padding: 5px 11px;
+  font-size: 12px;
+}
+.ec-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.ec-btn:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+/* Primário: azul escuro da marca. Branco sobre ele dá 6,72:1 — o azul claro
+   daria 3,46:1 e reprovaria WCAG AA, por isso ele não preenche botão. */
+.ec-btn[data-variant="primary"] {
+  background: var(--brand-700);
+  color: #fff;
+}
+.ec-btn[data-variant="primary"]:hover:not(:disabled) {
+  background: var(--brand-800);
+}
+
+.ec-btn[data-variant="secondary"] {
+  background: var(--surface);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+.ec-btn[data-variant="secondary"]:hover:not(:disabled) {
+  border-color: var(--brand-500);
+  color: var(--brand-700);
+  background: var(--brand-50);
+}
+
+.ec-btn[data-variant="ghost"] {
+  background: transparent;
+  color: var(--text-muted);
+}
+.ec-btn[data-variant="ghost"]:hover:not(:disabled) {
+  background: var(--brand-50);
+  color: var(--brand-700);
+}
+
+.ec-btn[data-variant="danger"] {
+  background: var(--surface);
+  border-color: var(--danger-50);
+  color: var(--danger-600);
+}
+.ec-btn[data-variant="danger"]:hover:not(:disabled) {
+  background: var(--danger-50);
+  border-color: var(--danger-600);
+}
+
+/* ------------------------------------------------------------------- card --- */
+.ec-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-sm);
+}
+.ec-card--padded {
+  padding: var(--sp-4);
+}
+.ec-card[data-tone="brand"] {
+  border-left: 3px solid var(--brand-500);
+}
+.ec-card[data-tone="accent"] {
+  border-left: 3px solid var(--accent-500);
+}
+.ec-card[data-tone="ok"] {
+  border-left: 3px solid var(--ok-600);
+}
+.ec-card[data-tone="warn"] {
+  border-left: 3px solid var(--accent-500);
+}
+.ec-card[data-tone="danger"] {
+  border-left: 3px solid var(--danger-600);
+}
+
+/* ------------------------------------------------------------------ badge --- */
+.ec-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: var(--r-full);
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+.ec-badge[data-tone="brand"] {
+  background: var(--brand-50);
+  border-color: var(--brand-200);
+  color: var(--brand-700);
+}
+/* Laranja como preenchimento com texto escuro: 10,55:1. Ao contrário do texto
+   laranja sobre branco, que não passaria de 1,72:1. */
+.ec-badge[data-tone="accent"] {
+  background: var(--accent-300);
+  border-color: var(--accent-600);
+  color: var(--brand-900);
+}
+.ec-badge[data-tone="ok"] {
+  background: var(--ok-50);
+  border-color: var(--ok-600);
+  color: var(--ok-600);
+}
+.ec-badge[data-tone="warn"] {
+  background: var(--warn-50);
+  border-color: var(--accent-600);
+  color: var(--warn-700);
+}
+.ec-badge[data-tone="danger"] {
+  background: var(--danger-50);
+  border-color: var(--danger-600);
+  color: var(--danger-600);
+}
+
+/* ------------------------------------------------------- cabeçalho da tela --- */
+.ec-pagehead {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-5);
+}
+.ec-pagehead__text {
+  min-width: 0;
+  flex: 1 1 320px;
+}
+.ec-pagehead h1 {
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1.15;
+}
+.ec-pagehead p {
+  margin: 4px 0 0;
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+.ec-pagehead__meta {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  margin-top: var(--sp-3);
+}
+.ec-pagehead__actions {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* ----------------------------------------------------------- estado vazio --- */
+.ec-empty {
+  text-align: center;
+  padding: var(--sp-6) var(--sp-4);
+  color: var(--text-muted);
+}
+.ec-empty__icon {
+  font-size: 22px;
+  opacity: 0.5;
+  margin-bottom: var(--sp-2);
+}
+.ec-empty__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.ec-empty__hint {
+  margin: 6px auto 0;
+  max-width: 42ch;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+/* ----------------------------------------------------------------- aviso --- */
+.ec-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.ec-notice[data-tone="ok"] {
+  background: var(--ok-50);
+  border-color: var(--ok-600);
+  color: var(--ok-600);
+}
+.ec-notice[data-tone="warn"] {
+  background: var(--warn-50);
+  border-color: var(--accent-600);
+  color: var(--warn-700);
+}
+.ec-notice[data-tone="danger"] {
+  background: var(--danger-50);
+  border-color: var(--danger-600);
+  color: var(--danger-600);
+}
+.ec-notice[data-tone="brand"] {
+  background: var(--brand-50);
+  border-color: var(--brand-200);
+  color: var(--brand-700);
+}
+.ec-notice__x {
+  margin-left: auto;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 12px;
+  opacity: 0.7;
+}
+.ec-notice__x:hover {
+  opacity: 1;
+}
+
+/* ----------------------------------------------------------------- campo --- */
+.ec-field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+.ec-field__label {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.ec-field__hint {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.ec-input {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--text-strong);
+  font-family: var(--font-text);
+  font-size: 13px;
+  transition: border-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
+}
+.ec-input::placeholder {
+  color: var(--text-faint);
+}
+.ec-input:hover {
+  border-color: var(--brand-500);
+}
+.ec-input:focus {
+  outline: none;
+  border-color: var(--brand-500);
+  box-shadow: 0 0 0 3px var(--brand-100);
+}
+
+/* ------------------------------------------------------ controle segmentado --- */
+.ec-seg {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+}
+.ec-seg > button {
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  padding: 5px 11px;
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+.ec-seg > button:hover {
+  color: var(--brand-700);
+}
+.ec-seg > button[data-active] {
+  background: var(--surface);
+  color: var(--brand-700);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ------------------------------------------------------- navegação do app --- */
+.ec-nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: 0 var(--sp-5);
+  height: 58px;
+}
+.ec-nav__brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--text-strong);
+  text-decoration: none;
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  flex-shrink: 0;
+}
+.ec-nav__links {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.ec-nav__links::-webkit-scrollbar {
+  display: none;
+}
+.ec-nav__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 11px;
+  border-radius: var(--r-sm);
+  text-decoration: none;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+.ec-nav__link:hover {
+  background: var(--brand-50);
+  color: var(--brand-700);
+}
+.ec-nav__link[data-active] {
+  background: var(--brand-50);
+  color: var(--brand-700);
+}
+/* A faixa embaixo do item ativo é o único indicador que não depende de cor —
+   quem não distingue azul de cinza ainda vê onde está. */
+.ec-nav__link[data-active]::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 11px;
+  right: 11px;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--brand-500);
+}
+.ec-nav__link {
+  position: relative;
+}
+.ec-nav__group {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+  flex-shrink: 0;
+  margin: 0 4px;
+}
+.ec-nav__tail {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-shrink: 0;
+}
+
+/* No celular o rótulo do menu sai e fica o ícone; a marca encurta. */
+@media (max-width: 720px) {
+  .ec-nav {
+    padding: 0 var(--sp-3);
+    gap: var(--sp-2);
+  }
+  .ec-nav__brand span {
+    display: none;
+  }
+  .ec-nav__link {
+    padding: 7px 9px;
+  }
+  .ec-nav__label {
+    display: none;
+  }
+  .ec-nav__group {
+    display: none;
+  }
+}
+
+/* ------------------------------------------------------- casca das telas --- */
+.ec-page {
+  padding: var(--sp-5) var(--sp-5) var(--sp-7);
+  max-width: 1440px;
+  margin: 0 auto;
+}
+@media (max-width: 720px) {
+  .ec-page {
+    padding: var(--sp-4) var(--sp-3) var(--sp-6);
+  }
+}
+
+/* Grade de colunas que colapsa sozinha, usada pelo quadro e pelos resumos. */
+.ec-cols {
+  display: grid;
+  gap: var(--sp-3);
+  align-items: start;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+}
+
+/* ==========================================================================
+   Quadro de tarefas — primeira tela convertida ao design system.
+   ========================================================================== */
+
+.ec-taskform {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.ec-colhead {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 11px var(--sp-3);
+  border-bottom: 1px solid var(--border);
+}
+.ec-colhead__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.ec-colhead__dot[data-col="todo"] {
+  background: var(--accent-500);
+}
+.ec-colhead__dot[data-col="doing"] {
+  background: var(--brand-500);
+}
+.ec-colhead__dot[data-col="done"] {
+  background: var(--ok-600);
+}
+.ec-colhead__label {
+  font-family: var(--font-display);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-strong);
+}
+.ec-colhead__hint {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.ec-colhead__count {
+  margin-left: auto;
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  min-width: 18px;
+  text-align: right;
+}
+
+.ec-task {
+  padding: 10px 11px;
+  box-shadow: none;
+  transition: border-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
+}
+.ec-task:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-sm);
+}
+.ec-task[data-done] {
+  background: var(--surface-sunken);
+}
+.ec-task[data-done] .ec-task__title {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+/* Só a opacidade muda enquanto salva: sem "pular" e sem trocar o layout. */
+.ec-task[data-busy] {
+  opacity: 0.55;
+}
+
+.ec-task__head {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  margin-bottom: 5px;
+}
+.ec-task__title {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text-strong);
+  overflow-wrap: anywhere;
+}
+.ec-task__meta {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  align-items: center;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+/* Prazo: a cor reforça, mas o texto ("atrasada", "hoje") já diz sozinho. */
+.ec-task__due[data-tone="late"] {
+  color: var(--danger-600);
+  font-weight: 700;
+}
+.ec-task__due[data-tone="today"] {
+  color: var(--warn-700);
+  font-weight: 700;
+}
+.ec-task__due[data-tone="soon"] {
+  color: var(--brand-600);
+}
+.ec-task__link {
+  color: var(--brand-600);
+  text-decoration: none;
+  font-weight: 600;
+}
+.ec-task__link:hover {
+  text-decoration: underline;
+}
+.ec-task__notes {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+}
+.ec-task__actions {
+  display: flex;
+  gap: var(--sp-1);
+  margin-top: var(--sp-2);
+  align-items: center;
+}

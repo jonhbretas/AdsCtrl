@@ -4,14 +4,27 @@ import { usePathname } from "next/navigation";
 import { useRouter } from "next/navigation";
 import BrandMark from "@/components/BrandMark";
 
-const ITEMS = [
-  { href: "/today", label: "Hoje", icon: "✦" },
-  { href: "/", label: "Clientes", icon: "◫" },
-  { href: "/creatives", label: "Criativos", icon: "◉" },
-  { href: "/meta-assets", label: "Raio-X", icon: "⌁" },
-  { href: "/alerts", label: "Alertas", icon: "△" },
-  { href: "/tarefas", label: "Tarefas", icon: "☑" },
-  { href: "/admin", label: "Configurações", icon: "⚙" },
+// Os sete itens eram uma fileira plana. Agrupados por intenção — o que se opera
+// todo dia, o que se analisa quando há dúvida, e o que se configura raramente —
+// a barra passa a dizer para que serve cada coisa. Nenhum item foi removido.
+const GROUPS: { items: { href: string; label: string; icon: string; title: string }[] }[] = [
+  {
+    items: [
+      { href: "/today", label: "Hoje", icon: "◴", title: "O que precisa de atenção agora" },
+      { href: "/", label: "Clientes", icon: "◫", title: "Contas, métricas e relatórios" },
+      { href: "/tarefas", label: "Tarefas", icon: "☑", title: "O que chegou e o que o sistema detectou" },
+    ],
+  },
+  {
+    items: [
+      { href: "/creatives", label: "Criativos", icon: "◉", title: "Qual peça merece continuar no ar" },
+      { href: "/meta-assets", label: "Raio-X", icon: "⌁", title: "Estrutura e ativos das contas" },
+      { href: "/alerts", label: "Alertas", icon: "△", title: "Saldo, pagamento, reprovação" },
+    ],
+  },
+  {
+    items: [{ href: "/admin", label: "Configurações", icon: "⚙", title: "Clientes, grupos e envio semanal" }],
+  },
 ];
 
 // Páginas sem a navegação do sistema. As três últimas são vistas por CLIENTE:
@@ -28,42 +41,53 @@ function isChromeless(pathname: string): boolean {
 export default function AppNav() {
   const pathname = usePathname();
   const router = useRouter();
+
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
     router.replace("/login");
     router.refresh();
   }
+
   if (isChromeless(pathname)) return null;
+
   return (
-    <nav style={{
-      position: "sticky", top: 0, zIndex: 50, height: 58, display: "flex",
-      alignItems: "center", padding: "0 22px", borderBottom: "1px solid #e9e9e7",
-      background: "rgba(255,255,255,.94)", backdropFilter: "blur(12px)",
-      fontFamily: "system-ui, -apple-system, sans-serif",
-    }}>
-      <a href="/today" style={{ display: "flex", alignItems: "center", gap: 9, color: "#111", textDecoration: "none", marginRight: 34 }}>
-        <BrandMark size={30} />
-        <span style={{ fontWeight: 750, letterSpacing: -0.3 }}>Assertivus Dash</span>
+    <nav className="ec-nav ec-glass" aria-label="Navegação principal">
+      <a href="/today" className="ec-nav__brand" aria-label="Assertivus Dash — início">
+        <BrandMark size={28} />
+        <span>Assertivus Dash</span>
       </a>
-      <div style={{ display: "flex", gap: 4, height: "100%", alignItems: "center" }}>
-        {ITEMS.map((item) => {
-          const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
-          return (
-            <a key={item.href} href={item.href} style={{
-              display: "flex", alignItems: "center", gap: 7, padding: "8px 12px",
-              borderRadius: 9, textDecoration: "none", fontSize: 13,
-              fontWeight: active ? 650 : 500, color: active ? "#111" : "#6f6f6b",
-              background: active ? "#f1f1ef" : "transparent",
-            }}>
-              <span style={{ fontSize: 12, color: active ? "#111" : "#999" }}>{item.icon}</span>
-              {item.label}
-            </a>
-          );
-        })}
+
+      <div className="ec-nav__links">
+        {GROUPS.map((group, groupIndex) => (
+          <div key={groupIndex} style={{ display: "flex", gap: 2, alignItems: "center" }}>
+            {groupIndex > 0 && <span className="ec-nav__group" aria-hidden="true" />}
+            {group.items.map((item) => {
+              const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+              return (
+                <a
+                  key={item.href}
+                  href={item.href}
+                  className="ec-nav__link"
+                  data-active={active ? "true" : undefined}
+                  aria-current={active ? "page" : undefined}
+                  title={item.title}
+                >
+                  <span aria-hidden="true" style={{ fontSize: 12, opacity: active ? 1 : 0.65 }}>
+                    {item.icon}
+                  </span>
+                  <span className="ec-nav__label">{item.label}</span>
+                </a>
+              );
+            })}
+          </div>
+        ))}
       </div>
-      <span style={{ flex: 1 }} />
-      <span style={{ fontSize: 11, color: "#aaa" }}>Cockpit PPC</span>
-      <button onClick={logout} title="Encerrar sessão" style={{ marginLeft: 10, border: 0, background: "transparent", color: "#aaa", cursor: "pointer", fontSize: 12 }}>Sair</button>
+
+      <div className="ec-nav__tail">
+        <button onClick={logout} className="ec-btn" data-variant="ghost" data-size="sm" title="Encerrar sessão">
+          Sair
+        </button>
+      </div>
     </nav>
   );
 }

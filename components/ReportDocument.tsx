@@ -263,7 +263,7 @@ export default function ReportDocument({
 
   return (
     <LayoutCtx.Provider value={{ w, compact }}>
-    <div style={{ width: w, margin: "0 auto", color: INK, fontFamily: "system-ui, -apple-system, Segoe UI, sans-serif" }}>
+    <div className="rpt-doc" style={{ width: w, margin: "0 auto", color: INK, fontFamily: "system-ui, -apple-system, Segoe UI, sans-serif" }}>
       <PrintStyles />
 
       {/* ---------------- CAPA ---------------- */}
@@ -1030,6 +1030,14 @@ function GoogleTable({
 function PrintStyles() {
   return (
     <style>{`
+      /* O documento do cliente é diagramado em content-box: as larguras aqui
+         (700px de página, 343px de meia página) são do CONTEÚDO, e o padding
+         soma por fora. O reset global do painel usa border-box, que faria os
+         cartões de meia página encolherem uns 26px cada — medido: o mesmo
+         relatório passou de 3 para 4 páginas. Esta é a única regra do painel
+         que a área do cliente precisa desfazer.
+         Vale também para a tela, não só para a impressão. */
+      .rpt-doc, .rpt-doc *, .rpt-doc *::before, .rpt-doc *::after { box-sizing: content-box; }
       @page { size: A4 portrait; margin: 10mm; }
       @media print {
         html, body { background: #fff !important; }

@@ -9,6 +9,17 @@
 // o custo de manter drag-and-drop não se paga para três colunas.
 
 import { useEffect, useMemo, useState } from "react";
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Input,
+  Notice,
+  PageHeader,
+  Select,
+  Skeleton,
+} from "@/components/ui";
 
 interface Task {
   id: string;
@@ -29,10 +40,12 @@ interface ClientRef {
   name: string;
 }
 
-const COLUMNS: { key: Task["status"]; label: string; hint: string; color: string }[] = [
-  { key: "todo", label: "A fazer", hint: "chegou e ainda não começou", color: "#e0a83a" },
-  { key: "doing", label: "Fazendo", hint: "em andamento agora", color: "#2f6fe4" },
-  { key: "done", label: "Feito", hint: "últimos 14 dias", color: "#1f8a4c" },
+// A cor de cada coluna vive no CSS (data-col), não aqui: cor de interface
+// pertence ao design system, não ao componente que a consome.
+const COLUMNS: { key: Task["status"]; label: string; hint: string }[] = [
+  { key: "todo", label: "A fazer", hint: "chegou e ainda não começou" },
+  { key: "doing", label: "Fazendo", hint: "em andamento agora" },
+  { key: "done", label: "Feito", hint: "últimos 14 dias" },
 ];
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
@@ -50,13 +63,6 @@ function dueLabel(due: string): { text: string; tone: "late" | "today" | "soon" 
   if (days <= 3) return { text: `em ${days} dias`, tone: "soon" };
   return { text: brDate(due), tone: "far" };
 }
-
-const DUE_COLOR: Record<string, string> = {
-  late: "#c2410c",
-  today: "#b45309",
-  soon: "#1768ca",
-  far: "#8a919e",
-};
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -169,111 +175,126 @@ export default function TasksPage() {
   const byStatus = (status: Task["status"]) => tasks.filter((t) => t.status === status);
   const lateCount = tasks.filter((t) => t.status !== "done" && t.due_date && t.due_date < todayIso()).length;
 
-  return (
-    <main style={{ padding: "22px 22px 60px", fontFamily: "system-ui, -apple-system, sans-serif", color: "#12161f" }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
-        <h1 style={{ fontSize: 20, fontWeight: 750, margin: 0, letterSpacing: -0.3 }}>Tarefas</h1>
-        <span style={{ fontSize: 12.5, color: "#8a919e" }}>
-          o que chegou e o que o sistema detectou, no mesmo lugar
-        </span>
-        {lateCount > 0 && (
-          <span style={{ fontSize: 11, fontWeight: 700, color: "#c2410c", background: "#fdf0ef", border: "1px solid #f0cfcc", borderRadius: 999, padding: "2px 9px" }}>
-            {lateCount} atrasada{lateCount > 1 ? "s" : ""}
-          </span>
-        )}
-        <span style={{ flex: 1 }} />
-        <button
-          onClick={load}
-          disabled={loading}
-          style={{ padding: "5px 11px", borderRadius: 8, border: "1px dashed #ddd", background: "#fff", color: "#888", fontSize: 11.5, cursor: loading ? "default" : "pointer" }}
-        >
-          {loading ? "Carregando…" : "Atualizar"}
-        </button>
-      </div>
+  const openCount = tasks.filter((t) => t.status !== "done").length;
 
-      {/* criação rápida */}
-      <form
-        onSubmit={create}
-        style={{ display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center", margin: "14px 0 16px", padding: "11px 12px", border: "1px solid #e7e9ef", borderRadius: 11, background: "#fcfcfd" }}
-      >
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Ex.: subir 3 criativos novos da Ana Prado"
-          style={{ flex: "1 1 280px", minWidth: 220, padding: "8px 11px", borderRadius: 9, border: "1px solid #dfe2e8", fontSize: 13 }}
-        />
-        <select
-          value={clientId}
-          onChange={(e) => setClientId(e.target.value)}
-          style={{ padding: "8px 10px", borderRadius: 9, border: "1px solid #dfe2e8", fontSize: 12.5, maxWidth: 200 }}
-        >
-          <option value="">sem cliente</option>
-          {clients.map((c) => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
-        </select>
-        <input
-          type="date"
-          value={due}
-          onChange={(e) => setDue(e.target.value)}
-          title="Prazo"
-          style={{ padding: "7px 10px", borderRadius: 9, border: "1px solid #dfe2e8", fontSize: 12.5 }}
-        />
-        <input
-          value={link}
-          onChange={(e) => setLink(e.target.value)}
-          placeholder="link do arquivo (opcional)"
-          style={{ flex: "0 1 200px", padding: "8px 11px", borderRadius: 9, border: "1px solid #dfe2e8", fontSize: 12.5 }}
-        />
-        <button
-          type="button"
-          onClick={() => setPriority((p) => (p === "high" ? "normal" : "high"))}
-          title="Marcar como urgente"
-          style={{
-            padding: "7px 11px", borderRadius: 9, fontSize: 11.5, fontWeight: 650, cursor: "pointer",
-            border: `1px solid ${priority === "high" ? "#f0cfcc" : "#dfe2e8"}`,
-            background: priority === "high" ? "#fdf0ef" : "#fff",
-            color: priority === "high" ? "#c2410c" : "#7c8493",
-          }}
-        >
-          {priority === "high" ? "● urgente" : "○ urgente"}
-        </button>
-        <button
-          type="submit"
-          disabled={creating || !title.trim()}
-          style={{
-            padding: "8px 16px", borderRadius: 9, border: "none", fontSize: 12.5, fontWeight: 700,
-            background: creating || !title.trim() ? "#c9ccd3" : "#12161f", color: "#fff",
-            cursor: creating || !title.trim() ? "default" : "pointer",
-          }}
-        >
-          {creating ? "Criando…" : "Adicionar"}
-        </button>
-      </form>
+  return (
+    <main className="ec-page">
+      <PageHeader
+        title="Tarefas"
+        subtitle="O que chegou por fora e o que o sistema detectou, no mesmo lugar."
+        meta={
+          <>
+            {lateCount > 0 && (
+              <Badge tone="danger" title="Passaram do prazo">
+                {lateCount} atrasada{lateCount > 1 ? "s" : ""}
+              </Badge>
+            )}
+            {openCount > 0 && <Badge tone="brand">{openCount} em aberto</Badge>}
+            {!loading && openCount === 0 && lateCount === 0 && <Badge tone="ok">nada pendente</Badge>}
+          </>
+        }
+        actions={
+          <Button variant="secondary" size="sm" onClick={load} disabled={loading}>
+            {loading ? "Carregando…" : "Atualizar"}
+          </Button>
+        }
+      />
+
+      {/* Criação em uma linha: o título é o único campo obrigatório, para a
+          tarefa entrar no quadro no mesmo minuto em que o criativo chega. */}
+      <Card className="ec-mesh" style={{ marginBottom: "var(--sp-5)" }}>
+        <form onSubmit={create} className="ec-taskform">
+          <Input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Ex.: subir 3 criativos novos da Ana Prado"
+            aria-label="Descrição da tarefa"
+            style={{ flex: "1 1 300px", minWidth: 200 }}
+          />
+          <Select
+            value={clientId}
+            onChange={(e) => setClientId(e.target.value)}
+            aria-label="Cliente"
+            style={{ flex: "0 1 190px" }}
+          >
+            <option value="">sem cliente</option>
+            {clients.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </Select>
+          <Input
+            type="date"
+            value={due}
+            onChange={(e) => setDue(e.target.value)}
+            aria-label="Prazo"
+            style={{ flex: "0 0 148px" }}
+          />
+          <Input
+            value={link}
+            onChange={(e) => setLink(e.target.value)}
+            placeholder="link do arquivo"
+            aria-label="Link do arquivo"
+            style={{ flex: "0 1 180px" }}
+          />
+          <Button
+            type="button"
+            variant={priority === "high" ? "danger" : "secondary"}
+            size="sm"
+            aria-pressed={priority === "high"}
+            onClick={() => setPriority((p) => (p === "high" ? "normal" : "high"))}
+            title="Tarefa urgente"
+          >
+            {priority === "high" ? "● urgente" : "○ urgente"}
+          </Button>
+          <Button type="submit" variant="primary" disabled={creating || !title.trim()}>
+            {creating ? "Criando…" : "Adicionar"}
+          </Button>
+        </form>
+      </Card>
 
       {error && (
-        <div style={{ margin: "0 0 14px", padding: "10px 12px", borderRadius: 9, background: "#fdf0ef", border: "1px solid #f0cfcc", color: "#a3372f", fontSize: 12.5 }}>
-          {error}
+        <div style={{ marginBottom: "var(--sp-4)" }}>
+          <Notice tone="danger" onDismiss={() => setError(null)}>
+            {error}
+          </Notice>
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12, alignItems: "start" }}>
+      <div className="ec-cols">
         {COLUMNS.map((column) => {
           const items = byStatus(column.key);
           return (
-            <section key={column.key} style={{ border: "1px solid #e7e9ef", borderRadius: 12, background: "#fff", overflow: "hidden" }}>
-              <header style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", borderBottom: "1px solid #f0f1f5" }}>
-                <span style={{ width: 8, height: 8, borderRadius: "50%", background: column.color }} />
-                <span style={{ fontSize: 12, fontWeight: 750 }}>{column.label}</span>
-                <span style={{ fontSize: 11, color: "#a0a4ad" }}>{column.hint}</span>
-                <span style={{ flex: 1 }} />
-                <span style={{ fontSize: 11, fontWeight: 700, color: "#7c8493" }}>{items.length}</span>
+            <section key={column.key} className="ec-card" aria-label={column.label}>
+              <header className="ec-colhead">
+                <span className="ec-colhead__dot" data-col={column.key} aria-hidden="true" />
+                <span className="ec-colhead__label">{column.label}</span>
+                <span className="ec-colhead__hint">{column.hint}</span>
+                <span className="ec-colhead__count">{items.length}</span>
               </header>
-              <div style={{ display: "grid", gap: 8, padding: 10 }}>
-                {items.length === 0 && (
-                  <div style={{ fontSize: 12, color: "#b4b9c4", padding: "10px 2px" }}>
-                    {column.key === "todo" ? "Nada pendente." : column.key === "doing" ? "Nada em andamento." : "Nada concluído por aqui."}
-                  </div>
+              <div style={{ display: "grid", gap: "var(--sp-2)", padding: "var(--sp-3)" }}>
+                {loading && items.length === 0 && (
+                  <>
+                    <Skeleton h={54} radius={9} />
+                    <Skeleton h={54} radius={9} />
+                  </>
+                )}
+                {!loading && items.length === 0 && (
+                  <EmptyState
+                    title={
+                      column.key === "todo"
+                        ? "Nada pendente"
+                        : column.key === "doing"
+                          ? "Nada em andamento"
+                          : "Nada concluído ainda"
+                    }
+                    hint={
+                      column.key === "todo"
+                        ? "Quando um cliente mandar criativo, anote aqui em cima antes de fechar a conversa."
+                        : column.key === "doing"
+                          ? "Mova uma tarefa de “A fazer” quando começar."
+                          : "O que você concluir aparece aqui por 14 dias."
+                    }
+                  />
                 )}
                 {items.map((task) => (
                   <TaskCard
@@ -312,78 +333,68 @@ function TaskCard({
   const prev = index > 0 ? COLUMNS[index - 1] : null;
   const next = index < COLUMNS.length - 1 ? COLUMNS[index + 1] : null;
 
+  // A borda esquerda carrega prioridade e origem — é o único uso de cor no
+  // cartão, então "urgente" e "automática" se leem sem precisar de rótulo.
+  const tone = task.priority === "high" ? "danger" : task.source === "auto" ? "accent" : undefined;
+
   return (
-    <article
-      style={{
-        border: `1px solid ${task.priority === "high" ? "#f0cfcc" : "#eceef3"}`,
-        borderLeft: `3px solid ${task.priority === "high" ? "#c2410c" : task.source === "auto" ? "#e0a83a" : "#dfe2e8"}`,
-        borderRadius: 9,
-        padding: "9px 10px",
-        background: task.status === "done" ? "#fbfcfb" : "#fff",
-        opacity: busy ? 0.6 : 1,
-      }}
+    <Card
+      as="article"
+      tone={tone}
+      padded={false}
+      className="ec-task"
+      data-done={task.status === "done" ? "true" : undefined}
+      data-busy={busy ? "true" : undefined}
+      aria-busy={busy}
     >
-      <div style={{ display: "flex", gap: 6, alignItems: "baseline", flexWrap: "wrap", marginBottom: 5 }}>
+      <div className="ec-task__head">
         {task.source === "auto" && (
-          <span
-            title="Aberta automaticamente pela coleta"
-            style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.4, color: "#8a6116", background: "#fdf6e6", border: "1px solid #f0dfb4", borderRadius: 5, padding: "1px 5px" }}
-          >
+          <Badge tone="accent" title="Aberta automaticamente pela coleta">
             AUTO
-          </span>
+          </Badge>
         )}
-        <span style={{ fontSize: 12.5, fontWeight: 600, lineHeight: 1.35, textDecoration: task.status === "done" ? "line-through" : "none", color: task.status === "done" ? "#8a919e" : "#12161f" }}>
-          {task.title}
-        </span>
+        <h3 className="ec-task__title">{task.title}</h3>
       </div>
 
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", fontSize: 10.5, color: "#8a919e" }}>
+      <div className="ec-task__meta">
         {clientName && <span>{clientName}</span>}
         {due && (
-          <span style={{ color: DUE_COLOR[due.tone], fontWeight: due.tone === "late" || due.tone === "today" ? 700 : 500 }}>
+          <span className="ec-task__due" data-tone={due.tone}>
             {due.text}
           </span>
         )}
         {task.link && (
-          <a href={task.link} target="_blank" rel="noreferrer" style={{ color: "#2f6fe4", textDecoration: "none", fontWeight: 650 }}>
+          <a href={task.link} target="_blank" rel="noreferrer" className="ec-task__link">
             abrir arquivo →
           </a>
         )}
       </div>
 
-      {task.notes && (
-        <div style={{ marginTop: 6, fontSize: 11, color: "#5c6373", lineHeight: 1.45, whiteSpace: "pre-wrap" }}>
-          {task.notes}
-        </div>
-      )}
+      {task.notes && <p className="ec-task__notes">{task.notes}</p>}
 
-      <div style={{ display: "flex", gap: 5, marginTop: 8, alignItems: "center" }}>
+      <div className="ec-task__actions">
         {prev && (
-          <button onClick={() => onMove(prev.key)} disabled={busy} style={moveButton}>
+          <Button variant="ghost" size="sm" onClick={() => onMove(prev.key)} disabled={busy}>
             ← {prev.label}
-          </button>
+          </Button>
         )}
         {next && (
-          <button onClick={() => onMove(next.key)} disabled={busy} style={{ ...moveButton, color: "#1f8a4c", borderColor: "#cfe6d8" }}>
+          <Button variant="secondary" size="sm" onClick={() => onMove(next.key)} disabled={busy}>
             {next.label} →
-          </button>
+          </Button>
         )}
         <span style={{ flex: 1 }} />
-        <button onClick={onRemove} disabled={busy} title="Excluir" style={{ ...moveButton, border: "none", color: "#b4b9c4" }}>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onRemove}
+          disabled={busy}
+          title="Excluir tarefa"
+          aria-label={`Excluir ${task.title}`}
+        >
           ✕
-        </button>
+        </Button>
       </div>
-    </article>
+    </Card>
   );
 }
-
-const moveButton: React.CSSProperties = {
-  padding: "3px 8px",
-  borderRadius: 7,
-  border: "1px solid #e6e8ee",
-  background: "#fff",
-  color: "#5c6373",
-  fontSize: 10.5,
-  fontWeight: 650,
-  cursor: "pointer",
-};
