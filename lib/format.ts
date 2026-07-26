@@ -73,6 +73,17 @@ export const ACTION_LABELS: Record<string, string> = {
   post_reaction: "Reações",
   comment: "Comentários",
   add_to_cart: "Adições ao carrinho",
+  post: "Compartilhamentos",
+  post_interaction_net: "Interações no post",
+  post_interaction_gross: "Interações no post (bruto)",
+  "onsite_conversion.post_net_like": "Curtidas",
+  "onsite_conversion.post_unlike": "Descurtidas",
+  "onsite_conversion.post_net_save": "Salvamentos (líquidos)",
+  "onsite_conversion.total_messaging_connection": "Conexões por mensagem",
+  "onsite_conversion.messaging_user_depth_2_message_send": "Conversas com resposta",
+  "onsite_conversion.profile_visit": "Visitas ao perfil",
+  video_thruplay_watched: "ThruPlays",
+  omni_landing_page_view: "Views de LP",
 };
 
 export function resultLabel(actionType: string): string {

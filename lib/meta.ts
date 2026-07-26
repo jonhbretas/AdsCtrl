@@ -403,6 +403,8 @@ export interface RowInsight {
   clicks: number;
   ctr: number;
   cpm: number;
+  reach: number;
+  frequency: number;
   results: Record<string, number>;
   values: Record<string, number>;
   objective?: string;
@@ -416,6 +418,7 @@ export interface BreakdownRow {
   clicks: number;
   ctr: number;
   cpm: number;
+  reach: number;
   results: Record<string, number>;
   values: Record<string, number>;
 }
@@ -448,6 +451,10 @@ export interface AccountDetail {
     position: BreakdownRow[];
     device: BreakdownRow[];
     hour: BreakdownRow[];
+    // Só no modo estendido (relatório): alcance por faixa isolada — não dá
+    // para somar o alcance de age_gender, porque é público único.
+    age?: BreakdownRow[];
+    gender?: BreakdownRow[];
   };
   availableResults: string[]; // action_types presentes no período
 }
@@ -483,7 +490,7 @@ async function fetchLevel(
 ): Promise<RowInsight[]> {
   const nameField = level === "campaign" ? "campaign_name" : level === "adset" ? "adset_name" : "ad_name";
   const idField = level === "campaign" ? "campaign_id" : level === "adset" ? "adset_id" : "ad_id";
-  const fields = `${nameField},${idField},spend,impressions,clicks,ctr,cpm,actions,action_values,objective`;
+  const fields = `${nameField},${idField},spend,impressions,clicks,ctr,cpm,reach,frequency,actions,action_values,objective`;
   const url = `${GRAPH}/${actId}/insights?level=${level}&fields=${fields}&limit=200&${timeRange(
     since,
     until
@@ -497,6 +504,8 @@ async function fetchLevel(
     clicks: Number(r.clicks || 0),
     ctr: Number(r.ctr || 0),
     cpm: Number(r.cpm || 0),
+    reach: Number(r.reach || 0),
+    frequency: Number(r.frequency || 0),
     results: actionsToMap(r.actions),
     values: actionsToMap(r.action_values),
     objective: r.objective,
@@ -510,9 +519,11 @@ async function fetchBreakdown(
   keyer: (r: any) => string,
   since: string,
   until: string,
-  token: string
+  token: string,
+  // A Meta não devolve alcance em toda quebra (a por hora, por exemplo, falha).
+  withReach = true
 ): Promise<BreakdownRow[]> {
-  const fields = "spend,impressions,clicks,ctr,cpm,actions,action_values";
+  const fields = `spend,impressions,clicks,ctr,cpm,${withReach ? "reach," : ""}actions,action_values`;
   const url = `${GRAPH}/${actId}/insights?fields=${fields}&breakdowns=${breakdowns}&limit=500&${timeRange(
     since,
     until
@@ -525,6 +536,7 @@ async function fetchBreakdown(
     clicks: Number(r.clicks || 0),
     ctr: Number(r.ctr || 0),
     cpm: Number(r.cpm || 0),
+    reach: Number(r.reach || 0),
     results: actionsToMap(r.actions),
     values: actionsToMap(r.action_values),
   }));
@@ -659,7 +671,9 @@ export async function getAccountDetail(
   actId: string,
   since: string,
   until: string,
-  token: string = TOKEN
+  token: string = TOKEN,
+  // extended = quebras extras usadas só no relatório em PDF.
+  opts: { extended?: boolean } = {}
 ): Promise<AccountDetail> {
   const prev = previousRange(since, until);
   const [
@@ -703,13 +717,21 @@ export async function getAccountDetail(
       (r) => (r.hourly_stats_aggregated_by_advertiser_time_zone || "").slice(0, 5),
       since,
       until,
-      token
+      token,
+      false
     ).catch(() => []),
     fetchAdThumbnails(actId, token).catch(() => ({} as Record<string, string>)),
   ]);
 
   // Anexa thumbnails aos anúncios.
   for (const ad of ads) ad.thumbnail = thumbs[ad.id];
+
+  const [age, gender] = opts.extended
+    ? await Promise.all([
+        fetchBreakdown(actId, "age", (r) => r.age || "—", since, until, token).catch(() => []),
+        fetchBreakdown(actId, "gender", (r) => r.gender || "—", since, until, token).catch(() => []),
+      ])
+    : [undefined, undefined];
 
   // action_types disponíveis no período (para o seletor de "Resultado").
   const resultSet = new Set<string>();
@@ -733,6 +755,8 @@ export async function getAccountDetail(
       position: position.sort((a, b) => b.spend - a.spend),
       device: device.sort((a, b) => b.spend - a.spend),
       hour: hour.sort((a, b) => a.key.localeCompare(b.key)),
+      age: age?.sort((a, b) => a.key.localeCompare(b.key)),
+      gender: gender?.sort((a, b) => b.impressions - a.impressions),
     },
     availableResults: [...resultSet],
   };

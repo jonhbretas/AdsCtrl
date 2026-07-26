@@ -1,11 +1,21 @@
 "use client";
 
 // app/report/[id]/page.tsx
-// Relatório de uma conta em página limpa — pronta para imprimir/salvar em PDF.
+// Relatório do cliente em página limpa — pronta para imprimir/salvar em PDF.
+// Busca tudo de uma vez (/api/report) para o documento nunca ir para a
+// impressora com metade dos blocos ainda carregando.
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import AccountDetail from "@/components/AccountDetail";
+import ReportDocument, { ReportPayload } from "@/components/ReportDocument";
+
+function safeDecode(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
 
 function defaultRange() {
   const fmt = (d: Date) => d.toISOString().slice(0, 10);
@@ -17,68 +27,87 @@ function defaultRange() {
 
 export default function ReportPage() {
   const params = useParams<{ id: string }>();
-  const accountId = params.id;
-  const [range, setRange] = useState(defaultRange());
-  const [account, setAccount] = useState<any>(null);
-  const [ready, setReady] = useState(false);
+  // Contas Google têm ":" no id ("google:123") e chegam aqui percent-encoded.
+  const accountId = safeDecode(params.id);
+  const [data, setData] = useState<ReportPayload | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const q = new URLSearchParams(window.location.search);
     const def = defaultRange();
-    setRange({ since: q.get("since") || def.since, until: q.get("until") || def.until });
+    const since = q.get("since") || def.since;
+    const until = q.get("until") || def.until;
 
-    fetch("/api/accounts")
-      .then((r) => r.json())
-      .then((d) => {
-        const acc = (d.accounts || []).find(
-          (a: any) => a.account_id === accountId || `act_${a.account_id}` === accountId
-        );
-        setAccount(acc || null);
+    let alive = true;
+    setLoading(true);
+    fetch(`/api/report?account_id=${encodeURIComponent(accountId)}&since=${since}&until=${until}`, { cache: "no-store" })
+      .then(async (r) => {
+        const text = await r.text();
+        const payload = text ? JSON.parse(text) : {};
+        if (!r.ok || payload.error) throw new Error(payload.error || `Falha (HTTP ${r.status}).`);
+        return payload as ReportPayload;
       })
-      .finally(() => setReady(true));
+      .then((payload) => alive && setData(payload))
+      .catch((e) => alive && setError(e?.message ?? "Erro ao montar o relatório."))
+      .finally(() => alive && setLoading(false));
+    return () => {
+      alive = false;
+    };
   }, [accountId]);
 
-  const name = account?.name || `Conta ${accountId}`;
-
   return (
-    <div style={{ maxWidth: 980, margin: "0 auto", padding: "28px 24px", fontFamily: "system-ui, sans-serif", color: "#111" }}>
-      <style>{`@media print { .no-print { display: none !important; } body { background: #fff; } }`}</style>
+    <div style={{ background: "#f4f5f7", minHeight: "100vh", padding: "24px 16px 60px" }}>
+      <style>{`@media print { body { background: #fff !important; } .page-shell { box-shadow: none !important; padding: 0 !important; background: #fff !important; } }`}</style>
 
-      <header className="report-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, marginBottom: 20 }}>
-        <div>
-          <div style={{ fontSize: 12, color: "#888", fontWeight: 600, letterSpacing: 0.5 }}>RELATÓRIO DE MÍDIA PAGA · {(account?.platform || "meta").toUpperCase()}</div>
-          <h1 style={{ margin: "4px 0 0", fontSize: 26, fontWeight: 700 }}>{name}</h1>
-          <p style={{ margin: "4px 0 0", color: "#888", fontSize: 14 }}>
-            Período: {range.since} → {range.until}
-          </p>
-        </div>
-        <div className="no-print" style={{ display: "flex", gap: 8 }}>
-          <a href="/" style={{ padding: "8px 14px", borderRadius: 10, border: "1px solid #e2e2e2", background: "#fff", fontSize: 13, color: "#333", textDecoration: "none" }}>← Overview</a>
-          <button onClick={() => window.print()} style={{ padding: "8px 16px", borderRadius: 10, border: "none", background: "#111", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-            ⤓ Baixar PDF
-          </button>
-        </div>
-      </header>
+      <div className="no-print" style={{ maxWidth: 740, margin: "0 auto 16px", display: "flex", gap: 8, alignItems: "center" }}>
+        <a href="/" style={{ padding: "8px 14px", borderRadius: 10, border: "1px solid #e2e2e2", background: "#fff", fontSize: 13, color: "#333", textDecoration: "none" }}>
+          ← Voltar
+        </a>
+        <span style={{ flex: 1 }} />
+        <button
+          onClick={() => window.print()}
+          disabled={loading || !!error}
+          style={{
+            padding: "8px 18px",
+            borderRadius: 10,
+            border: "none",
+            background: loading || error ? "#c9ccd3" : "#12161f",
+            color: "#fff",
+            fontSize: 13,
+            fontWeight: 650,
+            cursor: loading || error ? "default" : "pointer",
+          }}
+        >
+          ⤓ Baixar PDF
+        </button>
+      </div>
 
-      {!ready ? (
-        <div style={{ padding: 40, color: "#888" }}>Carregando relatório…</div>
-      ) : (
-        <div style={{ border: "1px solid #eee", borderRadius: 14, overflow: "hidden", background: "#fff" }}>
-          <AccountDetail
-            accountId={accountId}
-            platform={account?.platform || "meta"}
-            since={range.since}
-            until={range.until}
-            status={account?.status || "—"}
-            balance={account?.balance ?? null}
-            currency={account?.currency || "BRL"}
-          />
-        </div>
-      )}
-
-      <footer style={{ marginTop: 20, fontSize: 11, color: "#bbb", textAlign: "center" }}>
-        Gerado por AdsCtrl · dados ao vivo da plataforma de anúncios
-      </footer>
+      <div
+        className="page-shell"
+        style={{
+          maxWidth: 740,
+          margin: "0 auto",
+          background: "#fff",
+          borderRadius: 14,
+          padding: "26px 20px",
+          boxShadow: "0 1px 3px rgba(16,24,40,.08), 0 12px 32px rgba(16,24,40,.06)",
+        }}
+      >
+        {loading && (
+          <div style={{ padding: 60, textAlign: "center", color: "#8a919e", fontSize: 14 }}>
+            Montando o relatório com os dados ao vivo das plataformas…
+          </div>
+        )}
+        {error && (
+          <div style={{ padding: 24 }}>
+            <div style={{ background: "#fdf0ef", border: "1px solid #f0cfcc", color: "#a3372f", padding: "12px 14px", borderRadius: 10, fontSize: 13 }}>
+              {error}
+            </div>
+          </div>
+        )}
+        {data && <ReportDocument data={data} />}
+      </div>
     </div>
   );
 }

@@ -9,6 +9,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import AccountDetail from "@/components/AccountDetail";
+import AccountChanges from "@/components/AccountChanges";
 import {
   compareSortValues,
   SortButton,
@@ -873,6 +874,12 @@ export default function Dashboard() {
                       balance={a.balance}
                       currency={a.currency}
                     />
+                    <AccountChanges
+                      accountId={a.account_id}
+                      platform={a.platform}
+                      since={range.since}
+                      until={range.until}
+                    />
                     <AccountDetail
                       accountId={a.account_id}
                       platform={a.platform}
@@ -910,6 +917,13 @@ export default function Dashboard() {
                                   platform="google"
                                   balance={null}
                                   currency={google.currency}
+                                  compact
+                                />
+                                <AccountChanges
+                                  accountId={google.account_id}
+                                  platform="google"
+                                  since={range.since}
+                                  until={range.until}
                                   compact
                                 />
                                 <AccountDetail
