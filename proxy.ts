@@ -10,7 +10,10 @@ import {
 
 const LOGIN_PAGE = "/login";
 const LOGIN_API = "/api/auth/login";
-const COLLECT_API = "/api/collect";
+// Rotas chamadas pelo Vercel Cron, que se autentica com Bearer CRON_SECRET.
+// Toda entrada nova em vercel.json precisa estar aqui, senão o middleware
+// barra o cron antes de a rota rodar.
+const CRON_APIS = ["/api/collect", "/api/reports/send"];
 // Relatório que o cliente abre pelo link assinado: a autorização é o token
 // dentro da própria URL, verificado na rota (lib/report-token.ts).
 const PUBLIC_REPORT_PAGE = "/r/";
@@ -41,7 +44,7 @@ function configurationError() {
 }
 
 async function hasValidCronAuthorization(request: NextRequest): Promise<boolean> {
-  if (request.nextUrl.pathname !== COLLECT_API) return false;
+  if (!CRON_APIS.includes(request.nextUrl.pathname)) return false;
   const cronSecret = process.env.CRON_SECRET;
   const authorization = request.headers.get("authorization");
   if (!cronSecret || !authorization?.startsWith("Bearer ")) return false;
