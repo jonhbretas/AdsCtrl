@@ -384,6 +384,7 @@ function MetaSection({
   const freq = k.reach ? k.impressions / k.reach : 0;
   const prevFreq = p.reach ? p.impressions / p.reach : 0;
   const purchases = pickVal(k.results, PURCHASE_KEYS);
+  const prevPurchases = pickVal(p.results, PURCHASE_KEYS);
   const purchaseValue = pickVal(k.values, PURCHASE_KEYS);
   const prevPurchaseValue = pickVal(p.values, PURCHASE_KEYS);
   const leads = pickVal(k.results, LEAD_KEYS) + pickVal(k.results, REGISTER_KEYS);
@@ -486,9 +487,31 @@ function MetaSection({
               />
             </>
           )}
+          {/* Compras contam mesmo sem valor: venda marcada como "pedido pago"
+              no WhatsApp chega à Meta sem receita, e a condição antiga
+              (purchaseValue > 0) escondia a métrica mais importante da conta.
+              ROAS e valor só entram quando existe receita para dividir. */}
+          {purchases > 0 && focus?.slug !== "vendas" && (
+            <>
+              <Kpi
+                label="Compras"
+                value={num(purchases)}
+                cur={purchases}
+                prev={prevPurchases}
+                prevText={num(prevPurchases)}
+              />
+              <Kpi
+                label="Custo por compra"
+                value={purchases ? m(k.spend / purchases) : "—"}
+                cur={purchases ? k.spend / purchases : undefined}
+                prev={prevPurchases ? p.spend / prevPurchases : undefined}
+                prevText={prevPurchases ? m(p.spend / prevPurchases) : undefined}
+                invert
+              />
+            </>
+          )}
           {purchaseValue > 0 && (
             <>
-              {focus?.slug !== "vendas" && <Kpi label="Compras" value={num(purchases)} />}
               <Kpi
                 label="ROAS"
                 value={k.spend ? mult(purchaseValue / k.spend) : "—"}

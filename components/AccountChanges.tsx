@@ -8,6 +8,7 @@
 
 import { useEffect, useState } from "react";
 import type { AdChangeEvent, ChangeCategory } from "@/lib/changes";
+import DecisionImpact from "@/components/DecisionImpact";
 
 const CATEGORY_LABELS: Record<ChangeCategory, string> = {
   status: "Status / pausas",
@@ -53,12 +54,31 @@ interface Payload {
   error?: string;
 }
 
-type RangeMode = "panel" | 7 | 14 | 30;
+type RangeMode = "panel" | 7 | 14 | 30 | "month";
 
 function isoDaysAgo(days: number): string {
   const d = new Date();
   d.setDate(d.getDate() - days);
   return d.toISOString().slice(0, 10);
+}
+
+// Mês corrente até ontem (hoje ainda está incompleto e puxaria as médias para
+// baixo) e o mês anterior inteiro, para a comparação mês a mês.
+function monthRanges(): { current: { since: string; until: string }; previous: { since: string; until: string } } {
+  const now = new Date();
+  const yesterday = new Date(now);
+  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+  const firstOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  // Se hoje é dia 1º, o "mês atual" ainda não tem dias fechados: usa o anterior.
+  const currentSince = fmt(firstOfMonth);
+  const currentUntil = fmt(yesterday) >= currentSince ? fmt(yesterday) : currentSince;
+  const prevFirst = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+  const prevLast = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 0));
+  return {
+    current: { since: currentSince, until: currentUntil },
+    previous: { since: fmt(prevFirst), until: fmt(prevLast) },
+  };
 }
 
 function todayIso(): string {
@@ -118,8 +138,18 @@ export default function AccountChanges({
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
-  const activeSince = rangeMode === "panel" ? since : isoDaysAgo(rangeMode);
-  const activeUntil = rangeMode === "panel" ? until : todayIso();
+  // Impacto é opcional: custa uma consulta de série diária, e nem toda visita
+  // ao log quer a análise.
+  const [showImpact, setShowImpact] = useState(false);
+
+  const months = monthRanges();
+  const activeSince =
+    rangeMode === "panel" ? since : rangeMode === "month" ? months.current.since : isoDaysAgo(rangeMode);
+  const activeUntil =
+    rangeMode === "panel" ? until : rangeMode === "month" ? months.current.until : todayIso();
+  // Só o modo mês tem comparação explícita; nos outros vale o período anterior
+  // de mesma duração, que a API calcula.
+  const compareRange = rangeMode === "month" ? months.previous : null;
 
   useEffect(() => {
     if (!open) return;
@@ -217,7 +247,7 @@ export default function AccountChanges({
           {/* período + recarregar */}
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
             <span style={{ fontSize: 11, color: "#999" }}>Período:</span>
-            {([["panel", "Do painel"], [7, "7 dias"], [14, "14 dias"], [30, "30 dias"]] as const).map(
+            {([["panel", "Do painel"], [7, "7 dias"], [14, "14 dias"], [30, "30 dias"], ["month", "Mês vs anterior"]] as const).map(
               ([mode, label]) => (
                 <button
                   key={String(mode)}
@@ -257,6 +287,44 @@ export default function AccountChanges({
               {loading ? "Buscando…" : "Atualizar"}
             </button>
           </div>
+
+          {/* impacto: a leitura de resultado ao lado das decisões */}
+          {platform === "meta" && (
+            <div style={{ marginBottom: 12 }}>
+              <button
+                onClick={() => setShowImpact((v) => !v)}
+                title="Comparar o período com o anterior e ver o antes/depois de cada decisão"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 7,
+                  padding: "6px 11px",
+                  borderRadius: 9,
+                  border: `1px solid ${showImpact ? "#b9d5fb" : "#e6e6e3"}`,
+                  background: showImpact ? "#eef5ff" : "#fff",
+                  color: showImpact ? "#1768ca" : "#555",
+                  fontSize: 11.5,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                <span>📈</span>
+                Impacto das decisões
+                <span style={{ fontSize: 10, color: "#9aa1ad", fontWeight: 500 }}>
+                  investimento e resultado, antes e depois
+                </span>
+                <span style={{ fontSize: 10, color: "#bbb" }}>{showImpact ? "▲" : "▼"}</span>
+              </button>
+              {showImpact && (
+                <DecisionImpact
+                  accountId={accountId}
+                  since={activeSince}
+                  until={activeUntil}
+                  compare={compareRange}
+                />
+              )}
+            </div>
+          )}
 
           {/* filtros por tipo de alteração */}
           {!loading && !error && all.length > 0 && (
