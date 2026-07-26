@@ -6,6 +6,7 @@
 // exatamente o que sai na impressão (nada de gráfico responsivo que encolhe
 // na hora de imprimir).
 
+import { createContext, useContext } from "react";
 import {
   Bar,
   BarChart,
@@ -34,6 +35,18 @@ import {
 // ---------- medidas da página ----------
 const PAGE_W = 700; // largura útil de um A4 retrato com margem de 10mm
 const HALF = (PAGE_W - 14) / 2;
+
+// ---------- modo de leitura ----------
+// O documento nasceu com largura de A4 fixa, para o que aparece na tela ser
+// exatamente o que sai impresso. No celular isso obriga a rolar de lado, então
+// existe um segundo modo: mesmo conteúdo, empilhado e na largura da tela.
+// Em vez de passar largura por dezenas de props, quem precisa lê do contexto.
+interface LayoutInfo {
+  w: number; // largura útil do documento
+  compact: boolean; // empilhado (celular) em vez de A4
+}
+const LayoutCtx = createContext<LayoutInfo>({ w: PAGE_W, compact: false });
+const useLayout = () => useContext(LayoutCtx);
 
 // ---------- paleta ----------
 const INK = "#12161f";
@@ -211,7 +224,18 @@ function resolveFocus(slug?: string | null): Focus | null {
   };
 }
 
-export default function ReportDocument({ data }: { data: ReportPayload }) {
+export default function ReportDocument({
+  data,
+  compact = false,
+  width,
+}: {
+  data: ReportPayload;
+  compact?: boolean;
+  width?: number;
+}) {
+  // No modo celular a largura vem de quem hospeda (a tela); no modo documento
+  // é sempre A4, custe o que custar — é o mesmo desenho que vai para o PDF.
+  const w = compact ? Math.max(280, width ?? 340) : PAGE_W;
   const { meta, google, range, prevRange, account } = data;
   const cur = account.currency || "BRL";
   const m = (v: number, digits = 2) => money(v, cur, digits);
@@ -238,7 +262,8 @@ export default function ReportDocument({ data }: { data: ReportPayload }) {
   const totalClicks = (k?.clicks || 0) + googleTotals.clicks;
 
   return (
-    <div style={{ width: PAGE_W, margin: "0 auto", color: INK, fontFamily: "system-ui, -apple-system, Segoe UI, sans-serif" }}>
+    <LayoutCtx.Provider value={{ w, compact }}>
+    <div style={{ width: w, margin: "0 auto", color: INK, fontFamily: "system-ui, -apple-system, Segoe UI, sans-serif" }}>
       <PrintStyles />
 
       {/* ---------------- CAPA ---------------- */}
@@ -250,8 +275,10 @@ export default function ReportDocument({ data }: { data: ReportPayload }) {
         <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1.4, color: MUTED, textTransform: "uppercase" }}>
           Relatório de mídia paga
         </div>
-        <h1 style={{ margin: "8px 0 2px", fontSize: 30, fontWeight: 800, letterSpacing: -0.6 }}>{account.name}</h1>
-        <div style={{ fontSize: 15, color: MUTED, fontWeight: 500 }}>Análise de desempenho</div>
+        <h1 style={{ margin: "8px 0 2px", fontSize: compact ? 22 : 30, fontWeight: 800, letterSpacing: -0.6, lineHeight: 1.15, overflowWrap: "anywhere" }}>
+          {account.name}
+        </h1>
+        <div style={{ fontSize: compact ? 13 : 15, color: MUTED, fontWeight: 500 }}>Análise de desempenho</div>
         <p style={{ margin: "12px 0 0", fontSize: 12.5, color: "#4a5160", lineHeight: 1.55, maxWidth: 560 }}>
           Relatório gerado com os dados de <strong>{br(range.since)}</strong> a <strong>{br(range.until)}</strong>,
           comparado com o período anterior de mesma duração ({br(prevRange.since)} a {br(prevRange.until)}).
@@ -319,6 +346,7 @@ export default function ReportDocument({ data }: { data: ReportPayload }) {
         <div style={{ marginTop: 3 }}>Gerado por Assertivus Dash.</div>
       </footer>
     </div>
+    </LayoutCtx.Provider>
   );
 }
 
@@ -341,6 +369,11 @@ function MetaSection({
   const p = detail.prevKpis;
   const m = (v: number, digits = 2) => money(v, currency, digits);
   const b = detail.breakdowns;
+  // Recharts exige largura em número: nada de gráfico responsivo, que encolhe
+  // na hora de imprimir. Empilhado, o gráfico de meia página ocupa a tela toda.
+  const { w: pageW, compact } = useLayout();
+  const fullChart = pageW - 34;
+  const halfChart = compact ? pageW - 34 : HALF - 34;
 
   const linkClicks = pickVal(k.results, LINKCLICK_KEYS);
   const prevLinkClicks = pickVal(p.results, LINKCLICK_KEYS);
@@ -479,7 +512,7 @@ function MetaSection({
 
       <Block>
         <Card title="Investimento por dia">
-          <ComposedChart width={PAGE_W - 34} height={190} data={daily} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+          <ComposedChart width={fullChart} height={190} data={daily} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={LINE} />
             <XAxis dataKey="label" tick={{ fontSize: 9.5, fill: MUTED }} tickLine={false} axisLine={false} />
             <YAxis tick={{ fontSize: 9.5, fill: MUTED }} tickLine={false} axisLine={false} width={54} tickFormatter={(v) => moneyShort(v, currency)} />
@@ -492,7 +525,7 @@ function MetaSection({
       <Block>
         <Row2>
           <Card title="Cliques e CTR ao longo do tempo" width={HALF}>
-            <ComposedChart width={HALF - 34} height={170} data={daily} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
+            <ComposedChart width={halfChart} height={170} data={daily} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={LINE} />
               <XAxis dataKey="label" tick={{ fontSize: 9, fill: MUTED }} tickLine={false} axisLine={false} />
               <YAxis yAxisId="l" tick={{ fontSize: 9, fill: MUTED }} tickLine={false} axisLine={false} width={40} />
@@ -504,7 +537,7 @@ function MetaSection({
           </Card>
           <Card title="Impressões por hora do dia" width={HALF}>
             <BarChart
-              width={HALF - 34}
+              width={halfChart}
               height={170}
               data={b.hour.map((h) => ({ label: h.key, v: h.impressions }))}
               margin={{ top: 8, right: 4, left: 0, bottom: 0 }}
@@ -543,7 +576,7 @@ function MetaSection({
           {b.age && b.age.length > 0 && (
             <Card title="Impressões e alcance por idade" width={HALF}>
               <BarChart
-                width={HALF - 34}
+                width={halfChart}
                 height={170}
                 data={b.age.map((r) => ({ label: ageLabel(r.key), imp: r.impressions, reach: r.reach }))}
                 margin={{ top: 8, right: 4, left: 0, bottom: 0 }}
@@ -691,6 +724,7 @@ function RowsTable({
   focus: Focus | null;
 }) {
   const m = (v: number) => money(v, currency);
+  const { compact } = useLayout();
   if (rows.length === 0) return <Empty>Sem dados no período.</Empty>;
 
   const results = rows.map((r) => primaryRowResult(r, focus));
@@ -726,7 +760,17 @@ function RowsTable({
               // eslint-disable-next-line @next/next/no-img-element
               <img src={r.thumbnail} alt="" width={20} height={20} style={{ borderRadius: 4, objectFit: "cover", flexShrink: 0 }} />
             )}
-            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.name}>
+            {/* Na tabela A4 o nome é cortado com reticências para a linha caber.
+                No cartão de celular ele é o título: quebra em duas linhas em vez
+                de esticar a caixa além da tela. */}
+            <span
+              style={
+                compact
+                  ? { overflowWrap: "anywhere", minWidth: 0 }
+                  : { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }
+              }
+              title={r.name}
+            >
               {r.name}
             </span>
           </span>,
@@ -785,6 +829,7 @@ function GoogleSection({ block }: { block: GoogleBlock }) {
     spend: d.spend,
     clicks: d.clicks,
   }));
+  const { w: pageW } = useLayout();
 
   return (
     <>
@@ -825,7 +870,7 @@ function GoogleSection({ block }: { block: GoogleBlock }) {
       {daily.length > 0 && (
         <Block>
           <Card title="Custo e cliques ao longo do tempo">
-            <ComposedChart width={PAGE_W - 34} height={180} data={daily} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+            <ComposedChart width={pageW - 34} height={180} data={daily} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={LINE} />
               <XAxis dataKey="label" tick={{ fontSize: 9.5, fill: MUTED }} tickLine={false} axisLine={false} />
               <YAxis yAxisId="l" tick={{ fontSize: 9.5, fill: MUTED }} tickLine={false} axisLine={false} width={54} tickFormatter={(v) => moneyShort(v, currency)} />
@@ -991,11 +1036,21 @@ function Block({ children }: { children: React.ReactNode }) {
 // Cada card fica com a altura do próprio conteúdo. Esticar os dois até a
 // altura do maior deixava caixas com metade do corpo vazio.
 function Row2({ children }: { children: React.ReactNode }) {
-  return <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>{children}</div>;
+  const { compact } = useLayout();
+  // No celular os dois cartões viram um embaixo do outro.
+  return (
+    <div style={{ display: "flex", flexDirection: compact ? "column" : "row", gap: 14, alignItems: "flex-start" }}>
+      {children}
+    </div>
+  );
 }
 
 function Grid({ cols, children }: { cols: number; children: React.ReactNode }) {
-  return <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 8 }}>{children}</div>;
+  const { compact } = useLayout();
+  // Quatro indicadores lado a lado numa tela de 360px viram quatro tarjas
+  // ilegíveis; duas colunas ainda mostram o número inteiro.
+  const n = compact ? Math.min(2, cols) : cols;
+  return <div style={{ display: "grid", gridTemplateColumns: `repeat(${n}, minmax(0, 1fr))`, gap: 8 }}>{children}</div>;
 }
 
 function SectionTitle({ children, kicker, color }: { children: React.ReactNode; kicker: string; color: string }) {
@@ -1036,12 +1091,17 @@ function Card({
   style?: React.CSSProperties;
   keep?: boolean;
 }) {
+  const { compact } = useLayout();
+  // Empilhado, o cartão ocupa a largura toda: metade de uma tela de celular
+  // não comporta gráfico nenhum.
+  const cardWidth = compact ? undefined : width;
   return (
     <div
       className={`rpt-card${keep ? " rpt-keep" : ""}`}
       style={{
-        width,
-        flex: width ? "0 0 auto" : undefined,
+        width: cardWidth,
+        alignSelf: compact ? "stretch" : undefined,
+        flex: cardWidth ? "0 0 auto" : undefined,
         border: `1px solid ${LINE}`,
         borderRadius: 10,
         background: "#fff",
@@ -1113,6 +1173,7 @@ function Kpi({
 
 function Funnel({ steps }: { steps: { label: string; v: number }[] }) {
   const top = steps[0]?.v || 1;
+  const { compact } = useLayout();
   return (
     <div style={{ display: "grid", gap: 6 }}>
       {steps.map((s, i) => {
@@ -1121,8 +1182,8 @@ function Funnel({ steps }: { steps: { label: string; v: number }[] }) {
         // Barra curta não comporta o número dentro dela: escreve ao lado.
         const inside = w >= 14;
         return (
-          <div key={s.label} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ width: 118, fontSize: 10.5, color: "#4a5160" }}>{s.label}</span>
+          <div key={s.label} style={{ display: "flex", alignItems: "center", gap: compact ? 6 : 10 }}>
+            <span style={{ width: compact ? 74 : 118, flexShrink: 0, fontSize: compact ? 9.5 : 10.5, color: "#4a5160", lineHeight: 1.2 }}>{s.label}</span>
             <div style={{ flex: 1, background: "#f2f4f7", borderRadius: 5, height: 22, display: "flex", alignItems: "center" }}>
               <div
                 style={{
@@ -1188,7 +1249,29 @@ function BarList({ rows, color }: { rows: { key: string; value: number; right: s
   // Ordena pela barra mostrada: lista fora de ordem parece erro de dado.
   const data = rows.filter((r) => r.value > 0).sort((a, b) => b.value - a.value);
   const max = Math.max(1, ...data.map((r) => r.value));
+  const { compact } = useLayout();
   if (data.length === 0) return <Empty>Sem dados no período.</Empty>;
+  // No celular, rótulo e números ficam acima da barra: lado a lado sobrariam
+  // uns 60px para a barra, que deixa de significar qualquer coisa.
+  if (compact) {
+    return (
+      <div style={{ display: "grid", gap: 9 }}>
+        {data.map((r) => (
+          <div key={r.key}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 10.5, marginBottom: 3 }}>
+              <span style={{ color: "#4a5160", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.key}>
+                {r.key}
+              </span>
+              <span style={{ color: INK, fontWeight: 600, whiteSpace: "nowrap" }}>{r.right}</span>
+            </div>
+            <div style={{ height: 7, background: "#f2f4f7", borderRadius: 4, overflow: "hidden" }}>
+              <div style={{ width: `${Math.round((r.value / max) * 100)}%`, height: "100%", background: color, borderRadius: 4 }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
   return (
     <div style={{ display: "grid", gap: 7 }}>
       {data.map((r) => (
@@ -1213,7 +1296,36 @@ function DataTable({
   head: { label: string; align?: "left" | "right"; width?: number }[];
   rows: React.ReactNode[][];
 }) {
+  const { compact } = useLayout();
   if (rows.length === 0) return <Empty>Sem dados no período.</Empty>;
+
+  // Dez colunas não cabem numa tela de celular por nenhum arranjo de largura.
+  // Em vez de encolher a fonte até o ilegível ou obrigar a rolar de lado, cada
+  // linha vira um cartão: a primeira coluna é o título e o resto vira par
+  // rótulo/valor. Mesmos dados, mesma ordem — muda só o empacotamento.
+  if (compact) {
+    return (
+      <div style={{ display: "grid", gap: 8 }}>
+        {rows.map((cells, i) => (
+          <div key={i} className="rpt-keep" style={{ border: `1px solid ${LINE}`, borderRadius: 9, padding: "9px 10px", background: "#fff" }}>
+            <div style={{ fontSize: 11.5, fontWeight: 700, marginBottom: 7, lineHeight: 1.3, overflowWrap: "anywhere" }}>
+              {cells[0]}
+            </div>
+            {/* minmax(0,1fr): sem isso a coluna não encolhe abaixo do rótulo
+                mais comprido e o cartão vaza alguns pixels em telas de 360px. */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "4px 12px" }}>
+              {cells.slice(1).map((cell, j) => (
+                <div key={j} style={{ display: "flex", justifyContent: "space-between", gap: 6, fontSize: 10.5, lineHeight: 1.35, minWidth: 0 }}>
+                  <span style={{ color: MUTED, overflowWrap: "anywhere" }}>{head[j + 1]?.label}</span>
+                  <span style={{ fontWeight: 600, textAlign: "right", overflowWrap: "anywhere" }}>{cell}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
   // Tabela com dez colunas em uma página A4 não perdoa: os valores ficam com
   // nowrap (número quebrado é ilegível), mas o cabeçalho pode quebrar em duas
   // linhas e o respiro é curto — senão a tabela vaza para fora do card.

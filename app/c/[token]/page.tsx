@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import ReportDocument, { ReportPayload } from "@/components/ReportDocument";
 import BrandMark from "@/components/BrandMark";
+import { ModeToggle, useReadingMode } from "@/components/ReadingMode";
 
 interface HistoryItem {
   since: string;
@@ -47,6 +48,7 @@ export default function ClientDashboardPage() {
   const [data, setData] = useState<DashboardPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const { compact, choose, docWidth, shellRef, printDocument } = useReadingMode();
 
   useEffect(() => {
     let alive = true;
@@ -89,9 +91,11 @@ export default function ClientDashboardPage() {
         </span>
         <span style={{ fontSize: 12, color: "#8a919e" }}>· métricas de mídia paga</span>
         <span style={{ flex: 1 }} />
+        <ModeToggle compact={compact} onChange={choose} />
         <button
-          onClick={() => window.print()}
+          onClick={printDocument}
           disabled={loading || !!error}
+          title="O PDF sai sempre no formato de documento"
           style={{
             padding: "7px 14px",
             borderRadius: 9,
@@ -136,13 +140,15 @@ export default function ClientDashboardPage() {
       </div>
 
       <div
+        ref={shellRef}
         className="page-shell"
         style={{
           maxWidth: 740,
           margin: "0 auto",
           background: "#fff",
           borderRadius: 14,
-          padding: "26px 20px",
+          // Empilhado, cada pixel de margem é conteúdo perdido.
+          padding: compact ? "16px 12px" : "26px 20px",
           boxShadow: "0 1px 3px rgba(16,24,40,.08), 0 12px 32px rgba(16,24,40,.06)",
         }}
       >
@@ -158,7 +164,7 @@ export default function ClientDashboardPage() {
             </div>
           </div>
         )}
-        {data && !loading && <ReportDocument data={data.report} />}
+        {data && !loading && <ReportDocument data={data.report} compact={compact} width={docWidth} />}
       </div>
 
       {data && data.reports.length > 0 && (

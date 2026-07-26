@@ -1,6 +1,5 @@
 // app/c/layout.tsx
-// Área do cliente (painel): sem navegação, sem indexação, viewport travado
-// na largura do documento para o celular encaixar tudo na tela.
+// Área do cliente (painel): sem navegação e sem indexação.
 
 import type { Metadata, Viewport } from "next";
 
@@ -9,8 +8,11 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
+// Largura real do aparelho. Antes o viewport ficava travado em 740px para o
+// documento A4 encaixar por zoom-out — o que deixava tudo minúsculo. Agora
+// existe leitura empilhada de celular, então a página usa a tela como ela é.
 export const viewport: Viewport = {
-  width: 740,
+  width: "device-width",
   initialScale: 1,
 };
 

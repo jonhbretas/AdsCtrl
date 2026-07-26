@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import ReportDocument, { ReportPayload } from "@/components/ReportDocument";
 import BrandMark from "@/components/BrandMark";
+import { ModeToggle, useReadingMode } from "@/components/ReadingMode";
 
 export default function PublicReportPage() {
   const params = useParams<{ token: string }>();
@@ -15,6 +16,7 @@ export default function PublicReportPage() {
   const [data, setData] = useState<ReportPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const { compact, choose, docWidth, shellRef, printDocument } = useReadingMode();
 
   useEffect(() => {
     let alive = true;
@@ -51,15 +53,17 @@ export default function PublicReportPage() {
         }
       `}</style>
 
-      <div className="no-print" style={{ maxWidth: 740, margin: "0 auto 16px", display: "flex", alignItems: "center", gap: 8 }}>
+      <div className="no-print" style={{ maxWidth: 740, margin: "0 auto 16px", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         <BrandMark size={22} />
         <span style={{ fontSize: 12, color: "#8a919e" }}>
           Relatório de mídia paga · Assertivus
         </span>
         <span style={{ flex: 1 }} />
+        <ModeToggle compact={compact} onChange={choose} />
         <button
-          onClick={() => window.print()}
+          onClick={printDocument}
           disabled={loading || !!error}
+          title="O PDF sai sempre no formato de documento"
           style={{
             padding: "8px 18px",
             borderRadius: 10,
@@ -76,13 +80,15 @@ export default function PublicReportPage() {
       </div>
 
       <div
+        ref={shellRef}
         className="page-shell"
         style={{
           maxWidth: 740,
           margin: "0 auto",
           background: "#fff",
           borderRadius: 14,
-          padding: "26px 20px",
+          // Empilhado, cada pixel de margem é conteúdo perdido.
+          padding: compact ? "16px 12px" : "26px 20px",
           boxShadow: "0 1px 3px rgba(16,24,40,.08), 0 12px 32px rgba(16,24,40,.06)",
         }}
       >
@@ -98,7 +104,7 @@ export default function PublicReportPage() {
             </div>
           </div>
         )}
-        {data && <ReportDocument data={data} />}
+        {data && <ReportDocument data={data} compact={compact} width={docWidth} />}
       </div>
     </div>
   );

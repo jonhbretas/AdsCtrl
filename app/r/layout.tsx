@@ -1,8 +1,5 @@
 // app/r/layout.tsx
-// Área do cliente: sem navegação, sem indexação e com viewport fixo.
-// O documento tem largura fixa de página A4; travar o viewport em 740px faz
-// o celular encaixar o relatório inteiro na tela em vez de cortar as caixas
-// e obrigar a rolar para o lado.
+// Área do cliente: sem navegação e sem indexação.
 
 import type { Metadata, Viewport } from "next";
 
@@ -11,8 +8,11 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
+// Largura real do aparelho. Antes o viewport ficava travado em 740px para o
+// documento A4 encaixar por zoom-out — o que deixava tudo minúsculo. Agora
+// existe leitura empilhada de celular, então a página usa a tela como ela é.
 export const viewport: Viewport = {
-  width: 740,
+  width: "device-width",
   initialScale: 1,
 };
 
