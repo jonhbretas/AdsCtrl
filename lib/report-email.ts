@@ -134,12 +134,12 @@ function brandMark(size = 34): string {
           </table>`;
 }
 
-function brandHeader(): string {
+function brandHeader(brand: string): string {
   return `<table role="presentation" cellpadding="0" cellspacing="0" border="0">
             <tr>
               <td valign="middle">${brandMark(34)}</td>
               <td valign="middle" style="padding-left:9px;font-family:${FONT};font-size:15px;font-weight:bold;color:${INK};letter-spacing:-.2px;">
-                Assertivus
+                ${escapeHtml(brand)}
               </td>
             </tr>
           </table>`;
@@ -167,9 +167,12 @@ export interface ReportEmail {
 // Monta o e-mail a partir do MESMO payload que alimenta o relatório completo.
 export function renderReportEmail(
   report: ReportPayloadData,
-  options: { clientName: string; link: string; dashboardLink?: string; dryRun?: boolean }
+  options: { clientName: string; link: string; dashboardLink?: string; dryRun?: boolean; brand?: string | null }
 ): ReportEmail {
   const currency = report.account.currency || "BRL";
+  // Assertivus é o padrão da entrega; a marca do cliente sobrescreve quando
+  // configurada (clients.brand_name).
+  const brand = (options.brand || "").trim() || "Assertivus";
   const m = (v: number) => money(v, currency);
   const meta: any = report.meta && !report.meta.error ? report.meta : null;
   const k = meta?.kpis;
@@ -295,7 +298,7 @@ export function renderReportEmail(
         ${options.dryRun
           ? `<div style="background:#fff8e9;border:1px solid #edd49f;color:#8a6117;font-size:11px;font-family:${FONT};padding:7px 10px;border-radius:6px;margin-bottom:12px;">Envio de teste — o cliente não recebeu esta mensagem.</div>`
           : ""}
-        ${brandHeader()}
+        ${brandHeader(brand)}
         <div style="font-size:10px;font-weight:bold;letter-spacing:1.2px;text-transform:uppercase;color:${MUTED};font-family:${FONT};padding-top:16px;">Relatório de mídia paga</div>
         <div style="font-size:23px;font-weight:bold;color:${INK};font-family:${FONT};padding:6px 0 2px;">${escapeHtml(
           options.clientName
@@ -346,7 +349,7 @@ export function renderReportEmail(
       <tr><td style="padding:18px 22px 22px;">
         <div style="border-top:1px solid ${LINE};padding-top:12px;font-size:10.5px;color:${MUTED};font-family:${FONT};line-height:1.6;">
           Dados consultados diretamente nas plataformas de anúncio.
-          O link acima vale por 60 dias.<br>Relatório automático enviado pela Assertivus.
+          O link acima vale por 60 dias.<br>Relatório automático enviado pela ${escapeHtml(brand)}.
         </div>
       </td></tr>
     </table>

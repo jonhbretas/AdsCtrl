@@ -4,7 +4,7 @@
 // Ex: /api/report?account_id=act_123&since=2026-07-14&until=2026-07-20
 
 import { NextResponse } from "next/server";
-import { buildReport, defaultRange, ReportError, resultFamilyForAccount } from "@/lib/report-data";
+import { buildReport, clientReportSettings, defaultRange, ReportError } from "@/lib/report-data";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -19,11 +19,11 @@ export async function GET(req: Request) {
     const def = defaultRange();
     const since = searchParams.get("since") || def.since;
     const until = searchParams.get("until") || def.until;
-    const [report, result_family] = await Promise.all([
+    const [report, settings] = await Promise.all([
       buildReport(requested, since, until),
-      resultFamilyForAccount(requested),
+      clientReportSettings(requested),
     ]);
-    return NextResponse.json({ ...report, result_family });
+    return NextResponse.json({ ...report, result_family: settings.result_family, brand: settings.brand });
   } catch (e: any) {
     const status = e instanceof ReportError ? e.status : 500;
     return NextResponse.json({ error: e?.message ?? "Erro ao montar o relatório." }, { status });

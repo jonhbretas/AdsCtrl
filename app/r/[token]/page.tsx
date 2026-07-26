@@ -56,7 +56,7 @@ export default function PublicReportPage() {
       <div className="no-print" style={{ maxWidth: 740, margin: "0 auto 16px", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         <BrandMark size={22} />
         <span style={{ fontSize: 12, color: "#8a919e" }}>
-          Relatório de mídia paga · Assertivus
+          Relatório de mídia paga · {(data?.brand || "").trim() || "Assertivus"}
         </span>
         <span style={{ flex: 1 }} />
         <ModeToggle compact={compact} onChange={choose} />

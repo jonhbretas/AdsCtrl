@@ -28,36 +28,65 @@ export class ReportError extends Error {
 // Resolvido FORA do cache de propósito: trocar o foco no admin tem que valer no
 // próximo carregamento, e não daqui a 24h.
 export async function resultFamilyForAccount(accountId: string): Promise<string | null> {
-  if (supabaseEnvMissing()) return null;
-  try {
+  return (await clientReportSettings(accountId)).result_family;
+}
+
+export interface ClientReportSettings {
+  result_family: string | null;
+  /** Marca que assina o que o cliente vê. Nulo = Assertivus. */
+  brand: string | null;
+}
+
+// Resolve o cliente de uma conta e devolve o que o relatório precisa saber
+// sobre ele. Uma consulta serve as duas coisas: foco e marca.
+export async function clientReportSettings(accountId: string): Promise<ClientReportSettings> {
+  const empty: ClientReportSettings = { result_family: null, brand: null };
+  if (supabaseEnvMissing()) return empty;
+
+  // brand_name pode não existir ainda (supabase-migration-brand.sql). Tenta com
+  // a coluna e repete sem ela: marca é acabamento, não pode derrubar relatório.
+  const read = async (withBrand: boolean) => {
     const supabase = getServiceClient();
+    const columns = withBrand ? "result_family,brand_name" : "result_family";
     const bare = accountId.replace(/^act_/, "").replace(/^google:/, "");
 
-    const { data: direct } = await supabase
+    const direct = await supabase
       .from("clients")
-      .select("result_family")
+      .select(columns)
       .eq("source_meta_account_id", bare)
-      .not("result_family", "is", null)
       .limit(1);
-    if (direct?.[0]?.result_family) return direct[0].result_family;
+    if (direct.error) throw direct.error;
+    if (direct.data?.[0]) return direct.data[0] as any;
 
-    const { data: links } = await supabase
+    const links = await supabase
       .from("client_ad_accounts")
       .select("client_id")
       .eq("account_id", bare)
       .limit(1);
-    const clientId = links?.[0]?.client_id;
+    const clientId = links.data?.[0]?.client_id;
     if (!clientId) return null;
 
-    const { data: client } = await supabase
-      .from("clients")
-      .select("result_family")
-      .eq("id", clientId)
-      .limit(1);
-    return client?.[0]?.result_family ?? null;
+    const client = await supabase.from("clients").select(columns).eq("id", clientId).limit(1);
+    if (client.error) throw client.error;
+    return (client.data?.[0] as any) ?? null;
+  };
+
+  try {
+    let row: any;
+    try {
+      row = await read(true);
+    } catch (error: any) {
+      if (!/brand_name/.test(error?.message || "")) throw error;
+      row = await read(false);
+    }
+    if (!row) return empty;
+    return {
+      result_family: row.result_family ?? null,
+      brand: (row.brand_name ?? null) || null,
+    };
   } catch {
-    // O foco é refinamento de leitura; nunca pode derrubar o relatório.
-    return null;
+    // Foco e marca são refinamentos de leitura; nunca derrubam o relatório.
+    return empty;
   }
 }
 

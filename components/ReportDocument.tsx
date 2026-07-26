@@ -163,6 +163,9 @@ export interface ReportPayload {
   // Foco do cliente (clients.result_family). Define qual resultado é lido como
   // "o resultado" — sem isso, uma conta de conversas aparece medida por leads.
   result_family?: string | null;
+  // Marca que assina o documento (clients.brand_name). O painel interno é
+  // Ectolab; o que o cliente recebe é Assertivus, salvo configuração própria.
+  brand?: string | null;
   error?: string;
 }
 
@@ -237,6 +240,8 @@ export default function ReportDocument({
   // é sempre A4, custe o que custar — é o mesmo desenho que vai para o PDF.
   const w = compact ? Math.max(280, width ?? 340) : PAGE_W;
   const { meta, google, range, prevRange, account } = data;
+  // Assertivus é o padrão da entrega; brand só sobrescreve quando configurado.
+  const brand = (data.brand || "").trim() || "Assertivus";
   const cur = account.currency || "BRL";
   const m = (v: number, digits = 2) => money(v, cur, digits);
 
@@ -270,7 +275,7 @@ export default function ReportDocument({
       <section style={{ paddingBottom: 18, borderBottom: `2px solid ${INK}`, marginBottom: 20 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 14 }}>
           <BrandMark size={26} />
-          <span style={{ fontSize: 13, fontWeight: 750, letterSpacing: -0.2, color: INK }}>Assertivus</span>
+          <span style={{ fontSize: 13, fontWeight: 750, letterSpacing: -0.2, color: INK }}>{brand}</span>
         </div>
         <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1.4, color: MUTED, textTransform: "uppercase" }}>
           Relatório de mídia paga
@@ -343,7 +348,7 @@ export default function ReportDocument({
           {new Date(data.generated_at).toLocaleString("pt-BR")}.
         </div>
         {data.organic_note && <div style={{ marginTop: 3 }}>{data.organic_note}</div>}
-        <div style={{ marginTop: 3 }}>Gerado por Assertivus Dash.</div>
+        <div style={{ marginTop: 3 }}>Gerado por {brand}.</div>
       </footer>
     </div>
     </LayoutCtx.Provider>

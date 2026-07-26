@@ -87,17 +87,31 @@ async function handle(req: Request) {
     }
 
     const supabase = getServiceClient();
+    // brand_name entra no select por último de propósito: se a migração de
+    // marca não rodou, o catch abaixo já trata e o envio segue sem ela.
     let query = supabase
       .from("clients")
-      .select("id,name,timezone,report_email,report_enabled,source_meta_account_id,status")
+      .select("id,name,timezone,report_email,report_enabled,source_meta_account_id,status,brand_name")
       .neq("status", "archived");
     if (onlyClient) query = query.eq("id", onlyClient);
     else query = query.eq("report_enabled", true);
 
-    const [{ data: clients, error: clientsError }, { data: links }] = await Promise.all([
+    let [{ data: clients, error: clientsError }, { data: links }] = await Promise.all([
       query,
       supabase.from("client_ad_accounts").select("client_id,account_id,is_primary"),
     ]);
+    // Sem a migração de marca, repete a consulta sem a coluna: o envio semanal
+    // não pode falhar por causa de um campo de acabamento.
+    if (clientsError && /brand_name/.test(clientsError.message || "")) {
+      let retry = supabase
+        .from("clients")
+        .select("id,name,timezone,report_email,report_enabled,source_meta_account_id,status")
+        .neq("status", "archived");
+      retry = onlyClient ? retry.eq("id", onlyClient) : retry.eq("report_enabled", true);
+      const again = await retry;
+      clients = again.data as any;
+      clientsError = again.error;
+    }
     if (clientsError) {
       if (/report_email|report_enabled|report_sends/.test(clientsError.message || "")) {
         return NextResponse.json(
@@ -193,6 +207,8 @@ async function handle(req: Request) {
           link,
           dashboardLink: dashboard,
           dryRun,
+          // Marca do cliente quando configurada; Assertivus por padrão.
+          brand: (client as any).brand_name ?? null,
         });
         const sent = await sendEmail({
           to: recipient,

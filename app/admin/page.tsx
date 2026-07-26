@@ -33,6 +33,8 @@ interface ClientRecord {
   status: "active" | "paused" | "archived";
   objective: string | null;
   result_family: string | null;
+  /** Marca exibida ao cliente (relatório, painel, e-mail). Nulo = Assertivus. */
+  brand_name?: string | null;
   primary_kpi: string | null;
   target_value: number | null;
   monthly_budget: number | null;
@@ -899,6 +901,20 @@ function ReportDelivery({
           onUpdate(client.id, { report_email: value || null, ...(value ? {} : { report_enabled: false }) });
         }}
         style={{ ...compactInput, width: 240 }}
+      />
+      {/* Marca que o cliente vê. Vazio = Assertivus, que é o padrão da entrega;
+          o painel interno segue Ectolab de qualquer forma. */}
+      <input
+        key={`${client.id}-brand-${loadRevision}`}
+        defaultValue={client.brand_name ?? ""}
+        placeholder="marca no relatório (Assertivus)"
+        title="Nome que assina o relatório, o painel e o e-mail deste cliente. Vazio usa Assertivus."
+        onBlur={(e) => {
+          const value = e.target.value.trim();
+          if (value === (client.brand_name ?? "")) return;
+          onUpdate(client.id, { brand_name: value || null });
+        }}
+        style={{ ...compactInput, width: 210 }}
       />
       <label
         title={hasEmail ? "Enviar toda segunda-feira" : "Cadastre o e-mail antes de ativar"}

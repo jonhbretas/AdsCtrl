@@ -46,6 +46,14 @@ export async function PATCH(req: Request, { params }: RouteContext) {
       .eq("id", id)
       .select("id")
       .maybeSingle();
+    // "Could not find the 'brand_name' column" não diz nada a quem está usando
+    // a tela. Aponta o arquivo que resolve.
+    if (error && /brand_name/.test(error.message || "")) {
+      return NextResponse.json(
+        { error: "Rode supabase-migration-brand.sql no SQL Editor do Supabase para usar a marca por cliente." },
+        { status: 503 }
+      );
+    }
     if (error) throw error;
     if (!data) {
       return NextResponse.json({ error: "Cliente não encontrado." }, { status: 404 });

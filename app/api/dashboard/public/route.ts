@@ -52,14 +52,27 @@ export async function GET(req: Request) {
     }
 
     const supabase = getServiceClient();
-    const [{ data: client }, { data: links }] = await Promise.all([
+    // brand_name pode não existir ainda (supabase-migration-brand.sql): o painel
+    // do cliente não pode ficar fora do ar por causa de uma coluna de marca.
+    const readClient = async (withBrand: boolean) =>
       supabase
         .from("clients")
-        .select("id,name,status,source_meta_account_id,result_family")
+        .select(
+          withBrand
+            ? "id,name,status,source_meta_account_id,result_family,brand_name"
+            : "id,name,status,source_meta_account_id,result_family"
+        )
         .eq("id", payload.clientId)
-        .maybeSingle(),
-      supabase.from("client_ad_accounts").select("client_id,account_id,is_primary"),
-    ]);
+        .maybeSingle();
+
+    let clientResult = await readClient(true);
+    if (clientResult.error && /brand_name/.test(clientResult.error.message || "")) {
+      clientResult = await readClient(false);
+    }
+    const client = clientResult.data as any;
+    const { data: links } = await supabase
+      .from("client_ad_accounts")
+      .select("client_id,account_id,is_primary");
     if (!client) {
       return NextResponse.json({ error: "Cliente não encontrado." }, { status: 404 });
     }
@@ -104,8 +117,12 @@ export async function GET(req: Request) {
         range,
         cached,
         fetched_at,
-        // O foco fica fora do payload cacheado: trocar no admin vale na hora.
-        report: { ...report, result_family: client.result_family ?? null },
+        // Foco e marca ficam fora do payload cacheado: trocar no admin vale na hora.
+        report: {
+          ...report,
+          result_family: client.result_family ?? null,
+          brand: (client as any).brand_name ?? null,
+        },
         reports,
       },
       { headers: { "Cache-Control": "no-store" } }
