@@ -413,23 +413,221 @@
   flex-shrink: 0;
 }
 
-/* No celular o rótulo do menu sai e fica o ícone; a marca encurta. */
+/* No celular os sete itens do topo saíam como ícones de 29x32px sem rótulo:
+   ninguém adivinha o que "⌁" faz, e 29px erra o toque. Eles saem daqui e
+   voltam na barra inferior, com nome e 56px de altura. */
 @media (max-width: 720px) {
   .ec-nav {
     padding: 0 var(--sp-3);
     gap: var(--sp-2);
   }
-  .ec-nav__brand span {
+  .ec-nav {
+    height: 50px;
+  }
+  .ec-nav__links {
     display: none;
   }
-  .ec-nav__link {
-    padding: 7px 9px;
-  }
-  .ec-nav__label {
+  /* "Sair" reaparece na folha de "Mais", ao alcance do polegar. */
+  .ec-nav__tail {
     display: none;
   }
-  .ec-nav__group {
-    display: none;
+}
+
+/* --------------------------------------------- barra inferior (celular) --- */
+/* Quatro destinos alcançáveis com o polegar. O quinto item é "Mais", que
+   abre a folha com o resto — nada foi removido do app. */
+.ec-tabbar {
+  display: none;
+}
+.ec-tabbar__item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-height: 56px;
+  border: none;
+  background: transparent;
+  text-decoration: none;
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.ec-tabbar__item[data-active] {
+  color: var(--brand-700);
+}
+/* Faixa no topo do item ativo: indicador que não depende de cor. */
+.ec-tabbar__item[data-active]::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 22%;
+  right: 22%;
+  height: 2px;
+  border-radius: 0 0 2px 2px;
+  background: var(--brand-500);
+}
+.ec-tabbar__icon {
+  font-size: 17px;
+  line-height: 1;
+}
+
+@media (max-width: 720px) {
+  .ec-tabbar {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    position: fixed;
+    inset: auto 0 0 0;
+    z-index: 60;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+    box-shadow: 0 -2px 12px rgb(15 42 54 / 8%);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
+
+/* Aviso de tela larga: existe só no celular. */
+.ec-widehint {
+  display: none;
+}
+@media (max-width: 720px) {
+  .ec-widehint {
+    display: block;
+    margin: 0 0 var(--sp-4);
+    padding: 10px 12px;
+    border-radius: var(--r-sm);
+    border: 1px solid var(--border);
+    background: var(--surface-sunken);
+    color: var(--text-muted);
+    font-size: 12.5px;
+    line-height: 1.45;
+  }
+}
+
+/* ------------------------------------------------- folha inferior ("Mais") --- */
+.ec-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: flex-end;
+  background: rgb(15 42 54 / 42%);
+  border: none;
+  padding: 0;
+  width: 100%;
+}
+.ec-sheet__panel {
+  width: 100%;
+  background: var(--surface);
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  padding: var(--sp-3) var(--sp-3) calc(var(--sp-4) + env(safe-area-inset-bottom, 0px));
+  box-shadow: var(--shadow-md);
+}
+.ec-sheet__grip {
+  width: 40px;
+  height: 4px;
+  border-radius: var(--r-full);
+  background: var(--border-strong);
+  margin: 0 auto var(--sp-3);
+}
+.ec-sheet__item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  min-height: 52px;
+  padding: 0 var(--sp-3);
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  text-align: left;
+  text-decoration: none;
+  color: var(--text-strong);
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ec-sheet__item[data-active] {
+  background: var(--brand-50);
+  color: var(--brand-700);
+}
+.ec-sheet__item small {
+  display: block;
+  font-family: var(--font-text);
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+.ec-sheet__sep {
+  height: 1px;
+  background: var(--border);
+  margin: var(--sp-2) var(--sp-3);
+}
+
+/* ------------------------------------------------- alvo de toque no celular --- */
+/* WCAG 2.5.5 e o guia da Apple pedem 44px. Vale só no celular: com mouse o
+   alvo menor é preciso e devolve altura de tela, que ali é escassa. */
+@media (max-width: 720px) {
+  .ec-btn[data-size="sm"],
+  .ec-btn[data-size="md"] {
+    min-height: 44px;
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+  .ec-seg > button {
+    min-height: 44px;
+    padding: 8px 12px;
+  }
+  .ec-input,
+  .ec-tab {
+    min-height: 44px;
+  }
+  /* Quatro ações do cabeçalho em coluna consumiam ~200px antes do primeiro
+     número. Duas por linha, e o primário fica sozinho na última. */
+  .ec-pagehead__actions > * {
+    flex: 1 1 calc(50% - var(--sp-2));
+  }
+  /* O alvo é o rótulo inteiro, não a caixa de 15px dentro dele. */
+  .ec-ack {
+    min-height: 44px;
+  }
+  /* Botão só de ícone ("✕") ficava com 40px de largura. */
+  .ec-btn[data-size="sm"],
+  .ec-btn[data-size="md"] {
+    min-width: 44px;
+  }
+  /* Ordenar coluna era uma linha de texto de 15px de altura. Só a altura:
+     alargar o cabeçalho alargaria a tabela, que já rola de lado. */
+  .ec-sortbtn {
+    min-height: 44px;
+  }
+  .ec-nav__brand {
+    min-height: 44px;
+  }
+  /* Telas ainda em estilo inline (Criativos, Raio-X) entram na regra por
+     esta classe, sem precisar reescrever o componente inteiro agora. */
+  .ec-seg-item,
+  .ec-touch {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  /* Configurações é um formulário de 330 controles em estilo inline: um por
+     um seria reescrever a tela. A zona aplica a regra a todos de uma vez —
+     `min-height` não é declarado inline em nenhum deles, então pega. */
+  .ec-touchzone input:not([type="checkbox"]):not([type="radio"]),
+  .ec-touchzone select,
+  .ec-touchzone textarea,
+  .ec-touchzone button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  /* Caixa de marcar: o alvo é o rótulo em volta dela. */
+  .ec-touchzone label {
+    min-height: 44px;
   }
 }
 
@@ -441,7 +639,9 @@
 }
 @media (max-width: 720px) {
   .ec-page {
-    padding: var(--sp-4) var(--sp-3) var(--sp-6);
+    /* A barra inferior é fixa: sem esta folga ela cobre a última linha da
+       tabela, e quem rola até o fim não vê que chegou ao fim. */
+    padding: var(--sp-4) var(--sp-3) calc(56px + var(--sp-6) + env(safe-area-inset-bottom, 0px));
   }
 }
 
@@ -596,6 +796,42 @@
   flex-wrap: wrap;
   margin-bottom: var(--sp-3);
 }
+/* No celular a régua de filtros empilhava treze controles antes do primeiro
+   número — uma tela inteira de rolagem para chegar ao dado. Ela passa a
+   abrir por toque; o botão diz o período em vigor e quantos filtros estão
+   fora do padrão, para não esconder decisão. No computador nada muda. */
+.ec-filters__toggle {
+  display: none;
+}
+@media (max-width: 720px) {
+  .ec-filters__toggle {
+    display: flex;
+    margin-bottom: var(--sp-3);
+  }
+  .ec-filters {
+    display: none;
+  }
+  .ec-filters[data-open] {
+    display: block;
+  }
+  /* Empilhado, controle pela metade não se lê: cada um ocupa a linha. */
+  .ec-filters .ec-toolbar > * {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+  .ec-filters .ec-seg {
+    display: flex;
+    flex-wrap: wrap;
+  }
+  .ec-filters .ec-seg > button {
+    flex: 1 1 auto;
+  }
+  .ec-filters .ec-inline-field,
+  .ec-filters .ec-inline-field .ec-input {
+    width: 100%;
+  }
+}
+
 .ec-inline-field {
   display: inline-flex;
   align-items: center;
@@ -628,6 +864,21 @@
   gap: var(--sp-3);
   margin-bottom: var(--sp-5);
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
+}
+/* Um indicador por linha empurrava os cinco para 600px de rolagem. Dois por
+   linha ainda cabem legíveis em 390px e cortam isso pela metade. */
+@media (max-width: 720px) {
+  .ec-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--sp-2);
+  }
+  /* Em meia largura, 25px quebra "R$ 15.048,23" em duas linhas. */
+  .ec-kpis .ec-kpi {
+    padding: 12px;
+  }
+  .ec-kpis .ec-kpi__value {
+    font-size: 21px;
+  }
 }
 
 /* Alertas + tabela. A coluna lateral só existe quando há largura para ela;

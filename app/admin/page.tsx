@@ -11,7 +11,7 @@ import {
   usePersistentSort,
 } from "@/components/SortableHeader";
 import { RESULT_FAMILY_BY_SLUG } from "@/lib/format";
-import { Badge, Notice, PageHeader, Skeleton, SkeletonCard } from "@/components/ui";
+import { Badge, Notice, PageHeader, Skeleton, SkeletonCard, WideScreenHint } from "@/components/ui";
 
 interface Group {
   id: string;
@@ -457,7 +457,7 @@ export default function Admin() {
 
   if (loading) {
     return (
-      <div className="ec-page" style={{ maxWidth: 1100 }}>
+      <div className="ec-page ec-touchzone" style={{ maxWidth: 1100 }}>
         <div style={{ display: "grid", gap: "var(--sp-3)", maxWidth: 420, marginBottom: "var(--sp-5)" }}>
           <Skeleton h={28} w="50%" />
           <Skeleton h={14} w="78%" />
@@ -468,7 +468,7 @@ export default function Admin() {
   }
 
   return (
-    <div className="ec-page" style={{ maxWidth: 1100 }}>
+    <div className="ec-page ec-touchzone" style={{ maxWidth: 1100 }}>
       <PageHeader
         title="Configurações"
         subtitle={`Metas, orçamento e envio semanal. ${accounts.length} contas no catálogo.`}
@@ -478,6 +478,11 @@ export default function Admin() {
           </a>
         }
       />
+
+      <WideScreenHint>
+        A tabela de metas por cliente é larga e rola para o lado. Ajustes rápidos
+        funcionam bem aqui; configurar tudo de uma vez é mais confortável no computador.
+      </WideScreenHint>
 
       {error && (
         <div style={{ marginBottom: "var(--sp-4)" }}>

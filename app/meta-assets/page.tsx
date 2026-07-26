@@ -15,6 +15,7 @@ import {
   PageHeader,
   Select as UiSelect,
   SkeletonCard,
+  WideScreenHint,
 } from "@/components/ui";
 
 type Connection = {
@@ -419,6 +420,8 @@ export default function MetaAssetsPage() {
           </div>
         }
       />
+
+      <WideScreenHint />
 
       {error && (
         <div style={{ marginBottom: "var(--sp-3)" }}>

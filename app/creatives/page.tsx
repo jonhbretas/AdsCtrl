@@ -21,6 +21,7 @@ import {
   Segmented,
   Select as UiSelect,
   SkeletonCard,
+  WideScreenHint,
 } from "@/components/ui";
 
 type AccountOption = { account_id: string; name: string; platform: string; hidden?: boolean; status: string };
@@ -516,6 +517,8 @@ export default function CreativesPage() {
         }
       />
 
+      <WideScreenHint />
+
       {error && (
         <div style={{ marginBottom: "var(--sp-4)" }}>
           <Notice tone="danger" onDismiss={() => setError(null)}>{error}</Notice>
@@ -579,6 +582,7 @@ export default function CreativesPage() {
               </div>
               <Field label="Objetivo">
                 <select
+                  className="ec-touch"
                   value={goalFilter}
                   onChange={(event) =>
                     setGoalFilter(event.target.value as GoalFilter)
@@ -593,7 +597,7 @@ export default function CreativesPage() {
                   ))}
                 </select>
               </Field>
-              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar criativo…" style={{ ...inputStyle, minWidth: 180 }} />
+              <input className="ec-touch" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar criativo…" style={{ ...inputStyle, minWidth: 180 }} />
               <span style={{ flex: 1 }} />
               {goalFilter === "all" && goalOptions.length > 1 && (
                 <span

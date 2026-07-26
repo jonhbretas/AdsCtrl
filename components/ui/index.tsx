@@ -114,6 +114,19 @@ export function PageHeader({
   );
 }
 
+/* ------------------------------------------------------- WideScreenHint ---
+   Criativos e Raio-X comparam 11 e 13 colunas: o valor delas está em ver tudo
+   lado a lado, e nenhuma reorganização faz isso caber em 390px. Em vez de
+   fingir que cabe, a tela avisa — e diz que a tabela rola de lado, porque
+   muita gente simplesmente não descobre que rola. Só aparece no celular. */
+export function WideScreenHint({ children }: { children?: React.ReactNode }) {
+  return (
+    <p className="ec-widehint">
+      {children || "Esta tela compara muitas colunas ao mesmo tempo — as tabelas rolam para o lado. No computador ela fica bem mais confortável."}
+    </p>
+  );
+}
+
 /* -------------------------------------------------------------- Skeleton ---
    Substitui a frase "Carregando…", que fazia o layout saltar quando os dados
    chegavam. O esqueleto ocupa o espaço final desde o primeiro quadro. */

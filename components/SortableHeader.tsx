@@ -140,6 +140,7 @@ export function SortButton<Key extends string>({
   return (
     <button
       type="button"
+      className="ec-sortbtn"
       onClick={() => onSort(nextSort(sort, column, initialDirection))}
       aria-label={`Ordenar ${accessibleLabel} em ordem ${nextDirection}`}
       aria-pressed={active}

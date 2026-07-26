@@ -163,6 +163,7 @@ export default function Dashboard() {
   const [customUntil, setCustomUntil] = useState(isoDaysAgo(1));
   const [showCustom, setShowCustom] = useState(false);
   const [showHidden, setShowHidden] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -522,6 +523,17 @@ export default function Dashboard() {
   }, [accounts]);
 
   const groupById = (id: string | null) => groups.find((g) => g.id === id);
+  // Filtro recolhido no celular não pode virar filtro esquecido: o botão diz
+  // o período em vigor e conta o que está fora do padrão.
+  const activeFilters = [
+    groupFilter !== "all",
+    platformFilter !== "meta",
+    !onlyActive,
+    search.trim() !== "",
+    showHidden,
+  ].filter(Boolean).length;
+  const periodLabel =
+    period === "custom" ? "personalizado" : PRESETS.find((p) => p.key === period)?.label || period;
   const short = PERIOD_SHORT[period];
   const fam = RESULT_FAMILY_BY_SLUG[focus] || RESULT_FAMILIES[0];
   const primaryCurrency = totals.currencyTotals[0]?.currency || "BRL";
@@ -645,6 +657,20 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* No celular tudo daqui até o fim da régua entra atrás deste botão. */}
+      <Button
+        className="ec-filters__toggle"
+        variant="secondary"
+        size="sm"
+        onClick={() => setFiltersOpen((open) => !open)}
+        aria-expanded={filtersOpen}
+        aria-controls="filtros-visao-geral"
+      >
+        ☰ Filtros · {periodLabel}
+        {activeFilters > 0 ? ` (${activeFilters})` : ""}
+      </Button>
+
+      <div className="ec-filters" id="filtros-visao-geral" data-open={filtersOpen ? "true" : undefined}>
       {/* GRUPOS (chips) */}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
         <Chip active={groupFilter === "all"} onClick={() => setGroupFilter("all")} label="Todos" color="#111" />
@@ -722,6 +748,7 @@ export default function Dashboard() {
             { value: "custom", label: "Personalizado" },
           ]}
         />
+      </div>
       </div>
 
       {/* LINHA DE PERÍODO (datas + procedência do dado) */}
@@ -808,7 +835,7 @@ export default function Dashboard() {
                       <div style={{ fontSize: 13, fontWeight: 600, color: st.fg }}>{a.account_name}</div>
                       <div style={{ fontSize: 12, color: "#666", marginTop: 2 }}>{a.title}</div>
                       <div style={{ fontSize: 12, color: "#888", marginTop: 1 }}>{a.detail}</div>
-                      <label style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8, fontSize: 12, color: st.fg, cursor: "pointer", userSelect: "none" }}>
+                      <label className="ec-ack" style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8, fontSize: 12, color: st.fg, cursor: "pointer", userSelect: "none" }}>
                         <input
                           type="checkbox"
                           checked={false}
@@ -942,6 +969,7 @@ export default function Dashboard() {
                   </div>
                   <BalanceCell account={a} />
                   <button
+                    className="ec-touch"
                     onClick={(e) => { e.stopPropagation(); toggleHidden(a.account_id, !a.hidden); }}
                     title={a.hidden ? "Reexibir esta conta" : "Ocultar esta conta do dashboard"}
                     style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14, color: "#bbb", padding: 0, lineHeight: 1 }}

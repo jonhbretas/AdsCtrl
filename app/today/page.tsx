@@ -342,6 +342,7 @@ export default function TodayPage() {
           <div style={{ display: "flex", justifyContent: "flex-end", padding: "7px 12px", borderBottom: "1px solid #eee", background: "#fff" }}>
             <button
               type="button"
+              className="ec-touch"
               onClick={() => setSort({ key: "priority", direction: "asc" })}
               style={{ border: 0, background: sort.key === "priority" ? "#eef5ff" : "transparent", color: sort.key === "priority" ? "#286fc9" : "#888", borderRadius: 7, padding: "5px 8px", fontSize: 10.5, fontWeight: 700, cursor: "pointer" }}
             >
