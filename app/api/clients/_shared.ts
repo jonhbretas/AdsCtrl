@@ -151,6 +151,21 @@ export function clientPatchFromBody(body: unknown, creating = false): Record<str
     patch.notes = nullableText(input.notes, "notes", 5000);
   }
 
+  if (Object.prototype.hasOwnProperty.call(input, "report_email")) {
+    const email = nullableText(input.report_email, "report_email", 180);
+    if (email && !/^[^@\s]+@[^@\s.]+\.[^@\s]+$/.test(email)) {
+      throw new ClientInputError("report_email deve ser um endereço de e-mail válido.");
+    }
+    patch.report_email = email;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(input, "report_enabled")) {
+    if (typeof input.report_enabled !== "boolean") {
+      throw new ClientInputError("report_enabled deve ser true ou false.");
+    }
+    patch.report_enabled = input.report_enabled;
+  }
+
   return patch;
 }
 

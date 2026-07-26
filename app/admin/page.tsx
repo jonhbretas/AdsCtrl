@@ -38,6 +38,9 @@ interface ClientRecord {
   currency: string;
   timezone: string;
   budget_start_day: number;
+  report_email?: string | null;
+  report_enabled?: boolean;
+  report_last_sent_at?: string | null;
   accounts: Account[];
 }
 type ClientAdminSortKey =
@@ -492,7 +495,8 @@ export default function Admin() {
                 <SortButton column="cycle" sort={clientSort} onSort={setClientSort} align="left">Ciclo</SortButton>
               </div>
             {sortedClients.map((client) => (
-              <div key={client.id} style={{ display: "grid", gridTemplateColumns: CLIENT_GRID, gap: 9, alignItems: "end", border: "1px solid #e9e9e6", borderRadius: 12, padding: "12px 14px", background: "#fff" }}>
+              <div key={client.id} style={{ border: "1px solid #e9e9e6", borderRadius: 12, background: "#fff" }}>
+                <div style={{ display: "grid", gridTemplateColumns: CLIENT_GRID, gap: 9, alignItems: "end", padding: "12px 14px" }}>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 14, fontWeight: 650, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{client.name}</div>
                   <div style={{ display: "flex", gap: 5, marginTop: 5 }}>
@@ -594,6 +598,13 @@ export default function Admin() {
                     ))}
                   </select>
                 </Field>
+                </div>
+                <ReportDelivery
+                  client={client}
+                  loadRevision={loadRevision}
+                  onUpdate={updateClient}
+                  onError={setError}
+                />
               </div>
             ))}
             {!clients.length && <div style={{ color: "#999", fontSize: 13 }}>Nenhum cliente ativo.</div>}
@@ -800,6 +811,102 @@ export default function Admin() {
           </div>
         </div>
       </section>
+    </div>
+  );
+}
+
+// Faixa de envio semanal por cliente. O envio real só liga aqui, cliente a
+// cliente — e o teste manda para REPORT_TEST_EMAIL, nunca para o cliente.
+function ReportDelivery({
+  client,
+  loadRevision,
+  onUpdate,
+  onError,
+}: {
+  client: ClientRecord;
+  loadRevision: number;
+  onUpdate: (id: string, patch: Partial<ClientRecord>) => void;
+  onError: (message: string) => void;
+}) {
+  const [sending, setSending] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const hasEmail = Boolean((client.report_email || "").trim());
+
+  async function sendTest() {
+    setSending(true);
+    setFeedback(null);
+    try {
+      const response = await fetch(`/api/reports/send?client=${encodeURIComponent(client.id)}&dry=1`, {
+        method: "POST",
+      });
+      const payload = await response.json();
+      if (!response.ok || payload.error) throw new Error(payload.error || `Falha (HTTP ${response.status}).`);
+      const result = payload.results?.[0];
+      setFeedback(
+        result?.status === "sent"
+          ? `Teste enviado para ${result.recipient}.`
+          : `Não enviado: ${result?.reason || "sem retorno"}.`
+      );
+    } catch (e: any) {
+      onError(e?.message || "Falha ao enviar o teste.");
+    } finally {
+      setSending(false);
+      window.setTimeout(() => setFeedback(null), 8000);
+    }
+  }
+
+  return (
+    <div style={{ borderTop: "1px solid #f0f0ee", padding: "10px 14px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", background: "#fcfcfb", borderRadius: "0 0 12px 12px" }}>
+      <span style={{ fontSize: 10, fontWeight: 750, textTransform: "uppercase", letterSpacing: 0.25, color: "#888" }}>
+        Relatório semanal
+      </span>
+      <input
+        key={`${client.id}-report-email-${loadRevision}`}
+        type="email"
+        defaultValue={client.report_email ?? ""}
+        placeholder="e-mail do cliente"
+        onBlur={(e) => {
+          const value = e.target.value.trim();
+          if (value === (client.report_email ?? "")) return;
+          onUpdate(client.id, { report_email: value || null, ...(value ? {} : { report_enabled: false }) });
+        }}
+        style={{ ...compactInput, width: 240 }}
+      />
+      <label
+        title={hasEmail ? "Enviar toda segunda-feira" : "Cadastre o e-mail antes de ativar"}
+        style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: hasEmail ? "#333" : "#aaa" }}
+      >
+        <input
+          type="checkbox"
+          checked={Boolean(client.report_enabled)}
+          disabled={!hasEmail}
+          onChange={(e) => onUpdate(client.id, { report_enabled: e.target.checked })}
+        />
+        Enviar toda segunda
+      </label>
+      <button
+        onClick={sendTest}
+        disabled={sending}
+        title="Gera o relatório da semana passada e manda para o endereço de teste"
+        style={{
+          padding: "6px 11px",
+          borderRadius: 8,
+          border: "1px dashed #b9d5fb",
+          background: "#fff",
+          color: "#1768ca",
+          fontSize: 11,
+          fontWeight: 650,
+          cursor: sending ? "default" : "pointer",
+        }}
+      >
+        {sending ? "Enviando…" : "Enviar teste para mim"}
+      </button>
+      {feedback && <span style={{ fontSize: 11, color: "#2b7143" }}>{feedback}</span>}
+      {client.report_last_sent_at && (
+        <span style={{ fontSize: 10.5, color: "#aaa" }}>
+          último envio: {new Date(client.report_last_sent_at).toLocaleDateString("pt-BR")}
+        </span>
+      )}
     </div>
   );
 }

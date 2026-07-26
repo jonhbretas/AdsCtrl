@@ -11,9 +11,17 @@ import {
 const LOGIN_PAGE = "/login";
 const LOGIN_API = "/api/auth/login";
 const COLLECT_API = "/api/collect";
+// Relatório que o cliente abre pelo link assinado: a autorização é o token
+// dentro da própria URL, verificado na rota (lib/report-token.ts).
+const PUBLIC_REPORT_PAGE = "/r/";
+const PUBLIC_REPORT_API = "/api/report/public";
 
 function isApiPath(pathname: string): boolean {
   return pathname === "/api" || pathname.startsWith("/api/");
+}
+
+function isSignedReportPath(pathname: string): boolean {
+  return pathname.startsWith(PUBLIC_REPORT_PAGE) || pathname === PUBLIC_REPORT_API;
 }
 
 function configurationError() {
@@ -47,6 +55,9 @@ export async function proxy(request: NextRequest) {
 
   // O formulário e a API de login precisam permanecer acessíveis sem sessão.
   if (isLoginApi) return NextResponse.next();
+
+  // Link assinado do relatório: chega sem sessão, por definição.
+  if (isSignedReportPath(pathname)) return NextResponse.next();
 
   // O cron é independente da sessão do dashboard e continua operacional
   // durante uma eventual configuração inicial das variáveis de autenticação.
