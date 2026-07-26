@@ -147,6 +147,9 @@ export interface ReportPayload {
   meta: MetaDetail | null;
   google: GoogleBlock[];
   organic_note?: string;
+  // Foco do cliente (clients.result_family). Define qual resultado é lido como
+  // "o resultado" — sem isso, uma conta de conversas aparece medida por leads.
+  result_family?: string | null;
   error?: string;
 }
 
@@ -162,6 +165,51 @@ const dec = (v: number, digits = 1) => v.toFixed(digits).replace(".", ",");
 const MESSAGE_KEYS = RESULT_FAMILY_BY_SLUG.mensagens.keys;
 const LEAD_KEYS = RESULT_FAMILY_BY_SLUG.leads.keys;
 const REGISTER_KEYS = RESULT_FAMILY_BY_SLUG.cadastros.keys;
+
+// ---------- foco do cliente ----------
+// Rótulos curtos para a coluna das tabelas e para o custo unitário. "Conversas
+// iniciadas" não cabe num cabeçalho de 66px, e "Custo por resultado" diz menos
+// que "Custo por conversa".
+const FOCUS_SHORT: Record<string, string> = {
+  vendas: "Compras",
+  mensagens: "Conversas",
+  leads: "Leads",
+  cadastros: "Cadastros",
+  cliques: "Cliques",
+  lpv: "Views de LP",
+  engajamento: "Engajamento",
+};
+const FOCUS_COST: Record<string, string> = {
+  vendas: "Custo por compra",
+  mensagens: "Custo por conversa",
+  leads: "Custo por lead",
+  cadastros: "Custo por cadastro",
+  cliques: "Custo por clique no link",
+  lpv: "Custo por view de LP",
+  engajamento: "Custo por engajamento",
+};
+
+interface Focus {
+  slug: string;
+  label: string; // "Conversas iniciadas"
+  short: string; // "Conversas"
+  costLabel: string; // "Custo por conversa"
+  keys: string[];
+}
+
+// "conversoes" não tem action_type próprio (é o agregado da Meta): sem chaves
+// não dá para ancorar nada, então vale como "sem foco" e a heurística decide.
+function resolveFocus(slug?: string | null): Focus | null {
+  const family = slug ? RESULT_FAMILY_BY_SLUG[slug] : null;
+  if (!family || family.keys.length === 0) return null;
+  return {
+    slug: family.slug,
+    label: family.label,
+    short: FOCUS_SHORT[family.slug] || family.label,
+    costLabel: FOCUS_COST[family.slug] || "Custo por resultado",
+    keys: family.keys,
+  };
+}
 
 export default function ReportDocument({ data }: { data: ReportPayload }) {
   const { meta, google, range, prevRange, account } = data;
@@ -252,7 +300,7 @@ export default function ReportDocument({ data }: { data: ReportPayload }) {
           <Warn>Não foi possível carregar os dados da Meta: {meta.error}</Warn>
         </Block>
       )}
-      {metaOk && <MetaSection detail={meta!} currency={cur} accountName={account.name} />}
+      {metaOk && <MetaSection detail={meta!} currency={cur} accountName={account.name} focus={resolveFocus(data.result_family)} />}
 
       {/* ---------------- GOOGLE ADS ---------------- */}
       {google.map((g) => (
@@ -278,7 +326,17 @@ export default function ReportDocument({ data }: { data: ReportPayload }) {
 // SEÇÃO META ADS
 // ==========================================================================
 
-function MetaSection({ detail, currency, accountName }: { detail: MetaDetail; currency: string; accountName: string }) {
+function MetaSection({
+  detail,
+  currency,
+  accountName,
+  focus,
+}: {
+  detail: MetaDetail;
+  currency: string;
+  accountName: string;
+  focus: Focus | null;
+}) {
   const k = detail.kpis;
   const p = detail.prevKpis;
   const m = (v: number, digits = 2) => money(v, currency, digits);
@@ -299,6 +357,13 @@ function MetaSection({ detail, currency, accountName }: { detail: MetaDetail; cu
   const prevLeads = pickVal(p.results, LEAD_KEYS) + pickVal(p.results, REGISTER_KEYS);
   const messages = pickVal(k.results, MESSAGE_KEYS);
   const prevMessages = pickVal(p.results, MESSAGE_KEYS);
+
+  // O resultado que o cliente contratou abre a grade e vira a coluna
+  // "Resultado" das tabelas. O resto continua no relatório, mas para de
+  // disputar o papel de métrica principal.
+  const focusValue = focus ? pickVal(k.results, focus.keys) : 0;
+  const prevFocusValue = focus ? pickVal(p.results, focus.keys) : 0;
+  const showFocus = Boolean(focus) && focusValue > 0;
 
   const daily = detail.daily.map((d) => ({
     label: dayLabel(d.date),
@@ -332,6 +397,27 @@ function MetaSection({ detail, currency, accountName }: { detail: MetaDetail; cu
         <SectionTitle color={META} kicker="Meta Ads · Facebook e Instagram">{detail.name || accountName}</SectionTitle>
 
         <Grid cols={4}>
+          {showFocus && focus && (
+            <>
+              <Kpi
+                label={focus.label}
+                value={num(focusValue)}
+                cur={focusValue}
+                prev={prevFocusValue}
+                prevText={num(prevFocusValue)}
+                accent
+              />
+              <Kpi
+                label={focus.costLabel}
+                value={m(k.spend / focusValue)}
+                cur={k.spend / focusValue}
+                prev={prevFocusValue ? p.spend / prevFocusValue : undefined}
+                prevText={prevFocusValue ? m(p.spend / prevFocusValue) : undefined}
+                invert
+                accent
+              />
+            </>
+          )}
           <Kpi label="Valor investido" value={m(k.spend)} cur={k.spend} prev={p.spend} prevText={m(p.spend)} neutral />
           <Kpi label="Impressões" value={num(k.impressions)} cur={k.impressions} prev={p.impressions} prevText={num(p.impressions)} />
           <Kpi label="Alcance" value={num(k.reach)} cur={k.reach} prev={p.reach} prevText={num(p.reach)} />
@@ -341,7 +427,7 @@ function MetaSection({ detail, currency, accountName }: { detail: MetaDetail; cu
           <Kpi label="CTR (link)" value={pct(linkCtr)} cur={linkCtr} prev={prevLinkCtr} prevText={pct(prevLinkCtr)} />
           <Kpi label="CPC médio" value={m(cpc)} cur={cpc} prev={prevCpc} prevText={m(prevCpc)} invert />
           <Kpi label="CPM médio" value={m(k.cpm)} cur={k.cpm} prev={p.cpm} prevText={m(p.cpm)} invert />
-          {messages > 0 && (
+          {messages > 0 && focus?.slug !== "mensagens" && (
             <>
               <Kpi label="Conversas iniciadas" value={num(messages)} cur={messages} prev={prevMessages} prevText={num(prevMessages)} />
               <Kpi
@@ -354,7 +440,7 @@ function MetaSection({ detail, currency, accountName }: { detail: MetaDetail; cu
               />
             </>
           )}
-          {leads > 0 && (
+          {leads > 0 && focus?.slug !== "leads" && (
             <>
               <Kpi label="Cadastros / leads" value={num(leads)} cur={leads} prev={prevLeads} prevText={num(prevLeads)} />
               <Kpi
@@ -369,7 +455,7 @@ function MetaSection({ detail, currency, accountName }: { detail: MetaDetail; cu
           )}
           {purchaseValue > 0 && (
             <>
-              <Kpi label="Compras" value={num(purchases)} />
+              {focus?.slug !== "vendas" && <Kpi label="Compras" value={num(purchases)} />}
               <Kpi
                 label="ROAS"
                 value={k.spend ? mult(purchaseValue / k.spend) : "—"}
@@ -535,19 +621,19 @@ function MetaSection({ detail, currency, accountName }: { detail: MetaDetail; cu
 
       <Block>
         <Card title="Campanhas em destaque" keep={false}>
-          <RowsTable rows={detail.campaigns.slice(0, 10)} currency={currency} />
+          <RowsTable rows={detail.campaigns.slice(0, 10)} currency={currency} focus={focus} />
         </Card>
       </Block>
 
       <Block>
         <Card title="Conjuntos de anúncios em destaque" keep={false}>
-          <RowsTable rows={detail.adsets.slice(0, 10)} currency={currency} />
+          <RowsTable rows={detail.adsets.slice(0, 10)} currency={currency} focus={focus} />
         </Card>
       </Block>
 
       <Block>
         <Card title="Anúncios em destaque" keep={false}>
-          <RowsTable rows={detail.ads.slice(0, 10)} currency={currency} thumbs />
+          <RowsTable rows={detail.ads.slice(0, 10)} currency={currency} thumbs focus={focus} />
         </Card>
       </Block>
     </>
@@ -555,11 +641,18 @@ function MetaSection({ detail, currency, accountName }: { detail: MetaDetail; cu
 }
 
 // Resultado principal de uma linha (o que a campanha entregou de mais relevante).
-// A API não diz qual era o objetivo da campanha, então usamos prioridade por
-// tipo de conversão — mas só quando o volume faz sentido para a linha: uma
-// campanha de tráfego com 25 mil cliques e 4 conversas incidentais deve
-// aparecer como cliques, não como conversas.
-function primaryRowResult(row: Row): { label: string; value: number } | null {
+// Com foco configurado, ele manda: se a linha entregou aquilo, é aquilo que
+// aparece — nada de uma campanha de conversas ser lida por um lead avulso do
+// pixel só porque "lead" vem antes na lista.
+// Sem foco, a API não diz qual era o objetivo da campanha, então cai na
+// prioridade por tipo de conversão — e só quando o volume faz sentido para a
+// linha: uma campanha de tráfego com 25 mil cliques e 4 conversas incidentais
+// deve aparecer como cliques, não como conversas.
+function primaryRowResult(row: Row, focus: Focus | null): { label: string; value: number } | null {
+  if (focus) {
+    const v = pickVal(row.results, focus.keys);
+    if (v > 0) return { label: focus.short, value: v };
+  }
   const conversionTiers: [string[], string][] = [
     [PURCHASE_KEYS, "Compras"],
     [LEAD_KEYS, "Leads"],
@@ -586,15 +679,35 @@ function primaryRowResult(row: Row): { label: string; value: number } | null {
   return best ? { label: resultLabel(best[0]), value: best[1] } : null;
 }
 
-function RowsTable({ rows, currency, thumbs }: { rows: Row[]; currency: string; thumbs?: boolean }) {
+function RowsTable({
+  rows,
+  currency,
+  thumbs,
+  focus,
+}: {
+  rows: Row[];
+  currency: string;
+  thumbs?: boolean;
+  focus: Focus | null;
+}) {
   const m = (v: number) => money(v, currency);
   if (rows.length === 0) return <Empty>Sem dados no período.</Empty>;
+
+  const results = rows.map((r) => primaryRowResult(r, focus));
+  // O cabeçalho só nomeia a métrica quando TODA linha visível está medindo
+  // aquilo. Se alguma caiu na heurística, "Conversas" no topo com "Cliques no
+  // link" na célula seria mentira — nesse caso fica o genérico.
+  const uniform =
+    focus != null &&
+    results.some((res) => res?.label === focus.short) &&
+    results.every((res) => res == null || res.label === focus.short);
+
   return (
     <DataTable
       head={[
         // Larguras somadas cabem na página: dez colunas em A4 não têm folga.
         { label: "Nome", width: 132 },
-        { label: "Resultado", align: "right", width: 66 },
+        { label: uniform && focus ? focus.short : "Resultado", align: "right", width: 66 },
         { label: "Custo/res.", align: "right", width: 52 },
         { label: "Investido", align: "right", width: 62 },
         { label: "CTR", align: "right", width: 36 },
@@ -604,8 +717,8 @@ function RowsTable({ rows, currency, thumbs }: { rows: Row[]; currency: string; 
         { label: "Impr.", align: "right", width: 50 },
         { label: "Freq.", align: "right", width: 34 },
       ]}
-      rows={rows.map((r) => {
-        const res = primaryRowResult(r);
+      rows={rows.map((r, i) => {
+        const res = results[i];
         const freq = r.frequency || (r.reach ? r.impressions / r.reach : 0);
         return [
           <span key="n" style={{ display: "flex", alignItems: "center", gap: 5, minWidth: 0 }}>
@@ -957,6 +1070,7 @@ function Kpi({
   prevText,
   invert,
   neutral,
+  accent,
 }: {
   label: string;
   value: string;
@@ -965,14 +1079,25 @@ function Kpi({
   prevText?: string;
   invert?: boolean;
   neutral?: boolean;
+  accent?: boolean;
 }) {
   const d = cur != null && prev != null ? delta(cur, prev) : null;
   const up = d ? d.pct >= 0 : false;
   const good = invert ? !up : up;
   const color = !d || !d.hasPrev || neutral || Math.abs(d.pct) < 0.05 ? MUTED : good ? GREEN : RED;
   return (
-    <div className="rpt-keep" style={{ border: `1px solid ${LINE}`, borderRadius: 10, padding: "10px 11px", background: "#fff" }}>
-      <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.3, color: MUTED, textTransform: "uppercase", lineHeight: 1.3, minHeight: 22 }}>
+    <div
+      className="rpt-keep"
+      style={{
+        // accent = o resultado que o cliente contratou; precisa se distinguir
+        // dos outros doze indicadores à primeira vista, inclusive impresso.
+        border: `1px solid ${accent ? `${TEAL}66` : LINE}`,
+        borderRadius: 10,
+        padding: "10px 11px",
+        background: accent ? `${TEAL}0d` : "#fff",
+      }}
+    >
+      <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.3, color: accent ? TEAL : MUTED, textTransform: "uppercase", lineHeight: 1.3, minHeight: 22 }}>
         {label}
       </div>
       <div style={{ fontSize: 19, fontWeight: 800, letterSpacing: -0.5, marginTop: 3 }}>{value}</div>

@@ -38,7 +38,18 @@ export default function PublicReportPage() {
     <div style={{ background: "#f4f5f7", minHeight: "100vh", padding: "24px 16px 60px" }}>
       {/* Link privado: não deve ser indexado por buscador. */}
       <meta name="robots" content="noindex, nofollow" />
-      <style>{`@media print { body { background: #fff !important; } .page-shell { box-shadow: none !important; padding: 0 !important; } .no-print { display: none !important; } }`}</style>
+      {/* O documento tem largura de A4 (700px) e não encolhe — é o mesmo
+          desenho que sai na impressão. Em tela estreita ele rola DENTRO do
+          cartão; sem isso, vaza para fora e corta o conteúdo à direita.
+          Na impressão o recorte precisa sumir, ou a página sai cortada. */}
+      <style>{`
+        .page-shell { overflow-x: auto; }
+        @media print {
+          body { background: #fff !important; }
+          .page-shell { box-shadow: none !important; padding: 0 !important; overflow: visible !important; }
+          .no-print { display: none !important; }
+        }
+      `}</style>
 
       <div className="no-print" style={{ maxWidth: 740, margin: "0 auto 16px", display: "flex", alignItems: "center", gap: 8 }}>
         <BrandMark size={22} />

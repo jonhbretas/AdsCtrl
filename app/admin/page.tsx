@@ -10,6 +10,7 @@ import {
   SortState,
   usePersistentSort,
 } from "@/components/SortableHeader";
+import { RESULT_FAMILY_BY_SLUG } from "@/lib/format";
 
 interface Group {
   id: string;
@@ -520,9 +521,9 @@ export default function Admin() {
                 <Field label={`Orçamento mensal · ${client.currency || "BRL"}`}>
                   <input key={`${client.id}-budget-${loadRevision}-${client.monthly_budget ?? ""}`} type="number" min="0" step="10" defaultValue={client.monthly_budget ?? ""} placeholder={`${client.currency || "BRL"} 0`} onBlur={(e) => updateClient(client.id, { monthly_budget: e.target.value ? Number(e.target.value) : null })} style={compactInput} />
                 </Field>
-                <Field label="Resultado">
+                <Field label="Resultado do relatório">
                   <select value={client.result_family || ""} onChange={(e) => updateClient(client.id, { result_family: e.target.value || null })} style={compactInput}>
-                    <option value="">Automático</option>
+                    <option value="">Automático (decide pelo volume)</option>
                     <option value="conversoes">Conversões</option>
                     <option value="vendas">Vendas</option>
                     <option value="leads">Leads</option>
@@ -937,6 +938,7 @@ function ReportDelivery({
       >
         Copiar link do painel
       </button>
+      <FocusChip family={client.result_family} />
       {feedback && <span style={{ fontSize: 11, color: "#2b7143" }}>{feedback}</span>}
       {client.report_last_sent_at && (
         <span style={{ fontSize: 10.5, color: "#aaa" }}>
@@ -944,6 +946,37 @@ function ReportDelivery({
         </span>
       )}
     </div>
+  );
+}
+
+// Fica ao lado do envio semanal de propósito: é o momento em que o relatório
+// vira e-mail do cliente. Em "Automático" o relatório escolhe o resultado pelo
+// volume, e uma conta de conversas com leads avulsos do pixel acaba medida por
+// leads — o aviso existe para essa troca não passar em branco.
+function FocusChip({ family }: { family: string | null }) {
+  const known = family ? RESULT_FAMILY_BY_SLUG[family] : null;
+  if (known) {
+    return (
+      <span style={{ fontSize: 10.5, color: "#5c6373" }}>
+        foco: <strong style={{ color: "#2b7143" }}>{known.label}</strong>
+      </span>
+    );
+  }
+  return (
+    <span
+      title="Defina o Resultado do relatório nos dados do cliente para o relatório medir o que importa"
+      style={{
+        fontSize: 10.5,
+        fontWeight: 650,
+        color: "#8a6116",
+        background: "#fdf6e6",
+        border: "1px solid #f0dfb4",
+        borderRadius: 7,
+        padding: "3px 7px",
+      }}
+    >
+      foco automático
+    </span>
   );
 }
 

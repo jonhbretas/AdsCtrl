@@ -21,6 +21,46 @@ export class ReportError extends Error {
   }
 }
 
+// Qual resultado importa para este cliente (clients.result_family).
+// A Meta devolve dezenas de action_types e vários aparecem de carona — um lead
+// avulso do pixel numa conta que vive de conversa no WhatsApp. Sem essa âncora
+// o relatório destaca o que tem mais volume, não o que o negócio persegue.
+// Resolvido FORA do cache de propósito: trocar o foco no admin tem que valer no
+// próximo carregamento, e não daqui a 24h.
+export async function resultFamilyForAccount(accountId: string): Promise<string | null> {
+  if (supabaseEnvMissing()) return null;
+  try {
+    const supabase = getServiceClient();
+    const bare = accountId.replace(/^act_/, "").replace(/^google:/, "");
+
+    const { data: direct } = await supabase
+      .from("clients")
+      .select("result_family")
+      .eq("source_meta_account_id", bare)
+      .not("result_family", "is", null)
+      .limit(1);
+    if (direct?.[0]?.result_family) return direct[0].result_family;
+
+    const { data: links } = await supabase
+      .from("client_ad_accounts")
+      .select("client_id")
+      .eq("account_id", bare)
+      .limit(1);
+    const clientId = links?.[0]?.client_id;
+    if (!clientId) return null;
+
+    const { data: client } = await supabase
+      .from("clients")
+      .select("result_family")
+      .eq("id", clientId)
+      .limit(1);
+    return client?.[0]?.result_family ?? null;
+  } catch {
+    // O foco é refinamento de leitura; nunca pode derrubar o relatório.
+    return null;
+  }
+}
+
 export function defaultRange() {
   const fmt = (d: Date) => d.toISOString().slice(0, 10);
   const until = new Date();

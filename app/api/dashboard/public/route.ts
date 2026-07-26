@@ -55,7 +55,7 @@ export async function GET(req: Request) {
     const [{ data: client }, { data: links }] = await Promise.all([
       supabase
         .from("clients")
-        .select("id,name,status,source_meta_account_id")
+        .select("id,name,status,source_meta_account_id,result_family")
         .eq("id", payload.clientId)
         .maybeSingle(),
       supabase.from("client_ad_accounts").select("client_id,account_id,is_primary"),
@@ -104,7 +104,8 @@ export async function GET(req: Request) {
         range,
         cached,
         fetched_at,
-        report,
+        // O foco fica fora do payload cacheado: trocar no admin vale na hora.
+        report: { ...report, result_family: client.result_family ?? null },
         reports,
       },
       { headers: { "Cache-Control": "no-store" } }

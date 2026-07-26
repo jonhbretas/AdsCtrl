@@ -5,7 +5,7 @@
 // consultar qualquer conta do catálogo.
 
 import { NextResponse } from "next/server";
-import { buildReportCached, ReportError } from "@/lib/report-data";
+import { buildReportCached, ReportError, resultFamilyForAccount } from "@/lib/report-data";
 import { verifyReportToken } from "@/lib/report-token";
 
 export const dynamic = "force-dynamic";
@@ -23,8 +23,12 @@ export async function GET(req: Request) {
     }
     // Cache: o mesmo link pode ser aberto várias vezes (e período fechado não
     // muda mais). Sem isso, cada recarga custaria dezenas de chamadas de API.
-    const { report } = await buildReportCached(payload.accountId, payload.since, payload.until);
-    return NextResponse.json(report, { headers: { "Cache-Control": "no-store" } });
+    const [{ report }, result_family] = await Promise.all([
+      buildReportCached(payload.accountId, payload.since, payload.until),
+      resultFamilyForAccount(payload.accountId),
+    ]);
+    // Fora do payload cacheado: o foco muda no admin e vale na hora.
+    return NextResponse.json({ ...report, result_family }, { headers: { "Cache-Control": "no-store" } });
   } catch (e: any) {
     const status = e instanceof ReportError ? e.status : 500;
     return NextResponse.json({ error: e?.message ?? "Erro ao montar o relatório." }, { status });
