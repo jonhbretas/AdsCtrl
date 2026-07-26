@@ -13,6 +13,7 @@ import AccountChanges from "@/components/AccountChanges";
 import {
   Badge,
   Button,
+  Collapsible,
   Input,
   Notice,
   PageHeader,
@@ -964,15 +965,37 @@ export default function Dashboard() {
                       since={range.since}
                       until={range.until}
                     />
-                    <AccountDetail
-                      accountId={a.account_id}
-                      platform={a.platform}
-                      since={range.since}
-                      until={range.until}
-                      status={a.status}
-                      balance={a.balance}
-                      currency={a.currency}
-                    />
+                    {/* O detalhe da plataforma agora abre por clique, como o
+                        Google já fazia. São ~16 chamadas de API por conta:
+                        expandir um cliente só para ver as últimas edições não
+                        deve custar isso. */}
+                    <Collapsible
+                      tone="brand"
+                      summary={
+                        <>
+                          <span className="ec-collapse__icon" aria-hidden="true">
+                            {a.platform === "google" ? "G" : "f"}
+                          </span>
+                          <span className="ec-collapse__title">
+                            {a.platform === "google" ? "Google Ads" : "Meta Ads"} · detalhe do período
+                          </span>
+                          <span className="ec-collapse__meta">
+                            {liveError ? "indisponível" : money(m.spend, a.currency)}
+                          </span>
+                          <span className="ec-collapse__hint">campanhas, criativos, segmentações</span>
+                        </>
+                      }
+                    >
+                      <AccountDetail
+                        accountId={a.account_id}
+                        platform={a.platform}
+                        since={range.since}
+                        until={range.until}
+                        status={a.status}
+                        balance={a.balance}
+                        currency={a.currency}
+                      />
+                    </Collapsible>
                     {a.platform === "meta" && (
                       <div style={{ borderTop: "1px solid #e8edf5", padding: "22px 0 28px" }}>
                         <div style={{ fontSize: 12, fontWeight: 700, color: "#4285f4", letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 10 }}>
@@ -985,16 +1008,19 @@ export default function Dashboard() {
                         ) : linkedGoogle.map((google) => {
                           const gm = accMetrics(google);
                           return (
-                            <details key={google.account_id} style={{ border: "1px solid #e5eaf1", borderRadius: 12, marginTop: 10, background: "#fbfcfe" }}>
-                              <summary style={{ cursor: "pointer", padding: "14px 16px", display: "flex", alignItems: "center", gap: 12, listStyle: "none" }}>
-                                <span style={{ width: 26, height: 26, borderRadius: 7, background: "#fff", color: "#4285f4", display: "grid", placeItems: "center", fontWeight: 700 }}>G</span>
-                                <span style={{ flex: 1, fontSize: 14, fontWeight: 600 }}>{google.name}</span>
-                                <span style={{ fontSize: 12, color: "#888" }}>Investimento</span>
-                                <strong style={{ fontSize: 14 }}>{money(gm.spend, google.currency)}</strong>
-                                <span style={{ fontSize: 12, color: "#888" }}>Conversões</span>
-                                <strong style={{ fontSize: 14 }}>{num(gm.results.conversoes || gm.result || 0)}</strong>
-                              </summary>
-                              <div style={{ borderTop: "1px solid #e5eaf1", padding: "0 16px" }}>
+                            <div key={google.account_id} style={{ marginTop: 10 }}>
+                              <Collapsible
+                                summary={
+                                  <>
+                                    <span className="ec-collapse__icon" aria-hidden="true">G</span>
+                                    <span className="ec-collapse__title">{google.name}</span>
+                                    <span className="ec-collapse__meta">{money(gm.spend, google.currency)}</span>
+                                    <span className="ec-collapse__hint">
+                                      {num(gm.results.conversoes || gm.result || 0)} conversões
+                                    </span>
+                                  </>
+                                }
+                              >
                                 <OperationalLinks
                                   accountId={google.account_id}
                                   accountName={google.name}
@@ -1019,8 +1045,8 @@ export default function Dashboard() {
                                   balance={null}
                                   currency={google.currency}
                                 />
-                              </div>
-                            </details>
+                              </Collapsible>
+                            </div>
                           );
                         })}
                       </div>

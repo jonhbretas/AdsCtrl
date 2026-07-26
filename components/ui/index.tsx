@@ -215,6 +215,37 @@ export const Select = React.forwardRef<HTMLSelectElement, React.SelectHTMLAttrib
   }
 );
 
+/* ----------------------------------------------------------- Collapsible ---
+   Painel que só MONTA o conteúdo quando aberto.
+
+   A diferença em relação ao <details> nativo importa aqui: com <details>, o
+   React renderiza os filhos mesmo fechado — o navegador só os esconde. Como o
+   conteúdo destes painéis busca dados no efeito de montagem, um cliente
+   expandido disparava as consultas de TODAS as contas vinculadas de uma vez,
+   fechadas ou não. Montando sob demanda, só paga quem abre. */
+export function Collapsible({
+  summary,
+  children,
+  defaultOpen = false,
+  tone,
+}: {
+  summary: React.ReactNode;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+  tone?: "brand" | "neutral";
+}) {
+  const [open, setOpen] = React.useState(defaultOpen);
+  return (
+    <section className="ec-collapse" data-open={open ? "true" : undefined} data-tone={tone}>
+      <button className="ec-collapse__head" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+        <span className="ec-collapse__summary">{summary}</span>
+        <span className="ec-collapse__chevron" aria-hidden="true">{open ? "▲" : "▼"}</span>
+      </button>
+      {open && <div className="ec-collapse__body">{children}</div>}
+    </section>
+  );
+}
+
 /* ------------------------------------------------------------ SegmentedControl ---
    Substitui as fileiras de "chips" que hoje se repetem em cada tela com
    estilo próprio. Um só componente, um só comportamento de teclado. */

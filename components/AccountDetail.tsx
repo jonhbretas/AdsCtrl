@@ -504,6 +504,11 @@ export default function AccountDetail({
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 760 }}>
             <thead>
               <tr style={{ color: "#999", textAlign: "right" }}>
+                {/* Veiculação primeiro: é o interruptor da linha, e ler o nome
+                    depois de decidir ligar/desligar é a ordem natural. */}
+                {platform === "meta" && (
+                  <th style={{ padding: "10px 14px", textAlign: "left", fontWeight: 500, width: 62 }}>No ar</th>
+                )}
                 <Th sortKey="name" sort={tableSort} onSort={setTableSort} style={{ textAlign: "left" }}>{tab === "ads" ? "Anúncio" : tab === "adsets" ? "Conjunto" : "Campanha"}</Th>
                 <Th sortKey="spend" sort={tableSort} onSort={setTableSort} initialDirection="desc">Investimento</Th>
                 <Th sortKey="impressions" sort={tableSort} onSort={setTableSort} initialDirection="desc">Impressões</Th>
@@ -512,16 +517,33 @@ export default function AccountDetail({
                 <Th sortKey="result" sort={tableSort} onSort={setTableSort} initialDirection="desc">Resultado</Th>
                 <Th sortKey="cpr" sort={tableSort} onSort={setTableSort}>CPR</Th>
                 <Th sortKey="roas" sort={tableSort} onSort={setTableSort} initialDirection="desc">ROAS</Th>
-                {platform === "meta" && <th style={{ padding: "10px 14px", textAlign: "right", fontWeight: 500 }}>Veiculação</th>}
               </tr>
             </thead>
             <tbody>
-              {rows.length === 0 && <tr><td colSpan={platform === "meta" ? 9 : 8} style={{ padding: 20, textAlign: "center", color: "#aaa" }}>Sem dados no período.</td></tr>}
+              {rows.length === 0 && (
+                <tr>
+                  <td colSpan={platform === "meta" ? 9 : 8} style={{ padding: 0 }}>
+                    <div className="ec-inline-empty">
+                      Nenhuma {tab === "ads" ? "peça" : tab === "adsets" ? "conjunto" : "campanha"} com entrega neste
+                      período.
+                    </div>
+                  </td>
+                </tr>
+              )}
               {rows.map((r) => {
                 const res = resultOf(r);
                 const rv = pickVal(r.values, PURCHASE_KEYS);
                 return (
                   <tr key={r.id} style={{ borderTop: "1px solid #f4f4f4" }}>
+                    {platform === "meta" && (
+                      <td style={{ padding: "10px 14px", textAlign: "left" }}>
+                        <DeliverySwitch
+                          row={r}
+                          busy={changing === r.id}
+                          onToggle={() => toggleDelivery(r)}
+                        />
+                      </td>
+                    )}
                     <td style={{ padding: "10px 14px", textAlign: "left" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                         {tab === "ads" && r.thumbnail && (
@@ -534,15 +556,6 @@ export default function AccountDetail({
                     <Td>{formatMoney(r.spend)}</Td><Td>{num(r.impressions)}</Td><Td>{num(r.clicks)}</Td><Td>{pct(r.ctr)}</Td>
                     <Td accent>{num(res)}</Td><Td>{res ? formatMoney(r.spend / res) : "—"}</Td>
                     <Td>{rv > 0 && r.spend > 0 ? `${(rv / r.spend).toFixed(2)}x` : "—"}</Td>
-                    {platform === "meta" && (
-                      <td style={{ padding: "10px 14px", textAlign: "right", whiteSpace: "nowrap" }}>
-                        <DeliveryCell
-                          row={r}
-                          busy={changing === r.id}
-                          onToggle={() => toggleDelivery(r)}
-                        />
-                      </td>
-                    )}
                   </tr>
                 );
               })}
@@ -722,8 +735,18 @@ const EFFECTIVE_LABEL: Record<string, string> = {
   DELETED: "excluído",
 };
 
-function DeliveryCell({ row, busy, onToggle }: { row: Row; busy: boolean; onToggle: () => void }) {
-  if (!row.status) return <span style={{ color: "#bbb", fontSize: 12 }}>—</span>;
+// Interruptor de veiculação, no início da linha.
+//
+// Era um par "rótulo + botão Pausar" à direita, o que obrigava a atravessar
+// dez colunas de número para agir sobre a linha que se estava lendo. Como
+// switch à esquerda, o estado se lê na varredura vertical e a ação fica no
+// mesmo lugar em todas as linhas.
+//
+// Não é um <input type="checkbox">: a mudança não é local, ela vai para a Meta
+// e passa por confirmação. É um botão com role de switch, que é o que os
+// leitores de tela esperam para "ligado/desligado".
+function DeliverySwitch({ row, busy, onToggle }: { row: Row; busy: boolean; onToggle: () => void }) {
+  if (!row.status) return <span style={{ color: "var(--text-faint)", fontSize: 12 }}>—</span>;
 
   const active = row.status === "ACTIVE";
   // Arquivado/excluído não voltam por um clique: mostra o estado e nada mais.
@@ -732,38 +755,35 @@ function DeliveryCell({ row, busy, onToggle }: { row: Row; busy: boolean; onTogg
     ? EFFECTIVE_LABEL[row.effective_status] || row.effective_status.toLowerCase().replace(/_/g, " ")
     : null;
 
+  if (frozen) {
+    return (
+      <span className="ec-switch__frozen" title={`status: ${row.status}`}>
+        {EFFECTIVE_LABEL[row.status] || row.status.toLowerCase()}
+      </span>
+    );
+  }
+
   return (
-    <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
-      <div style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
-        <span
-          title={`status: ${row.status}${row.effective_status ? ` · efetivo: ${row.effective_status}` : ""}`}
-          style={{
-            display: "inline-flex", alignItems: "center", gap: 5,
-            fontSize: 11.5, fontWeight: 600, color: active ? "#2b7143" : "#8a6116",
-          }}
-        >
-          <span style={{ width: 7, height: 7, borderRadius: "50%", background: active ? "#2bb36b" : "#e0a83a" }} />
-          {active ? "Ativo" : frozen ? EFFECTIVE_LABEL[row.status] : "Pausado"}
-        </span>
-        {!frozen && (
-          <button
-            onClick={onToggle}
-            disabled={busy}
-            title={active ? "Pausar a veiculação na Meta" : "Reativar a veiculação na Meta"}
-            style={{
-              padding: "4px 10px", borderRadius: 7,
-              border: `1px solid ${active ? "#f0d8b4" : "#cfe0f5"}`,
-              background: busy ? "#f4f4f5" : "#fff",
-              color: busy ? "#aaa" : active ? "#8a6116" : "#1768ca",
-              fontSize: 11, fontWeight: 650,
-              cursor: busy ? "default" : "pointer",
-            }}
-          >
-            {busy ? "…" : active ? "Pausar" : "Reativar"}
-          </button>
-        )}
-      </div>
-      {effective && <span style={{ fontSize: 10, color: "#a0a4ad" }}>na Meta: {effective}</span>}
+    <div className="ec-switchwrap">
+      <button
+        role="switch"
+        aria-checked={active}
+        aria-label={`${active ? "Pausar" : "Reativar"} ${row.name}`}
+        onClick={onToggle}
+        disabled={busy}
+        className="ec-switch"
+        data-on={active ? "true" : undefined}
+        data-busy={busy ? "true" : undefined}
+        title={
+          (active ? "Pausar a veiculação na Meta" : "Reativar a veiculação na Meta") +
+          `\nstatus: ${row.status}${row.effective_status ? ` · efetivo: ${row.effective_status}` : ""}`
+        }
+      >
+        <span className="ec-switch__knob" />
+      </button>
+      {/* O efetivo só aparece quando diverge: anúncio ATIVO dentro de conjunto
+          pausado não está rodando, e o switch sozinho diria o contrário. */}
+      {effective && <span className="ec-switch__note">{effective}</span>}
     </div>
   );
 }
