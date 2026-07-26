@@ -187,9 +187,14 @@ h4 {
   }
 }
 
+/* Rolagem horizontal contida. max-width e min-width são o que faz o overflow
+   funcionar: sem eles o wrapper cresce junto com a tabela larga (item de
+   flex/grid tem min-width:auto por padrão) e quem rola é a PÁGINA. */
 .ec-scroll-x {
   overflow-x: auto;
   overscroll-behavior-x: contain;
+  max-width: 100%;
+  min-width: 0;
 }
 
 @media print {

@@ -24,6 +24,14 @@ export const metadata = {
   description: "Cockpit de performance em mídia paga da Assertivus",
 };
 
+// O painel nunca declarou viewport: sem isto o navegador de celular assume um
+// layout de 980px e desenha a página encolhida, o que fazia qualquer ajuste
+// responsivo parecer não funcionar. As páginas /r e /c já declaravam o seu.
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+};
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pt-BR" className={`${manrope.variable} ${inter.variable}`}>

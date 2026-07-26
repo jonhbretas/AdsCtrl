@@ -10,6 +10,18 @@ import {
   SortState,
   usePersistentSort,
 } from "@/components/SortableHeader";
+import {
+  Badge,
+  Button,
+  EmptyState,
+  Field as UiField,
+  Input as UiInput,
+  Notice,
+  PageHeader,
+  Segmented,
+  Select as UiSelect,
+  SkeletonCard,
+} from "@/components/ui";
 
 type AccountOption = { account_id: string; name: string; platform: string; hidden?: boolean; status: string };
 type Diagnostic = { code: string; tone: "positive" | "warning" | "critical" | "neutral"; title: string; detail: string; evidence: string[] };
@@ -480,33 +492,61 @@ export default function CreativesPage() {
   })), [creatives]);
 
   return (
-    <div style={{ maxWidth: 1500, margin: "0 auto", padding: "26px 22px 60px", fontFamily: "system-ui, -apple-system, sans-serif", color: "#171716" }}>
-      <header style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 18, marginBottom: 20 }}>
-        <div>
-          <div style={{ fontSize: 11, fontWeight: 800, color: "#777", letterSpacing: 0.7, textTransform: "uppercase" }}>Laboratório Meta</div>
-          <h1 style={{ margin: "4px 0 0", fontSize: 29, letterSpacing: -0.8 }}>Diagnóstico de criativos</h1>
-          <p style={{ margin: "5px 0 0", color: "#777", fontSize: 13 }}>Da atenção à conversão, com amostra e contexto.</p>
-        </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "end", flexWrap: "wrap", justifyContent: "flex-end" }}>
-          <Field label="Conta Meta">
-            <select value={accountId} onChange={(e) => setAccountId(e.target.value)} style={{ ...inputStyle, minWidth: 230 }}>
-              {accounts.map((a) => <option key={a.account_id} value={a.account_id}>{a.name}</option>)}
-            </select>
-          </Field>
-          <Field label="De"><input type="date" value={since} max={until} onChange={(e) => setSince(e.target.value)} style={inputStyle} /></Field>
-          <Field label="Até"><input type="date" value={until} min={since} max={daysAgo(0)} onChange={(e) => setUntil(e.target.value)} style={inputStyle} /></Field>
-          <button onClick={analyze} disabled={loading || !accountId} style={{ ...inputStyle, background: "#111", color: "#fff", borderColor: "#111", fontWeight: 700, cursor: "pointer" }}>{loading ? "Analisando…" : "Analisar"}</button>
-        </div>
-      </header>
+    <div className="ec-page" style={{ maxWidth: 1500 }}>
+      <PageHeader
+        title="Diagnóstico de criativos"
+        subtitle="Da atenção à conversão, com amostra e contexto."
+        actions={
+          <div className="ec-labbar">
+            <UiField label="Conta Meta">
+              <UiSelect value={accountId} onChange={(e) => setAccountId(e.target.value)} style={{ minWidth: 220 }}>
+                {accounts.map((a) => <option key={a.account_id} value={a.account_id}>{a.name}</option>)}
+              </UiSelect>
+            </UiField>
+            <UiField label="De">
+              <UiInput type="date" value={since} max={until} onChange={(e) => setSince(e.target.value)} />
+            </UiField>
+            <UiField label="Até">
+              <UiInput type="date" value={until} min={since} max={daysAgo(0)} onChange={(e) => setUntil(e.target.value)} />
+            </UiField>
+            <Button variant="primary" onClick={analyze} disabled={loading || !accountId}>
+              {loading ? "Analisando…" : "Analisar"}
+            </Button>
+          </div>
+        }
+      />
 
-      {error && <div style={{ padding: "12px 14px", border: "1px solid #f0ceca", borderRadius: 10, color: "#a33b35", background: "#fff8f7", marginBottom: 16, fontSize: 13 }}>{error}</div>}
-      {loading && !lab && <div style={{ padding: 50, textAlign: "center", color: "#888" }}>Consultando anúncios, vídeos e thumbnails na Meta…</div>}
+      {error && (
+        <div style={{ marginBottom: "var(--sp-4)" }}>
+          <Notice tone="danger" onDismiss={() => setError(null)}>{error}</Notice>
+        </div>
+      )}
+      {loading && !lab && (
+        <div style={{ display: "grid", gap: "var(--sp-3)" }}>
+          <Notice tone="brand">Consultando anúncios, vídeos e thumbnails na Meta — costuma levar alguns segundos.</Notice>
+          <div className="ec-kpis">
+            <SkeletonCard lines={2} />
+            <SkeletonCard lines={2} />
+            <SkeletonCard lines={2} />
+          </div>
+          <SkeletonCard lines={8} />
+        </div>
+      )}
+      {!loading && !lab && !error && (
+        <EmptyState
+          icon="◉"
+          title="Escolha uma conta e clique em Analisar"
+          hint="O laboratório busca os anúncios do período na Meta, calcula a mediana por objetivo e aponta qual criativo merece continuar no ar."
+        />
+      )}
       {lab && (
         <>
           <Summary account={lab} />
           <ActionTypesDebug account={lab} />
           <MetricGuide currency={lab.currency} />
-          <div style={{ display: "grid", gridTemplateColumns: "1.15fr .85fr", gap: 14, marginBottom: 16 }}>
+          {/* minmax(0,…) para as duas colunas poderem encolher: com 1.15fr o
+              filho não desce abaixo do próprio conteúdo e estoura a página. */}
+          <div className="ec-two-cols">
             <VideoFunnel account={lab} />
             <div style={panelStyle}>
               <PanelTitle title="Quadrante criativo" subtitle="Hook × outbound CTR · bolha = investimento" />
@@ -639,8 +679,10 @@ function Summary({ account }: { account: LabAccount }) {
   const s = account.summary;
   const messages = account.creatives.length > 0 && account.creatives.every((c) => c.goal === "messages");
   const hasRoas = account.creatives.some(hasApplicableRoas);
+  // Sete colunas fixas não caíam em 900px: o valor tem nowrap e empurrava a
+  // página. auto-fit (ec-metrics) deixa a faixa virar duas linhas.
   return (
-    <section style={{ display: "grid", gridTemplateColumns: "repeat(7,minmax(0,1fr))", gap: 9, marginBottom: 14 }}>
+    <section className="ec-metrics" aria-label="Resumo da conta">
       <Metric label="Investimento" value={money(s.spend, account.currency)} />
       <Metric label="Criativos ativos" value={`${s.creativesWithDelivery}/${s.creatives}`} />
       <Metric label="CPM" value={money(s.cpm, account.currency)} />
@@ -718,7 +760,9 @@ function MetricGuide({ currency }: { currency: string }) {
           ))}
         </div>
 
-        <div style={{ border: "1px solid #dce4eb", borderRadius: 11, overflow: "auto", maxHeight: 470, background: "#fff" }}>
+        {/* maxWidth 100% é o que faz o overflow interno realmente conter: sem
+            isso o wrapper cresce com a tabela e a página é que rola. */}
+        <div style={{ border: "1px solid var(--border)", borderRadius: "var(--r-md)", overflow: "auto", maxWidth: "100%", maxHeight: 470, background: "var(--surface)" }}>
           <table style={{ width: "100%", minWidth: 1020, borderCollapse: "collapse" }}>
             <thead style={{ position: "sticky", top: 0, zIndex: 2 }}>
               <tr style={{ background: "#102d4f", color: "#fff", fontSize: 10, textTransform: "uppercase", letterSpacing: 0.35 }}>
@@ -833,7 +877,7 @@ function CreativeTable({
     }
   }, [creatives.length, showLpv, showRoas, sort.key, onSort]);
   return (
-    <div style={{ overflowX: "auto" }}>
+    <div className="ec-scroll-x">
       <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1380 }}>
         <thead><tr style={{ color: "#888", fontSize: 10, textTransform: "uppercase", letterSpacing: 0.25 }}>
           <Th sortKey="creative" sort={sort} onSort={onSort} align="left">Criativo</Th>
@@ -1026,15 +1070,67 @@ function EconomicValue({
     </span>
   );
 }
+// O veredito ganha selo em vez de só texto colorido: é a coluna que a tela
+// existe para produzir, e o selo se lê antes da frase.
+const DIAGNOSIS_TONE: Record<Diagnostic["tone"], { tone: "ok" | "danger" | "warn" | "neutral"; verdict: string }> = {
+  positive: { tone: "ok", verdict: "Manter" },
+  critical: { tone: "danger", verdict: "Rever" },
+  warning: { tone: "warn", verdict: "Atenção" },
+  neutral: { tone: "neutral", verdict: "Observar" },
+};
+
 function Diagnosis({ diagnosis, sample }: { diagnosis: Diagnostic | null; sample: { label: string; reason: string } }) {
-  if (!diagnosis) return <span title={sample.reason} style={{ fontSize: 11, color: "#999" }}>{sample.label}</span>;
-  const color = diagnosis.tone === "positive" ? "#267a45" : diagnosis.tone === "critical" ? "#b3443d" : diagnosis.tone === "warning" ? "#946516" : "#777";
-  return <div title={diagnosis.detail}><div style={{ fontSize: 11.5, fontWeight: 700, color }}>{diagnosis.title}</div><div style={{ fontSize: 10.5, color: "#888", marginTop: 2, lineHeight: 1.3 }}>{diagnosis.detail}</div></div>;
+  if (!diagnosis) {
+    return (
+      <span title={sample.reason} className="ec-diag__sample">
+        {sample.label}
+      </span>
+    );
+  }
+  const level = DIAGNOSIS_TONE[diagnosis.tone] || DIAGNOSIS_TONE.neutral;
+  return (
+    <div title={diagnosis.detail} className="ec-diag">
+      <div className="ec-diag__top">
+        <Badge tone={level.tone}>{level.verdict}</Badge>
+        <span className="ec-diag__title" data-tone={diagnosis.tone}>{diagnosis.title}</span>
+      </div>
+      <div className="ec-diag__detail">{diagnosis.detail}</div>
+    </div>
+  );
 }
-function Metric({ label, value, accent }: { label: string; value: string; accent?: boolean }) { return <div style={{ ...panelStyle, padding: "13px 14px" }}><div style={{ fontSize: 9.5, color: "#888", textTransform: "uppercase", fontWeight: 750, letterSpacing: 0.3 }}>{label}</div><div style={{ fontSize: 18, fontWeight: 750, marginTop: 6, color: accent ? "#286fc9" : "#191918", whiteSpace: "nowrap" }}>{value}</div></div>; }
-function PanelTitle({ title, subtitle }: { title: string; subtitle: string }) { return <div><div style={{ fontSize: 13, fontWeight: 720 }}>{title}</div><div style={{ fontSize: 10.5, color: "#999", marginTop: 2 }}>{subtitle}</div></div>; }
-function Field({ label, children }: { label: string; children: React.ReactNode }) { return <label style={{ display: "grid", gap: 4 }}><span style={{ fontSize: 9.5, fontWeight: 750, color: "#888", textTransform: "uppercase" }}>{label}</span>{children}</label>; }
-function Toggle({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) { return <button onClick={onClick} style={{ border: 0, borderRadius: 7, padding: "6px 10px", background: active ? "#fff" : "transparent", color: active ? "#111" : "#777", boxShadow: active ? "0 1px 2px #0001" : "none", fontSize: 11, fontWeight: 650, cursor: "pointer" }}>{children}</button>; }
+// Os helpers desta tela agora leem os tokens. Trocá-los aqui converte as
+// dezenas de usos espalhados sem editar cada chamada.
+function Metric({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+  return (
+    <div className="ec-metric">
+      <div className="ec-metric__label">{label}</div>
+      <div className="ec-metric__value" data-accent={accent ? "true" : undefined}>{value}</div>
+    </div>
+  );
+}
+function PanelTitle({ title, subtitle }: { title: string; subtitle: string }) {
+  return (
+    <div>
+      <div className="ec-panelhead__title">{title}</div>
+      <div className="ec-panelhead__hint">{subtitle}</div>
+    </div>
+  );
+}
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="ec-field">
+      <span className="ec-field__label">{label}</span>
+      {children}
+    </label>
+  );
+}
+function Toggle({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button onClick={onClick} className="ec-seg-item" data-active={active ? "true" : undefined} aria-pressed={active}>
+      {children}
+    </button>
+  );
+}
 function Th({
   children,
   align = "right",
@@ -1067,7 +1163,26 @@ function Th({
     </th>
   );
 }
-function Td({ children }: { children: React.ReactNode }) { return <td style={{ padding: "9px 8px", textAlign: "right", fontSize: 11.5, color: "#444", whiteSpace: "nowrap" }}>{children}</td>; }
-function Empty({ text }: { text: string }) { return <div style={{ height: "100%", minHeight: 100, display: "grid", placeItems: "center", color: "#aaa", fontSize: 12 }}>{text}</div>; }
-const inputStyle: React.CSSProperties = { height: 34, boxSizing: "border-box", border: "1px solid #dededb", borderRadius: 8, background: "#fff", padding: "0 9px", color: "#333", fontSize: 11.5 };
-const panelStyle: React.CSSProperties = { border: "1px solid #e8e8e5", borderRadius: 13, background: "#fff", padding: 15 };
+function Td({ children }: { children: React.ReactNode }) {
+  return <td className="ec-td">{children}</td>;
+}
+function Empty({ text }: { text: string }) {
+  return <div className="ec-inline-empty">{text}</div>;
+}
+const inputStyle: React.CSSProperties = {
+  height: 34,
+  boxSizing: "border-box",
+  border: "1px solid var(--border-strong)",
+  borderRadius: "var(--r-sm)",
+  background: "var(--surface)",
+  padding: "0 9px",
+  color: "var(--text-strong)",
+  fontSize: 11.5,
+};
+const panelStyle: React.CSSProperties = {
+  border: "1px solid var(--border)",
+  borderRadius: "var(--r-md)",
+  background: "var(--surface)",
+  padding: 15,
+  boxShadow: "var(--shadow-sm)",
+};

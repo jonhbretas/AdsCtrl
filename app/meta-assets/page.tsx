@@ -7,6 +7,15 @@ import {
   SortState,
   usePersistentSort,
 } from "@/components/SortableHeader";
+import {
+  Badge,
+  Button,
+  Field as UiField,
+  Notice,
+  PageHeader,
+  Select as UiSelect,
+  SkeletonCard,
+} from "@/components/ui";
 
 type Connection = {
   index: number;
@@ -371,50 +380,73 @@ export default function MetaAssetsPage() {
   }
 
   return (
-    <div style={{ maxWidth: 1540, margin: "0 auto", padding: "26px 22px 60px", fontFamily: "system-ui, -apple-system, sans-serif", color: "#171716" }}>
-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 18, marginBottom: 18 }}>
-        <div>
-          <div style={{ fontSize: 10, fontWeight: 800, color: "#777", letterSpacing: 0.7, textTransform: "uppercase" }}>Central de ativos</div>
-          <h1 style={{ fontSize: 29, margin: "4px 0 0", letterSpacing: -0.8 }}>Raio-X Meta</h1>
-          <p style={{ margin: "6px 0 0", color: "#777", fontSize: 13 }}>
-            Perfis conectados, BMs, contas, cobrança e performance operacional em uma tela.
-          </p>
-        </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "end", flexWrap: "wrap", justifyContent: "flex-end" }}>
-          <label style={{ display: "grid", gap: 4 }}>
-            <span style={{ fontSize: 9.5, fontWeight: 750, color: "#888", textTransform: "uppercase" }}>Conta Meta</span>
-            <select
-              value={selectedAccount}
-              onChange={(event) => setSelectedAccount(event.target.value)}
-              disabled={catalogLoading || !catalog.length}
-              style={{ ...inputStyle, minWidth: 245 }}
-            >
-              {catalogLoading && <option>Carregando catálogo…</option>}
-              {!catalogLoading && !catalog.length && <option>Nenhuma conta visível sincronizada</option>}
-              {catalog.map((account) => (
-                <option key={account.account_id} value={account.account_id}>
-                  {account.name} · {statusLabel[account.status] || account.status} · {account.account_id}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button onClick={() => load(selectedAccount)} disabled={loading || !selectedAccount} style={{ ...buttonStyle, background: "#111", color: "#fff", borderColor: "#111" }}>
-            {loading && pendingTarget !== "all" ? "Consultando…" : "Consultar conta"}
-          </button>
-          <button onClick={() => load("all")} disabled={loading} style={buttonStyle}>
-            {loading && pendingTarget === "all" ? "Consultando todas…" : "Consultar todas"}
-          </button>
-          <button onClick={exportCsv} disabled={!accounts.length} style={buttonStyle}>Exportar CSV</button>
-          {loadedTarget && <button onClick={() => load(loadedTarget)} disabled={loading} style={buttonStyle}>↻ Atualizar resultado</button>}
-        </div>
-      </header>
+    <div className="ec-page" style={{ maxWidth: 1540 }}>
+      <PageHeader
+        title="Raio-X Meta"
+        subtitle="Perfis conectados, BMs, contas, cobrança e performance operacional em uma tela."
+        actions={
+          <div className="ec-labbar">
+            <UiField label="Conta Meta">
+              <UiSelect
+                value={selectedAccount}
+                onChange={(event) => setSelectedAccount(event.target.value)}
+                disabled={catalogLoading || !catalog.length}
+                style={{ minWidth: 235 }}
+              >
+                {catalogLoading && <option>Carregando catálogo…</option>}
+                {!catalogLoading && !catalog.length && <option>Nenhuma conta visível sincronizada</option>}
+                {catalog.map((account) => (
+                  <option key={account.account_id} value={account.account_id}>
+                    {account.name} · {statusLabel[account.status] || account.status} · {account.account_id}
+                  </option>
+                ))}
+              </UiSelect>
+            </UiField>
+            <Button variant="primary" onClick={() => load(selectedAccount)} disabled={loading || !selectedAccount}>
+              {loading && pendingTarget !== "all" ? "Consultando…" : "Consultar conta"}
+            </Button>
+            <Button variant="secondary" onClick={() => load("all")} disabled={loading}>
+              {loading && pendingTarget === "all" ? "Consultando todas…" : "Consultar todas"}
+            </Button>
+            <Button variant="secondary" onClick={exportCsv} disabled={!accounts.length}>
+              Exportar CSV
+            </Button>
+            {loadedTarget && (
+              <Button variant="ghost" onClick={() => load(loadedTarget)} disabled={loading}>
+                ↻ Atualizar
+              </Button>
+            )}
+          </div>
+        }
+      />
 
-      {error && <div style={{ padding: "12px 14px", background: "#fff4f2", color: "#a33f37", border: "1px solid #efcbc6", borderRadius: 11, marginBottom: 14 }}>{error}</div>}
-      {loading && !data && <div style={{ padding: 70, color: "#999", textAlign: "center" }}>Consultando conexões, BM e dados da conta pela API oficial da Meta…</div>}
+      {error && (
+        <div style={{ marginBottom: "var(--sp-3)" }}>
+          <Notice tone="danger" onDismiss={() => setError(null)}>{error}</Notice>
+        </div>
+      )}
+      {loading && !data && (
+        <div style={{ display: "grid", gap: "var(--sp-3)" }}>
+          <Notice tone="brand">
+            Consultando conexões, BM e dados da conta na API oficial da Meta. Consultar todas as contas leva mais tempo.
+          </Notice>
+          <div className="ec-kpis">
+            <SkeletonCard lines={2} />
+            <SkeletonCard lines={2} />
+            <SkeletonCard lines={2} />
+            <SkeletonCard lines={2} />
+          </div>
+          <SkeletonCard lines={7} />
+        </div>
+      )}
       {!loading && !data && !error && (
-        <div style={{ padding: "70px 24px", border: "1px dashed #dededb", borderRadius: 14, color: "#777", textAlign: "center", background: "#fbfbfa" }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: "#333" }}>Escolha como consultar</div>
-          <div style={{ fontSize: 12, marginTop: 6 }}>Selecione uma conta para um diagnóstico rápido ou use “Consultar todas” para uma auditoria geral.</div>
+        <div className="ec-card ec-mesh" style={{ textAlign: "center", padding: "var(--sp-7) var(--sp-5)" }}>
+          <div style={{ fontFamily: "var(--font-display)", fontSize: 15, fontWeight: 700, color: "var(--text-strong)" }}>
+            Escolha como consultar
+          </div>
+          <div style={{ fontSize: 12.5, marginTop: 6, color: "var(--text-muted)" }}>
+            Uma conta para diagnóstico rápido, ou “Consultar todas” para auditoria geral.
+          </div>
         </div>
       )}
 
@@ -590,38 +622,44 @@ function AccountStatus({ account }: { account: MetaAccount }) {
   const good = account.status === "ACTIVE";
   return (
     <div>
-      <span style={{ display: "inline-flex", padding: "4px 7px", borderRadius: 999, background: good ? "#eaf7ee" : "#fff0ee", color: good ? "#287746" : "#ad4039", fontSize: 10, fontWeight: 750 }}>
-        {statusLabel[account.status] || account.status}
-      </span>
-      {account.disable_reason != null && <div style={{ fontSize: 9.5, color: "#a75a53", marginTop: 3 }}>motivo #{account.disable_reason}</div>}
+      <Badge tone={good ? "ok" : "danger"}>{statusLabel[account.status] || account.status}</Badge>
+      {account.disable_reason != null && (
+        <div style={{ fontSize: 9.5, color: "var(--danger-600)", marginTop: 3 }}>motivo #{account.disable_reason}</div>
+      )}
     </div>
   );
 }
 
 function StatusPill({ status }: { status: Connection["status"] }) {
-  const config = status === "ok"
-    ? ["#eaf7ee", "#287746", "Saudável"]
-    : status === "partial"
-      ? ["#fff7e7", "#936619", "Parcial"]
-      : ["#fff0ee", "#ad4039", "Erro"];
-  return <span style={{ background: config[0], color: config[1], fontSize: 9.5, fontWeight: 750, borderRadius: 999, padding: "4px 7px" }}>{config[2]}</span>;
+  const tone = status === "ok" ? "ok" : status === "partial" ? "warn" : "danger";
+  const label = status === "ok" ? "Saudável" : status === "partial" ? "Parcial" : "Erro";
+  return <Badge tone={tone}>{label}</Badge>;
 }
 
 function Summary({ label, value, tone }: { label: string; value: string; tone?: "good" | "bad" }) {
   return (
-    <div style={{ ...panelStyle, padding: "13px 14px" }}>
-      <div style={{ fontSize: 9.5, color: "#888", textTransform: "uppercase", fontWeight: 750, letterSpacing: 0.3 }}>{label}</div>
-      <div style={{ fontSize: 19, fontWeight: 760, marginTop: 6, color: tone === "good" ? "#287746" : tone === "bad" ? "#ad4039" : "#191918" }}>{value}</div>
+    <div className="ec-metric">
+      <div className="ec-metric__label">{label}</div>
+      <div className="ec-metric__value" data-state={tone}>{value}</div>
     </div>
   );
 }
 
 function PanelTitle({ title, subtitle }: { title: string; subtitle: string }) {
-  return <div><div style={{ fontSize: 13, fontWeight: 720 }}>{title}</div><div style={{ fontSize: 10.5, color: "#999", marginTop: 2 }}>{subtitle}</div></div>;
+  return (
+    <div>
+      <div className="ec-panelhead__title">{title}</div>
+      <div className="ec-panelhead__hint">{subtitle}</div>
+    </div>
+  );
 }
 
 function QuickLink({ label, href, accent }: { label: string; href: string; accent?: boolean }) {
-  return <a href={href} target="_blank" rel="noreferrer" style={{ padding: "5px 7px", borderRadius: 7, border: `1px solid ${accent ? "#b8d5fa" : "#e1e1de"}`, background: accent ? "#eef5ff" : "#fafaf9", color: accent ? "#1768ca" : "#555", fontSize: 10, fontWeight: 700, textDecoration: "none" }}>{label} ↗</a>;
+  return (
+    <a href={href} target="_blank" rel="noreferrer" className="ec-quicklink" data-accent={accent ? "true" : undefined}>
+      {label} ↗
+    </a>
+  );
 }
 
 function Th({
@@ -661,10 +699,27 @@ function Th({
 }
 
 function Td({ children, strong }: { children: React.ReactNode; strong?: boolean }) {
-  return <td style={{ padding: "10px 8px", textAlign: "right", fontSize: 11, color: "#444", whiteSpace: "nowrap", fontWeight: strong ? 700 : 500 }}>{children}</td>;
+  return <td className="ec-td" data-strong={strong ? "true" : undefined}>{children}</td>;
 }
 
-const panelStyle: React.CSSProperties = { border: "1px solid #e8e8e5", borderRadius: 13, background: "#fff", padding: 14 };
-const inputStyle: React.CSSProperties = { height: 34, boxSizing: "border-box", border: "1px solid #dededb", borderRadius: 8, background: "#fff", padding: "0 9px", color: "#333", fontSize: 11.5 };
+// Objetos de estilo que apontam para os tokens: uma troca aqui alcança as
+// dezenas de usos espalhados nesta tela.
+const panelStyle: React.CSSProperties = {
+  border: "1px solid var(--border)",
+  borderRadius: "var(--r-md)",
+  background: "var(--surface)",
+  padding: 14,
+  boxShadow: "var(--shadow-sm)",
+};
+const inputStyle: React.CSSProperties = {
+  height: 34,
+  boxSizing: "border-box",
+  border: "1px solid var(--border-strong)",
+  borderRadius: "var(--r-sm)",
+  background: "var(--surface)",
+  padding: "0 9px",
+  color: "var(--text-strong)",
+  fontSize: 11.5,
+};
 const buttonStyle: React.CSSProperties = { height: 36, border: "1px solid #dededb", borderRadius: 9, background: "#fff", color: "#333", padding: "0 12px", fontSize: 11.5, fontWeight: 650, cursor: "pointer" };
 const copyStyle: React.CSSProperties = { border: 0, background: "transparent", color: "#7d94b0", fontSize: 9.5, padding: 0, marginTop: 3, cursor: "pointer" };
