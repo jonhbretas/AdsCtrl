@@ -11,6 +11,17 @@ import { useEffect, useMemo, useState } from "react";
 import AccountDetail from "@/components/AccountDetail";
 import AccountChanges from "@/components/AccountChanges";
 import {
+  Badge,
+  Button,
+  Input,
+  Notice,
+  PageHeader,
+  Segmented,
+  Select,
+  Skeleton,
+  SkeletonCard,
+} from "@/components/ui";
+import {
   compareSortValues,
   SortButton,
   SortState,
@@ -551,46 +562,85 @@ export default function Dashboard() {
       ? `${totals.roas.toFixed(2)}x`
       : "—";
 
-  if (loading) return <Center>Carregando overview…</Center>;
-  if (error)
+  // Esqueleto no lugar de "Carregando overview…": o texto fazia a tela saltar
+  // inteira quando os dados chegavam.
+  if (loading) {
     return (
-      <Center>
-        <h1 style={{ fontSize: 20, margin: 0 }}>Não foi possível carregar</h1>
-        <p style={{ color: "#a32d2d", background: "#fceceb", padding: "10px 14px", borderRadius: 8 }}>{error}</p>
-      </Center>
+      <div className="ec-page">
+        <div style={{ display: "grid", gap: "var(--sp-3)", maxWidth: 420, marginBottom: "var(--sp-5)" }}>
+          <Skeleton h={30} w="45%" />
+          <Skeleton h={14} w="72%" />
+        </div>
+        <div className="ec-cols" style={{ marginBottom: "var(--sp-4)" }}>
+          <SkeletonCard lines={2} />
+          <SkeletonCard lines={2} />
+          <SkeletonCard lines={2} />
+        </div>
+        <SkeletonCard lines={6} />
+      </div>
     );
+  }
+  if (error) {
+    return (
+      <div className="ec-page">
+        <PageHeader title="Não foi possível carregar" subtitle="Os dados de overview não voltaram." />
+        <Notice tone="danger">{error}</Notice>
+        <div style={{ marginTop: "var(--sp-4)" }}>
+          <Button variant="primary" onClick={refresh}>
+            Tentar de novo
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div style={{ maxWidth: 1280, margin: "0 auto", padding: "28px 20px", fontFamily: "system-ui, -apple-system, sans-serif", color: "#111" }}>
-      {/* HEADER */}
-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, marginBottom: 20, flexWrap: "wrap" }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700, letterSpacing: -0.5 }}>Visão geral</h1>
-          <p style={{ margin: "4px 0 0", color: "#888", fontSize: 14 }}>Métricas de mídia paga (Meta + Google) por conta.</p>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          {lastUpdated && <span style={{ fontSize: 12, color: "#aaa" }}>Coleta: {lastUpdated}</span>}
-          <button onClick={refresh} disabled={refreshing} style={btnStyle}>
-            {refreshing ? "Atualizando…" : "↻ Atualizar"}
-          </button>
-          <button onClick={syncAccounts} disabled={syncing} style={btnStyle} title="Buscar novas contas Meta e Google; elas entram ocultas">
-            {syncing ? "Sincronizando…" : "⇅ Sincronizar contas"}
-          </button>
-          <button onClick={collectNow} disabled={collecting} style={{ ...btnStyle, background: collecting ? "#eee" : "#111", color: collecting ? "#999" : "#fff", borderColor: "#111" }} title="Buscar métricas e alertas de todas as contas agora">
-            {collecting ? "Coletando…" : "⟳ Coletar agora"}
-          </button>
-          <a href="/admin" style={{ ...btnStyle, textDecoration: "none", display: "inline-flex", alignItems: "center" }}>⚙ Grupos</a>
-        </div>
-      </header>
+    <div className="ec-page">
+      <PageHeader
+        title="Visão geral"
+        subtitle="Métricas de mídia paga (Meta + Google) por conta."
+        meta={lastUpdated ? <Badge>Coleta: {lastUpdated}</Badge> : undefined}
+        actions={
+          <>
+            <Button variant="ghost" size="sm" onClick={refresh} disabled={refreshing}>
+              {refreshing ? "Atualizando…" : "↻ Atualizar"}
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={syncAccounts}
+              disabled={syncing}
+              title="Buscar novas contas Meta e Google; elas entram ocultas"
+            >
+              {syncing ? "Sincronizando…" : "⇅ Sincronizar contas"}
+            </Button>
+            <a href="/admin" className="ec-btn" data-variant="secondary" data-size="sm">
+              ⚙ Grupos
+            </a>
+            {/* Coletar é a ação que traz dado novo: é a dominante da tela. */}
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={collectNow}
+              disabled={collecting}
+              title="Buscar métricas e alertas de todas as contas agora"
+            >
+              {collecting ? "Coletando…" : "⟳ Coletar agora"}
+            </Button>
+          </>
+        }
+      />
 
       {syncMsg && (
-        <div style={{ background: "#e6f1fb", color: "#0c447c", padding: "8px 14px", borderRadius: 8, fontSize: 13, marginBottom: 14 }}>
-          {syncMsg}
+        <div style={{ marginBottom: "var(--sp-3)" }}>
+          <Notice tone="brand" onDismiss={() => setSyncMsg(null)}>{syncMsg}</Notice>
         </div>
       )}
       {!!live?.errors?.length && (
-        <div style={{ background: "#fff7e8", color: "#875711", padding: "8px 14px", borderRadius: 8, fontSize: 13, marginBottom: 14 }}>
-          {live.errors.length} conta(s) com dados ao vivo indisponíveis. A falha não foi convertida em zero.
+        <div style={{ marginBottom: "var(--sp-3)" }}>
+          <Notice tone="warn">
+            {live.errors.length} conta(s) com dados ao vivo indisponíveis. A falha não foi convertida em zero.
+          </Notice>
         </div>
       )}
 
@@ -602,74 +652,120 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* FILTROS */}
-      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
-        <div style={{ display: "flex", gap: 4, background: "#f2f2f2", borderRadius: 10, padding: 3 }}>
-          <PeriodBtn active={platformFilter === "meta"} onClick={() => { setPlatformFilter("meta"); setFocus("vendas"); }} label="Meta / Clientes" />
-          <PeriodBtn active={platformFilter === "google"} onClick={() => { setPlatformFilter("google"); setFocus("conversoes"); }} label="Google Ads" />
-        </div>
-        <select value={onlyActive ? "active" : "all"} onChange={(e) => setOnlyActive(e.target.value === "active")} style={selectStyle}>
+      {/* FILTROS
+          Antes eram oito controles no mesmo plano visual, todos com o mesmo
+          peso. Agora: plataforma e período em controle segmentado (a escolha
+          fica visível sem ler), busca e foco como campos, e o resto discreto. */}
+      <div className="ec-toolbar">
+        <Segmented
+          label="Plataforma"
+          value={platformFilter}
+          onChange={(value) => {
+            setPlatformFilter(value);
+            setFocus(value === "google" ? "conversoes" : "vendas");
+          }}
+          options={[
+            { value: "meta", label: "Meta / Clientes" },
+            { value: "google", label: "Google Ads" },
+          ]}
+        />
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Pesquisar conta…"
+          aria-label="Pesquisar conta"
+          style={{ flex: "0 1 210px" }}
+        />
+        <Select
+          value={onlyActive ? "active" : "all"}
+          onChange={(e) => setOnlyActive(e.target.value === "active")}
+          aria-label="Filtrar por status"
+          style={{ flex: "0 1 165px" }}
+        >
           <option value="active">Somente ativas</option>
           <option value="all">Todas as contas</option>
-        </select>
-        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Pesquisar conta…" style={{ ...selectStyle, minWidth: 200 }} />
-        <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: "#888" }}>
-          Foco:
-          <select value={focus} onChange={(e) => setFocus(e.target.value)} style={selectStyle} title="Resultado principal do negócio (vendas, mensagens, leads…)">
+        </Select>
+        <label className="ec-inline-field">
+          <span>Foco</span>
+          <Select
+            value={focus}
+            onChange={(e) => setFocus(e.target.value)}
+            title="Resultado principal do negócio (vendas, mensagens, leads…)"
+          >
             {RESULT_FAMILIES.map((f) => (
               <option key={f.slug} value={f.slug}>{f.label}</option>
             ))}
-          </select>
+          </Select>
         </label>
         {hiddenCount > 0 && (
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => setShowHidden((v) => !v)}
-            style={{ ...selectStyle, cursor: "pointer", color: showHidden ? "#111" : "#888", fontWeight: 500 }}
-            title="Mostrar/ocultar as contas que você escondeu"
+            aria-pressed={showHidden}
+            title="Mostrar ou esconder as contas que você ocultou"
           >
-            {showHidden ? "🙈 Ocultar escondidas" : `👁 Mostrar ocultas (${hiddenCount})`}
-          </button>
+            {showHidden ? "Ocultar escondidas" : `Mostrar ocultas (${hiddenCount})`}
+          </Button>
         )}
         <span style={{ flex: 1 }} />
-
-        {/* PERÍODO */}
-        <div style={{ display: "flex", gap: 4, background: "#f2f2f2", borderRadius: 10, padding: 3 }}>
-          {PRESETS.map((p) => (
-            <PeriodBtn key={p.key} active={period === p.key} onClick={() => { setPeriod(p.key); setShowCustom(false); }} label={p.label} />
-          ))}
-          <PeriodBtn
-            active={period === "custom"}
-            onClick={() => { setPeriod("custom"); setShowCustom(true); }}
-            label="Personalizado"
-          />
-        </div>
+        <Segmented
+          label="Período"
+          value={period}
+          onChange={(value) => {
+            setPeriod(value);
+            setShowCustom(value === "custom");
+          }}
+          options={[
+            ...PRESETS.map((p) => ({ value: p.key, label: p.label })),
+            { value: "custom", label: "Personalizado" },
+          ]}
+        />
       </div>
 
-      {/* LINHA DE PERÍODO (datas + estado ao vivo) */}
-      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 20, minHeight: 24 }}>
+      {/* LINHA DE PERÍODO (datas + procedência do dado) */}
+      <div className="ec-metaline">
         {(showCustom || period === "custom") && (
-          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-            <input type="date" value={customSince} max={customUntil} onChange={(e) => { setCustomSince(e.target.value); setPeriod("custom"); }} style={dateStyle} />
-            <span style={{ color: "#bbb" }}>→</span>
-            <input type="date" value={customUntil} min={customSince} max={isoDaysAgo(0)} onChange={(e) => { setCustomUntil(e.target.value); setPeriod("custom"); }} style={dateStyle} />
-          </div>
-        )}
-        <span style={{ fontSize: 12, color: "#aaa" }}>{range.since} → {range.until}</span>
-        {isLive && (
-          <span style={{ fontSize: 12, color: liveLoading ? "#f59e0b" : "#16a34a", fontWeight: 500 }}>
-            {liveLoading ? `● buscando ao vivo no ${platformFilter === "google" ? "Google Ads" : "Meta Ads"}…` : "● dados ao vivo"}
+          <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+            <Input
+              type="date"
+              value={customSince}
+              max={customUntil}
+              onChange={(e) => { setCustomSince(e.target.value); setPeriod("custom"); }}
+              aria-label="Início do período"
+              style={{ width: 148 }}
+            />
+            <span aria-hidden="true" style={{ color: "var(--text-faint)" }}>→</span>
+            <Input
+              type="date"
+              value={customUntil}
+              min={customSince}
+              max={isoDaysAgo(0)}
+              onChange={(e) => { setCustomUntil(e.target.value); setPeriod("custom"); }}
+              aria-label="Fim do período"
+              style={{ width: 148 }}
+            />
           </span>
         )}
-        {!isLive && <span style={{ fontSize: 12, color: "#bbb" }}>cache (atualiza 1x/dia) · não inclui hoje</span>}
+        <span className="ec-metaline__dates">{range.since} → {range.until}</span>
+        {/* Procedência do número é decisão, não decoração: ao vivo e cache
+            levam a leituras diferentes do mesmo valor. */}
+        {isLive ? (
+          <Badge tone={liveLoading ? "warn" : "ok"}>
+            {liveLoading ? `buscando no ${platformFilter === "google" ? "Google Ads" : "Meta Ads"}…` : "dados ao vivo"}
+          </Badge>
+        ) : (
+          <Badge title="A coleta roda uma vez por dia e não inclui o dia de hoje">cache · sem hoje</Badge>
+        )}
         {totals.mixedCurrencies && (
-          <span style={{ fontSize: 12, color: "#8a5b16", background: "#fff8eb", borderRadius: 7, padding: "3px 7px" }}>
-            Totais separados por moeda: {totals.currencyTotals.map((entry) => entry.currency).join(" · ")}
-          </span>
+          <Badge tone="warn">
+            Moedas separadas: {totals.currencyTotals.map((entry) => entry.currency).join(" · ")}
+          </Badge>
         )}
       </div>
 
       {/* KPIs GERAIS (agregado do período vs período anterior, guiado pelo foco) */}
-      <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginBottom: 20 }}>
+      <section className="ec-kpis" aria-label="Resumo do período">
         <Kpi label={`Investimento (${short})`} value={liveReady ? investmentValue : "…"} cur={totals.mixedCurrencies ? undefined : totals.spend} prev={totals.mixedCurrencies ? undefined : totals.prevSpend} neutral />
         <Kpi label={`${fam.label} (${short})`} value={liveReady ? num(totals.res) : "…"} cur={totals.res} prev={totals.prevRes} />
         <Kpi label={`Custo por resultado`} value={liveReady ? cprValue : "…"} cur={!totals.mixedCurrencies && totals.res > 0 ? totals.cpr : undefined} prev={!totals.mixedCurrencies && totals.prevRes > 0 ? totals.prevCpr : undefined} invert />
@@ -681,11 +777,13 @@ export default function Dashboard() {
         )}
       </section>
 
-      {/* LAYOUT: alertas (esq) + tabela (centro) */}
-      <div style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: 20, alignItems: "start" }}>
+      {/* LAYOUT: alertas (esq) + tabela (centro).
+          Em tela estreita os alertas passam para cima da tabela em vez de
+          espremer as duas colunas. */}
+      <div className="ec-split">
         {/* ALERTAS */}
-        <aside id="alerts" style={{ position: "sticky", top: 76, scrollMarginTop: 76 }}>
-          <div style={{ display: "flex", gap: 4, background: "#f2f2f2", borderRadius: 10, padding: 3, marginBottom: 12 }}>
+        <aside id="alerts" className="ec-split__side">
+          <div style={{ display: "flex", gap: 4, background: "var(--surface-sunken)", border: "1px solid var(--border)", borderRadius: "var(--r-sm)", padding: 3, marginBottom: "var(--sp-3)" }}>
             <TabBtn active={alertTab === "active"} onClick={() => setAlertTab("active")}>
               Ativos {visibleAlerts.length > 0 && <b>({visibleAlerts.length})</b>}
             </TabBtn>
@@ -762,7 +860,7 @@ export default function Dashboard() {
         </aside>
 
         {/* TABELA */}
-        <main style={{ border: "1px solid #eee", borderRadius: 14, overflowX: "auto", background: "#fff" }}>
+        <main className="ec-card ec-scroll-x" style={{ minWidth: 0 }}>
           <div style={{ minWidth: 900, display: "grid", gridTemplateColumns: GRID, padding: "12px 16px", borderBottom: "1px solid #f0f0f0", fontSize: 12, color: "#999", fontWeight: 600, alignItems: "center" }}>
             <GridSortHeader sortKey="name" sort={tableSort} onSort={setTableSort} align="left">Cliente</GridSortHeader>
             <GridSortHeader sortKey="channels" sort={tableSort} onSort={setTableSort} align="left" initialDirection="desc">Canais</GridSortHeader>
@@ -1371,21 +1469,7 @@ function Chip({ active, onClick, label, color }: { active: boolean; onClick: () 
 
 function TabBtn({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
-    <button
-      onClick={onClick}
-      style={{
-        flex: 1,
-        padding: "6px 10px",
-        borderRadius: 8,
-        border: "none",
-        background: active ? "#fff" : "transparent",
-        boxShadow: active ? "0 1px 2px rgba(0,0,0,.08)" : "none",
-        fontSize: 12.5,
-        fontWeight: 600,
-        color: active ? "#111" : "#777",
-        cursor: "pointer",
-      }}
-    >
+    <button onClick={onClick} className="ec-tab" data-active={active ? "true" : undefined} aria-pressed={active}>
       {children}
     </button>
   );
@@ -1401,18 +1485,19 @@ function Kpi({ label, value, cur, prev, invert, neutral }: { label: string; valu
   if (d && d.hasPrev) {
     const up = d.pct >= 0;
     const good = invert ? !up : up;
-    const color = neutral || Math.abs(d.pct) < 0.05 ? "#999" : good ? "#16a34a" : "#dc2626";
+    const tone = neutral || Math.abs(d.pct) < 0.05 ? "flat" : good ? "good" : "bad";
     badge = (
-      <span style={{ fontSize: 12, fontWeight: 600, color }}>
-        {up ? "▲" : "▼"} {Math.abs(d.pct).toFixed(1)}% <span style={{ color: "#aaa", fontWeight: 400 }}>vs. ant.</span>
+      <span className="ec-kpi__delta" data-tone={tone}>
+        {up ? "▲" : "▼"} {Math.abs(d.pct).toFixed(1)}%<span> vs. anterior</span>
       </span>
     );
   }
   return (
-    <div style={{ background: "#f7f7f5", borderRadius: 12, padding: "16px 18px" }}>
-      <div style={{ fontSize: 13, color: "#888" }}>{label}</div>
-      <div style={{ fontSize: 26, fontWeight: 700, marginTop: 4 }}>{value}</div>
-      <div style={{ marginTop: 4, minHeight: 16 }}>{badge}</div>
+    <div className="ec-kpi">
+      <div className="ec-kpi__label">{label}</div>
+      {/* Números tabulares: a coluna não "dança" quando o valor muda. */}
+      <div className="ec-kpi__value">{value}</div>
+      <div className="ec-kpi__foot">{badge}</div>
     </div>
   );
 }
