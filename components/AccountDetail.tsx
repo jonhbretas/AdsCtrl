@@ -20,6 +20,7 @@ import {
   money, moneyShort, num, pct, dayLabel, weekdayLabel, resultLabel,
   pickPrimaryResult, orderedResults, pickVal, delta, roas,
   PURCHASE_KEYS, ATC_KEYS, CHECKOUT_KEYS, LINKCLICK_KEYS,
+  RESULT_FAMILY_BY_SLUG,
 } from "@/lib/format";
 import {
   compareSortValues,
@@ -58,7 +59,60 @@ interface Detail {
     position: Breakdown[]; device: Breakdown[]; hour: Breakdown[];
   };
   availableResults: string[];
+  result_family?: string | null;
   error?: string;
+}
+
+// ---------- seleção de "Resultado" ----------
+// O seletor tinha só os action_types crus que a Meta devolveu no período. Dava
+// dois problemas: "Vendas" desaparecia da lista quando o período não teve
+// nenhuma venda (parecia que o sistema não suportava), e a lista vinha com 25
+// entradas técnicas — post_unlike, offsite_search_add_meta_leads,
+// post_interaction_gross — sem os conceitos que a gente usa para decidir.
+//
+// Agora são dois grupos: as FAMÍLIAS (Vendas, Conversas, Leads…), sempre
+// presentes mesmo com zero, e os action_types crus embaixo, para conferência.
+// "family:" e "action:" no valor distinguem os dois.
+const FAMILY_PREFIX = "family:";
+const ACTION_PREFIX = "action:";
+
+// Ordem de leitura por importância de negócio.
+const FAMILY_MENU = ["conversoes", "vendas", "mensagens", "leads", "cadastros", "cliques", "lpv", "engajamento"];
+
+// "Conversões reportadas" não tem action_type próprio: é a soma das famílias de
+// conversão. Cada família já resolve internamente as variações que a Meta
+// repete (purchase/omni_purchase/fb_pixel_purchase são a mesma venda), então
+// somar as famílias não conta a mesma conversão duas vezes.
+const CONVERSION_FAMILIES = ["vendas", "mensagens", "leads", "cadastros"];
+const ALL_CONVERSIONS = `${FAMILY_PREFIX}conversoes`;
+
+function selectionKeys(selection: string): string[] {
+  if (selection.startsWith(FAMILY_PREFIX)) {
+    return RESULT_FAMILY_BY_SLUG[selection.slice(FAMILY_PREFIX.length)]?.keys ?? [];
+  }
+  if (selection.startsWith(ACTION_PREFIX)) return [selection.slice(ACTION_PREFIX.length)];
+  return selection ? [selection] : [];
+}
+
+function resultValue(results: Record<string, number> | undefined, selection: string | null): number {
+  if (!selection || !results) return 0;
+  if (selection === ALL_CONVERSIONS) {
+    return CONVERSION_FAMILIES.reduce(
+      (sum, slug) => sum + pickVal(results, RESULT_FAMILY_BY_SLUG[slug]?.keys ?? []),
+      0
+    );
+  }
+  const keys = selectionKeys(selection);
+  return keys.length ? pickVal(results, keys) : 0;
+}
+
+function selectionLabel(selection: string): string {
+  if (selection.startsWith(FAMILY_PREFIX)) {
+    const slug = selection.slice(FAMILY_PREFIX.length);
+    return RESULT_FAMILY_BY_SLUG[slug]?.label || slug;
+  }
+  const type = selection.startsWith(ACTION_PREFIX) ? selection.slice(ACTION_PREFIX.length) : selection;
+  return type ? resultLabel(type) : "—";
 }
 
 const ACCENT = "#3987e5";
@@ -123,7 +177,14 @@ export default function AccountDetail({
         if (!r.ok || d.error) throw new Error(d.error || `Falha (HTTP ${r.status}).`);
         return d as Detail;
       })
-      .then((d) => { if (!alive) return; setData(d); setResult(pickPrimaryResult(d.availableResults)); })
+      .then((d) => {
+        if (!alive) return;
+        setData(d);
+        // Abre no foco configurado do cliente; sem foco, na heurística antiga.
+        const focus = d.result_family && RESULT_FAMILY_BY_SLUG[d.result_family] ? d.result_family : null;
+        const fallback = pickPrimaryResult(d.availableResults);
+        setResult(focus ? `${FAMILY_PREFIX}${focus}` : fallback ? `${ACTION_PREFIX}${fallback}` : null);
+      })
       .catch((e) => alive && setError(e?.message ?? "Erro ao carregar detalhe."))
       .finally(() => alive && setLoading(false));
     return () => { alive = false; };
@@ -181,8 +242,11 @@ export default function AccountDetail({
     }
   }
 
+  // Valor do resultado selecionado: família, soma de conversões ou action_type.
+  const resultOf = (v: Vals) => resultValue(v.results, result);
+
   const metricOf = (o: Breakdown | Kpis | Daily, m: MetricKey) => {
-    const res = result ? o.results[result] || 0 : 0;
+    const res = resultOf(o);
     switch (m) {
       case "spend": return o.spend;
       case "impressions": return o.impressions;
@@ -203,7 +267,7 @@ export default function AccountDetail({
       const key = c.objective || "OUTROS";
       if (!m[key]) m[key] = { spend: 0, res: 0 };
       m[key].spend += c.spend;
-      m[key].res += result ? c.results[result] || 0 : 0;
+      m[key].res += resultOf(c);
     }
     return Object.entries(m)
       .map(([objective, v]) => ({ objective, spend: v.spend, cpr: v.res ? v.spend / v.res : 0 }))
@@ -231,11 +295,21 @@ export default function AccountDetail({
   if (!data) return null;
 
   const k = data.kpis, p = data.prevKpis;
-  const primaryRes = result ? k.results[result] || 0 : 0;
-  const prevPrimaryRes = result ? p.results[result] || 0 : 0;
+  const primaryRes = resultOf(k);
+  const prevPrimaryRes = resultOf(p);
   const cpr = primaryRes ? k.spend / primaryRes : 0;
   const prevCpr = prevPrimaryRes ? p.spend / prevPrimaryRes : 0;
-  const resultOptions = orderedResults(data.availableResults);
+  // Famílias sempre listadas (com a contagem do período, zero incluído) e os
+  // action_types crus como segundo grupo, para conferir de onde vem o número.
+  const familyOptions = FAMILY_MENU.filter((slug) => RESULT_FAMILY_BY_SLUG[slug]).map((slug) => {
+    const value = `${FAMILY_PREFIX}${slug}`;
+    return { value, label: RESULT_FAMILY_BY_SLUG[slug].label, count: resultValue(k.results, value) };
+  });
+  const rawOptions = orderedResults(data.availableResults).map((type) => ({
+    value: `${ACTION_PREFIX}${type}`,
+    label: resultLabel(type),
+    count: k.results[type] || 0,
+  }));
   const sourceRows =
     tab === "campaigns"
       ? data.campaigns
@@ -243,7 +317,7 @@ export default function AccountDetail({
         ? data.adsets
         : data.ads;
   const rowValue = (row: Row) => {
-    const rowResult = result ? row.results[result] || 0 : 0;
+    const rowResult = resultOf(row);
     const purchaseValue = pickVal(row.values, PURCHASE_KEYS);
     switch (tableSort.key) {
       case "name": return row.name;
@@ -298,7 +372,22 @@ export default function AccountDetail({
         <label style={{ fontSize: 12, color: "#888" }}>Resultado:</label>
         <select value={result ?? ""} onChange={(e) => setResult(e.target.value)}
                 style={{ padding: "5px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13 }}>
-          {resultOptions.map((r) => <option key={r} value={r}>{resultLabel(r)}</option>)}
+          <optgroup label="Resultado do negócio">
+            {familyOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label} ({num(option.count)})
+              </option>
+            ))}
+          </optgroup>
+          {rawOptions.length > 0 && (
+            <optgroup label="Detalhado (como a Meta reporta)">
+              {rawOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label} ({num(option.count)})
+                </option>
+              ))}
+            </optgroup>
+          )}
         </select>
       </div>
 
@@ -306,7 +395,7 @@ export default function AccountDetail({
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12, marginBottom: 12 }}>
         <KpiCard label="INVESTIMENTO" value={formatMoney(k.spend)} cur={k.spend} prev={p.spend} neutral />
         <KpiCard label="ALCANCE" value={num(k.reach)} cur={k.reach} prev={p.reach} sub={`Freq. ${freq.toFixed(2)}x`} />
-        <KpiCard label={resultLabel(result || "").toUpperCase()} value={num(primaryRes)} cur={primaryRes} prev={prevPrimaryRes} />
+        <KpiCard label={selectionLabel(result || "").toUpperCase()} value={num(primaryRes)} cur={primaryRes} prev={prevPrimaryRes} />
         <KpiCard
           label="CUSTO / RESULTADO"
           value={primaryRes > 0 ? formatMoney(cpr) : "—"}
@@ -429,7 +518,7 @@ export default function AccountDetail({
             <tbody>
               {rows.length === 0 && <tr><td colSpan={platform === "meta" ? 9 : 8} style={{ padding: 20, textAlign: "center", color: "#aaa" }}>Sem dados no período.</td></tr>}
               {rows.map((r) => {
-                const res = result ? r.results[result] || 0 : 0;
+                const res = resultOf(r);
                 const rv = pickVal(r.values, PURCHASE_KEYS);
                 return (
                   <tr key={r.id} style={{ borderTop: "1px solid #f4f4f4" }}>
@@ -477,7 +566,7 @@ export default function AccountDetail({
         </ChartCard>
         <ChartCard height={220} title="Resultados por dia">
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={data.daily.map((d) => ({ label: dayLabel(d.date), res: result ? d.results[result] || 0 : 0, cpm: d.cpm }))} margin={{ top: 10, right: 8, left: 8, bottom: 0 }}>
+            <ComposedChart data={data.daily.map((d) => ({ label: dayLabel(d.date), res: resultOf(d), cpm: d.cpm }))} margin={{ top: 10, right: 8, left: 8, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eee" />
               <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#999" }} tickLine={false} axisLine={false} />
               <YAxis tick={{ fontSize: 11, fill: "#999" }} tickLine={false} axisLine={false} width={36} />

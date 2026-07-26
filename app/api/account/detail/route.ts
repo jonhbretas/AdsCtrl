@@ -5,6 +5,7 @@
 import { NextResponse } from "next/server";
 import { getAccountDetail, tokenByIndex } from "@/lib/meta";
 import { getGoogleAccountDetail } from "@/lib/google-ads";
+import { resultFamilyForAccount } from "@/lib/report-data";
 import { getServiceClient, supabaseEnvMissing } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
@@ -49,8 +50,14 @@ export async function GET(req: Request) {
     // Meta aceita tanto "act_123" quanto "123".
     if (!actId.startsWith("act_")) actId = `act_${actId}`;
     const token = tokenByIndex(typeof account.token_ref === "number" ? account.token_ref : 0);
-    const detail = await getAccountDetail(actId, since, until, token);
-    return NextResponse.json(detail);
+    // O foco do cliente define qual resultado o painel abre selecionado — a
+    // mesma âncora que o relatório usa. Sem isso a heurística escolhe pela
+    // ordem da lista e mede uma conta de conversas por leads de carona.
+    const [detail, result_family] = await Promise.all([
+      getAccountDetail(actId, since, until, token),
+      resultFamilyForAccount(lookupId),
+    ]);
+    return NextResponse.json({ ...detail, result_family });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message ?? "Erro ao buscar detalhe." }, { status: 500 });
   }
