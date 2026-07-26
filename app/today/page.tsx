@@ -7,6 +7,15 @@ import {
   SortState,
   usePersistentSort,
 } from "@/components/SortableHeader";
+import {
+  Badge,
+  Button,
+  EmptyState,
+  Notice,
+  PageHeader,
+  Skeleton,
+  SkeletonCard,
+} from "@/components/ui";
 
 type Priority = {
   client_id: string; client_name: string; type: string;
@@ -248,124 +257,87 @@ export default function TodayPage() {
     });
   }, [data, sort]);
 
-  if (loading) return <State title="Preparando seu cockpit…" detail="Consolidando clientes, pacing e prioridades." />;
+  if (loading) {
+    return (
+      <div className="ec-page" style={{ maxWidth: 1420 }}>
+        <div style={{ display: "grid", gap: "var(--sp-3)", maxWidth: 460, marginBottom: "var(--sp-5)" }}>
+          <Skeleton h={32} w="55%" />
+          <Skeleton h={14} w="80%" />
+        </div>
+        <div className="ec-kpis">
+          <SkeletonCard lines={1} />
+          <SkeletonCard lines={1} />
+          <SkeletonCard lines={1} />
+          <SkeletonCard lines={1} />
+        </div>
+        <SkeletonCard lines={6} />
+      </div>
+    );
+  }
   if (error) return (
-    <State title="Cockpit ainda não disponível" detail={error}>
-      <p style={{ color: "#777", fontSize: 13, lineHeight: 1.5 }}>
-        Execute as migrações <code>supabase-migration-clients.sql</code> e <code>supabase-migration-operations.sql</code>,
-        depois faça uma coleta para preencher o histórico diário.
-      </p>
-      <button onClick={load} style={buttonStyle}>Tentar novamente</button>
-    </State>
+    <div className="ec-page" style={{ maxWidth: 760 }}>
+      <PageHeader title="Cockpit ainda não disponível" subtitle={error} />
+      <Notice tone="warn">
+        Rode as migrações <code>supabase-migration-clients.sql</code> e <code>supabase-migration-operations.sql</code> no
+        SQL Editor e depois faça uma coleta para preencher o histórico diário.
+      </Notice>
+      <div style={{ marginTop: "var(--sp-4)" }}>
+        <Button variant="primary" onClick={load}>Tentar novamente</Button>
+      </div>
+    </div>
   );
   if (!data) return null;
 
   return (
-    <div className="adsctrl-today-page" style={{ fontFamily: "system-ui, -apple-system, sans-serif", color: "#171716" }}>
-      <style>{`
-        .adsctrl-today-page {
-          max-width: 1420px;
-          margin: 0 auto;
-          padding: 28px 24px 56px;
+    <div className="ec-page ec-today" style={{ maxWidth: 1420 }}>
+      <PageHeader
+        title={`${greeting}, Jonathan.`}
+        subtitle={
+          critical
+            ? `${critical} situação(ões) crítica(s) exigem atenção.`
+            : "Nenhuma situação crítica detectada."
         }
-        .adsctrl-today-header {
-          display: flex;
-          justify-content: space-between;
-          gap: 20px;
-          align-items: flex-start;
-          margin-bottom: 22px;
+        meta={<DataPill status={data.last_collection?.status || "unknown"} />}
+        actions={
+          <>
+            <Button variant="ghost" size="sm" onClick={load}>↻ Atualizar</Button>
+            <a href="/admin#clients" className="ec-btn" data-variant="secondary" data-size="sm">
+              Metas e orçamento
+            </a>
+          </>
         }
-        .adsctrl-today-actions {
-          display: flex;
-          align-items: center;
-          gap: 9px;
-        }
-        .adsctrl-today-summary {
-          display: grid;
-          grid-template-columns: repeat(4, minmax(0, 1fr));
-          gap: 12px;
-          margin-bottom: 18px;
-        }
-        .adsctrl-today-layout {
-          display: grid;
-          grid-template-columns: 360px minmax(0, 1fr);
-          gap: 16px;
-          align-items: start;
-        }
-        .adsctrl-today-priority-list {
-          max-height: 650px;
-          overflow-y: auto;
-        }
-        @media (max-width: 1000px) {
-          .adsctrl-today-layout {
-            grid-template-columns: minmax(0, 1fr);
-          }
-          .adsctrl-today-priority-list {
-            max-height: 360px;
-          }
-        }
-        @media (max-width: 760px) {
-          .adsctrl-today-page {
-            padding: 22px 16px 44px;
-          }
-          .adsctrl-today-header {
-            flex-direction: column;
-            align-items: stretch;
-          }
-          .adsctrl-today-actions {
-            flex-wrap: wrap;
-          }
-          .adsctrl-today-summary {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-          }
-        }
-        @media (max-width: 520px) {
-          .adsctrl-today-summary {
-            grid-template-columns: minmax(0, 1fr);
-          }
-        }
-      `}</style>
-      <header className="adsctrl-today-header">
-        <div>
-          <div style={{ fontSize: 12, fontWeight: 700, color: "#777", letterSpacing: 0.7, textTransform: "uppercase" }}>Cockpit diário</div>
-          <h1 style={{ margin: "4px 0 0", fontSize: 30, letterSpacing: -0.9 }}>{greeting}, Jonathan.</h1>
-          <p style={{ margin: "6px 0 0", color: "#777", fontSize: 14 }}>
-            {critical ? `${critical} situação(ões) crítica(s) exigem atenção.` : "Nenhuma situação crítica detectada."}
-          </p>
-        </div>
-        <div className="adsctrl-today-actions">
-          <DataPill status={data.last_collection?.status || "unknown"} />
-          <button onClick={load} style={buttonStyle}>↻ Atualizar</button>
-          <a href="/admin#clients" style={{ ...buttonStyle, textDecoration: "none" }}>Metas e orçamento</a>
-        </div>
-      </header>
+      />
 
-      <section className="adsctrl-today-summary">
+      <section className="ec-kpis" aria-label="Resumo do ciclo">
         <Kpi label="Investimento no ciclo" value={data.summary.mixedCurrencies ? "Múltiplas moedas" : currencyMoney(data.summary.spend, portfolioCurrency)} sub={data.summary.mixedCurrencies ? "Veja os valores por cliente" : data.summary.budget ? `${portfolioPacing.toFixed(0)}% do orçamento cadastrado` : "Cadastre os orçamentos"} />
         <Kpi label="Orçamento do ciclo" value={data.summary.mixedCurrencies ? "Por cliente" : data.summary.budget ? currencyMoney(data.summary.budget, portfolioCurrency) : "—"} sub={`${configured}/${data.clients.length} clientes configurados`} />
         <Kpi label="Resultados reportados" value={num(data.summary.conversions, 1)} sub="Soma operacional; não deduplicada entre canais" />
         <Kpi label="Fila de decisões" value={`${critical + warning}`} sub={`${critical} críticas · ${warning} atenção`} danger={critical > 0} />
       </section>
 
-      <div className="adsctrl-today-layout">
-        <aside style={{ border: "1px solid #e8e8e5", borderRadius: 14, background: "#fff", overflow: "hidden" }}>
-          <div style={{ padding: "15px 16px", borderBottom: "1px solid #eee", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <div className="ec-today__layout">
+        <aside className="ec-card" style={{ overflow: "hidden" }} aria-label="Ações prioritárias">
+          <div className="ec-panelhead">
             <div>
-              <div style={{ fontWeight: 700, fontSize: 14 }}>Ações prioritárias</div>
-              <div style={{ color: "#999", fontSize: 11, marginTop: 2 }}>Ordenadas por severidade e impacto</div>
+              <div className="ec-panelhead__title">Ações prioritárias</div>
+              <div className="ec-panelhead__hint">Ordenadas por severidade e impacto</div>
             </div>
-            <span style={{ fontSize: 12, fontWeight: 700, color: "#777" }}>{data.priorities.length}</span>
+            <span className="ec-panelhead__count">{data.priorities.length}</span>
           </div>
-          <div className="adsctrl-today-priority-list">
+          <div className="ec-today__priorities">
             {data.priorities.length === 0 ? (
-              <div style={{ padding: 24, color: "#888", fontSize: 13 }}>Tudo tranquilo por aqui. ✓</div>
+              <EmptyState
+                icon="✓"
+                title="Tudo tranquilo por aqui"
+                hint="Nenhuma conta com saldo acabando, pagamento travado, criativo reprovado ou meta fora do ritmo."
+              />
             ) : data.priorities.slice(0, 15).map((priority, index) => (
               <PriorityCard key={`${priority.client_id}-${priority.type}-${index}`} item={priority} />
             ))}
           </div>
         </aside>
 
-        <main style={{ border: "1px solid #e8e8e5", borderRadius: 14, overflowX: "auto", background: "#fff" }}>
+        <main className="ec-card ec-scroll-x" style={{ minWidth: 0 }}>
           <div style={{ minWidth: 820 }}>
           <div style={{ display: "flex", justifyContent: "flex-end", padding: "7px 12px", borderBottom: "1px solid #eee", background: "#fff" }}>
             <button
@@ -504,45 +476,48 @@ function ClientRow({ client }: { client: Client }) {
   );
 }
 
+const PRIORITY_TONE: Record<Priority["level"], { tone: "danger" | "warn" | "brand"; label: string }> = {
+  critical: { tone: "danger", label: "Crítico" },
+  warning: { tone: "warn", label: "Atenção" },
+  info: { tone: "brand", label: "Info" },
+};
+
+// Fundo tingido saiu: o que distingue a severidade é o badge e a faixa
+// esquerda, e fundo colorido atrás de texto pequeno derruba o contraste.
 function PriorityCard({ item }: { item: Priority }) {
-  const style = item.level === "critical"
-    ? { dot: "#d94747", bg: "#fff8f7", label: "Crítico" }
-    : item.level === "warning"
-      ? { dot: "#d99425", bg: "#fffaf1", label: "Atenção" }
-      : { dot: "#3987e5", bg: "#f5f9ff", label: "Info" };
+  const level = PRIORITY_TONE[item.level] || PRIORITY_TONE.info;
   return (
-    <div style={{ padding: "13px 16px", borderBottom: "1px solid #f0f0ee", background: style.bg }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-        <span style={{ width: 7, height: 7, borderRadius: "50%", background: style.dot }} />
-        <span style={{ fontSize: 10, textTransform: "uppercase", color: style.dot, fontWeight: 800 }}>{style.label}</span>
-        {item.impact != null && <span style={{ marginLeft: "auto", fontSize: 11, color: "#777" }}>impacto {currencyMoney(item.impact, item.client_currency || "BRL")}</span>}
+    <div className="ec-prio" data-level={item.level}>
+      <div className="ec-prio__head">
+        <Badge tone={level.tone}>{level.label}</Badge>
+        {item.impact != null && (
+          <span className="ec-prio__impact">
+            impacto {currencyMoney(item.impact, item.client_currency || "BRL")}
+          </span>
+        )}
       </div>
-      <div style={{ fontSize: 13, fontWeight: 700, marginTop: 6 }}>{item.client_name}</div>
-      <div style={{ fontSize: 12, fontWeight: 600, color: "#444", marginTop: 2 }}>{item.title}</div>
-      <div style={{ fontSize: 11.5, lineHeight: 1.4, color: "#777", marginTop: 3 }}>{item.detail}</div>
+      <div className="ec-prio__client">{item.client_name}</div>
+      <div className="ec-prio__title">{item.title}</div>
+      <div className="ec-prio__detail">{item.detail}</div>
     </div>
   );
 }
 
 function Kpi({ label, value, sub, danger }: { label: string; value: string; sub: string; danger?: boolean }) {
   return (
-    <div style={{ border: `1px solid ${danger ? "#f0ceca" : "#e8e8e5"}`, borderRadius: 14, padding: "16px 18px", background: danger ? "#fffafa" : "#fff" }}>
-      <div style={{ fontSize: 11, color: "#888", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4 }}>{label}</div>
-      <div style={{ fontSize: 25, fontWeight: 760, marginTop: 7, letterSpacing: -0.5, color: danger ? "#b93d3d" : "#171716" }}>{value}</div>
-      <div style={{ fontSize: 11, color: "#999", marginTop: 5 }}>{sub}</div>
+    <div className="ec-kpi" data-alarm={danger ? "true" : undefined}>
+      <div className="ec-kpi__label">{label}</div>
+      <div className="ec-kpi__value" data-tone={danger ? "danger" : undefined}>{value}</div>
+      <div className="ec-kpi__sub">{sub}</div>
     </div>
   );
 }
 
 function StatusDot({ status }: { status: string }) {
-  const config = status === "fresh" ? ["#2d9b58", "Atual"] : status === "stale" ? ["#d94747", "Atrasado"] : ["#aaa", "Sem dados"];
-  return <span title={config[1]} style={{ width: 10, height: 10, borderRadius: "50%", background: config[0], boxShadow: `0 0 0 3px ${config[0]}20` }} />;
+  const label = status === "fresh" ? "Atual" : status === "stale" ? "Atrasado" : "Sem dados";
+  return <span className="ec-dot" data-status={status} title={label} role="img" aria-label={label} />;
 }
 function DataPill({ status }: { status: string }) {
   const good = status === "success";
-  return <span style={{ fontSize: 11, padding: "7px 10px", borderRadius: 9, background: good ? "#eef8f1" : "#fff6e7", color: good ? "#267a45" : "#9a681d", fontWeight: 650 }}>● Coleta {good ? "saudável" : status}</span>;
+  return <Badge tone={good ? "ok" : "warn"}>Coleta {good ? "saudável" : status}</Badge>;
 }
-function State({ title, detail, children }: { title: string; detail: string; children?: React.ReactNode }) {
-  return <div style={{ maxWidth: 620, margin: "90px auto", padding: 28, fontFamily: "system-ui", border: "1px solid #eee", borderRadius: 16 }}><h1 style={{ fontSize: 21, margin: 0 }}>{title}</h1><p style={{ color: "#777", fontSize: 14 }}>{detail}</p>{children}</div>;
-}
-const buttonStyle: React.CSSProperties = { border: "1px solid #dededb", background: "#fff", color: "#333", borderRadius: 9, padding: "8px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer" };

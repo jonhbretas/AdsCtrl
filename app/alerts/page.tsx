@@ -7,6 +7,17 @@ import {
   SortState,
   usePersistentSort,
 } from "@/components/SortableHeader";
+import {
+  Badge,
+  Button,
+  EmptyState,
+  Input,
+  Notice,
+  PageHeader,
+  Segmented,
+  Select,
+  Skeleton,
+} from "@/components/ui";
 
 type AlertLevel = "critical" | "warning" | "info";
 type AlertItem = {
@@ -32,10 +43,11 @@ const ALERT_SORT_KEYS: readonly AlertSortKey[] = [
   "updated",
 ];
 
-const LEVEL = {
-  critical: { label: "Crítico", color: "#b23a35", bg: "#fff4f2", border: "#efcfca" },
-  warning: { label: "Atenção", color: "#936116", bg: "#fff9ed", border: "#efdcae" },
-  info: { label: "Informativo", color: "#2768a8", bg: "#f1f7fd", border: "#cfe0f2" },
+// A cor de cada nível vem do token (via Badge), não de literal aqui.
+const LEVEL: Record<AlertLevel, { label: string; tone: "danger" | "warn" | "brand" }> = {
+  critical: { label: "Crítico", tone: "danger" },
+  warning: { label: "Atenção", tone: "warn" },
+  info: { label: "Informativo", tone: "brand" },
 };
 
 export default function AlertsPage() {
@@ -137,43 +149,64 @@ export default function AlertsPage() {
   const info = active.filter((item) => item.level === "info").length;
 
   return (
-    <main style={{ maxWidth: 1180, margin: "0 auto", padding: "28px 22px 60px", fontFamily: "system-ui, -apple-system, sans-serif", color: "#171716" }}>
-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 18, marginBottom: 20 }}>
-        <div>
-          <div style={{ fontSize: 11, color: "#777", fontWeight: 800, letterSpacing: 0.7, textTransform: "uppercase" }}>Monitoramento</div>
-          <h1 style={{ margin: "4px 0 0", fontSize: 29, letterSpacing: -0.8 }}>Central de alertas</h1>
-          <p style={{ margin: "6px 0 0", color: "#777", fontSize: 13 }}>Problemas de entrega, status, orçamento e performance que exigem atenção.</p>
-        </div>
-        <button onClick={load} disabled={loading} style={buttonStyle}>{loading ? "Atualizando…" : "↻ Atualizar"}</button>
-      </header>
+    <main className="ec-page" style={{ maxWidth: 1180 }}>
+      <PageHeader
+        title="Central de alertas"
+        subtitle="Problemas de entrega, status, orçamento e performance que exigem atenção."
+        actions={
+          <Button variant="secondary" size="sm" onClick={load} disabled={loading}>
+            {loading ? "Atualizando…" : "↻ Atualizar"}
+          </Button>
+        }
+      />
 
-      <section style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: 10, marginBottom: 16 }}>
-        <Summary label="Alertas ativos" value={active.length} color="#333" />
-        <Summary label="Críticos" value={critical} color="#b23a35" />
-        <Summary label="Atenção" value={warning} color="#936116" />
-        <Summary label="Informativos" value={info} color="#2768a8" />
+      <section className="ec-kpis" aria-label="Resumo dos alertas">
+        <Summary label="Alertas ativos" value={active.length} />
+        <Summary label="Críticos" value={critical} tone="danger" />
+        <Summary label="Atenção" value={warning} tone="warn" />
+        <Summary label="Informativos" value={info} tone="brand" />
       </section>
 
-      {error && <div role="alert" style={{ padding: "11px 14px", border: "1px solid #efcfca", borderRadius: 10, color: "#a33b35", background: "#fff7f5", marginBottom: 14, fontSize: 13 }}>{error}</div>}
+      {error && (
+        <div style={{ marginBottom: "var(--sp-3)" }}>
+          <Notice tone="danger" onDismiss={() => setError(null)}>{error}</Notice>
+        </div>
+      )}
 
-      <section style={{ border: "1px solid #e8e8e5", borderRadius: 14, background: "#fff", overflow: "hidden" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "12px 14px", borderBottom: "1px solid #ececea", background: "#fbfbfa", flexWrap: "wrap" }}>
-          <div style={{ display: "flex", gap: 3, padding: 3, borderRadius: 9, background: "#efefed" }}>
-            <Tab active={tab === "active"} onClick={() => setTab("active")}>Ativos ({active.length})</Tab>
-            <Tab active={tab === "history"} onClick={() => setTab("history")}>Histórico ({history.length})</Tab>
-          </div>
-          <select value={level} onChange={(event) => setLevel(event.target.value as typeof level)} style={inputStyle}>
+      <section className="ec-card" style={{ overflow: "hidden" }}>
+        <div className="ec-tablebar">
+          <Segmented
+            label="Escopo"
+            value={tab}
+            onChange={setTab}
+            options={[
+              { value: "active", label: `Ativos (${active.length})` },
+              { value: "history", label: `Histórico (${history.length})` },
+            ]}
+          />
+          <Select
+            value={level}
+            onChange={(event) => setLevel(event.target.value as typeof level)}
+            aria-label="Severidade"
+            style={{ flex: "0 1 190px" }}
+          >
             <option value="all">Todas as severidades</option>
             <option value="critical">Críticos</option>
             <option value="warning">Atenção</option>
             <option value="info">Informativos</option>
-          </select>
-          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar cliente ou alerta…" style={{ ...inputStyle, minWidth: 230 }} />
-          <span style={{ marginLeft: "auto", color: "#999", fontSize: 11 }}>{rows.length} resultado(s)</span>
+          </Select>
+          <Input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Buscar cliente ou alerta…"
+            aria-label="Buscar"
+            style={{ flex: "0 1 240px" }}
+          />
+          <span className="ec-tablebar__count">{rows.length} resultado(s)</span>
         </div>
 
-        <div style={{ overflowX: "auto" }}>
-          <div style={{ minWidth: 980, display: "grid", gridTemplateColumns: ALERT_GRID, gap: 16, alignItems: "center", padding: "10px 16px", borderBottom: "1px solid #ececea", color: "#888", background: "#fafaf9", fontSize: 10, fontWeight: 750, textTransform: "uppercase", letterSpacing: 0.3 }}>
+        <div className="ec-scroll-x">
+          <div className="ec-thead" style={{ minWidth: 980, gridTemplateColumns: ALERT_GRID }}>
             <SortButton column="level" sort={sort} onSort={setSort} align="left">Severidade</SortButton>
             <SortButton column="account" sort={sort} onSort={setSort} align="left">Conta / tipo</SortButton>
             <SortButton column="alert" sort={sort} onSort={setSort} align="left">Alerta</SortButton>
@@ -182,9 +215,21 @@ export default function AlertsPage() {
           </div>
 
           {loading ? (
-            <Empty>Carregando alertas…</Empty>
+            <div style={{ padding: "var(--sp-4)", display: "grid", gap: "var(--sp-3)", minWidth: 980 }}>
+              {[0, 1, 2, 3].map((i) => (
+                <Skeleton key={i} h={48} radius={10} />
+              ))}
+            </div>
           ) : rows.length === 0 ? (
-            <Empty>{tab === "active" ? "Nenhum alerta ativo com esses filtros. ✓" : "Nenhum alerta no histórico."}</Empty>
+            <EmptyState
+              icon={tab === "active" ? "✓" : "—"}
+              title={tab === "active" ? "Nenhum alerta ativo" : "Nenhum alerta no histórico"}
+              hint={
+                tab === "active"
+                  ? "Com estes filtros, nada exige atenção agora. Saldo, pagamento, reprovação e queda de gasto são verificados na coleta diária."
+                  : "Alertas resolvidos ou marcados como ciente aparecem aqui."
+              }
+            />
           ) : (
             <div style={{ minWidth: 980 }}>
               {rows.map((item) => {
@@ -193,29 +238,37 @@ export default function AlertsPage() {
                   ? item.last_seen_at
                   : item.resolved_at || item.acknowledged_at || item.last_seen_at;
                 return (
-                <article key={item.id} style={{ display: "grid", gridTemplateColumns: ALERT_GRID, gap: 16, alignItems: "center", padding: "14px 16px", borderTop: "1px solid #f0f0ee", background: item.level === "critical" && tab === "active" ? "#fffafa" : "#fff" }}>
+                <article
+                  key={item.id}
+                  className="ec-row"
+                  data-urgent={item.level === "critical" && tab === "active" ? "true" : undefined}
+                  style={{ gridTemplateColumns: ALERT_GRID }}
+                >
                   <div>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 8px", borderRadius: 999, background: appearance.bg, border: `1px solid ${appearance.border}`, color: appearance.color, fontSize: 10, fontWeight: 800, textTransform: "uppercase" }}>
-                      <span style={{ width: 6, height: 6, borderRadius: "50%", background: appearance.color }} />
-                      {appearance.label}
-                    </span>
+                    <Badge tone={appearance.tone}>{appearance.label}</Badge>
                   </div>
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 720, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{item.account_name}</div>
-                    <div style={{ marginTop: 3, color: "#999", fontSize: 10 }}>{item.type || "monitoramento"}</div>
+                    <div className="ec-row__strong">{item.account_name}</div>
+                    <div className="ec-row__faint">{item.type || "monitoramento"}</div>
                   </div>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 680 }}>{item.title}</div>
-                    <div style={{ marginTop: 4, color: "#777", fontSize: 11.5, lineHeight: 1.45 }}>{item.detail}</div>
+                  <div style={{ minWidth: 0 }}>
+                    <div className="ec-row__title">{item.title}</div>
+                    <div className="ec-row__detail">{item.detail}</div>
                   </div>
-                  <div style={{ color: "#888", fontSize: 10.5 }}>{date ? new Date(date).toLocaleString("pt-BR") : "—"}</div>
+                  <div className="ec-row__faint" style={{ fontVariantNumeric: "tabular-nums" }}>
+                    {date ? new Date(date).toLocaleString("pt-BR") : "—"}
+                  </div>
                   <div style={{ textAlign: "right" }}>
                     {tab === "active" ? (
-                      <button disabled={busy === item.id} onClick={() => acknowledge(item, true)} style={buttonStyle}>{busy === item.id ? "Salvando…" : "Marcar ciente"}</button>
+                      <Button variant="secondary" size="sm" disabled={busy === item.id} onClick={() => acknowledge(item, true)}>
+                        {busy === item.id ? "Salvando…" : "Marcar ciente"}
+                      </Button>
                     ) : !item.resolved ? (
-                      <button disabled={busy === item.id} onClick={() => acknowledge(item, false)} style={buttonStyle}>{busy === item.id ? "Salvando…" : "Reabrir"}</button>
+                      <Button variant="ghost" size="sm" disabled={busy === item.id} onClick={() => acknowledge(item, false)}>
+                        {busy === item.id ? "Salvando…" : "Reabrir"}
+                      </Button>
                     ) : (
-                      <span style={{ color: "#27874e", fontSize: 11, fontWeight: 750 }}>✓ Resolvido</span>
+                      <Badge tone="ok">✓ Resolvido</Badge>
                     )}
                   </div>
                 </article>
@@ -229,15 +282,15 @@ export default function AlertsPage() {
   );
 }
 
-function Summary({ label, value, color }: { label: string; value: number; color: string }) {
-  return <div style={{ border: "1px solid #e8e8e5", borderRadius: 13, background: "#fff", padding: "14px 16px" }}><div style={{ color: "#888", fontSize: 10, fontWeight: 750, textTransform: "uppercase" }}>{label}</div><div style={{ color, fontSize: 25, fontWeight: 780, marginTop: 5 }}>{value}</div></div>;
+// Contadores por severidade. Zero fica em cinza: só o que tem volume merece cor.
+function Summary({ label, value, tone }: { label: string; value: number; tone?: "danger" | "warn" | "brand" }) {
+  return (
+    <div className="ec-kpi">
+      <div className="ec-kpi__label">{label}</div>
+      <div className="ec-kpi__value" data-tone={value > 0 ? tone : undefined}>
+        {value}
+      </div>
+    </div>
+  );
 }
-function Tab({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return <button onClick={onClick} style={{ border: 0, borderRadius: 7, padding: "6px 11px", background: active ? "#fff" : "transparent", color: active ? "#111" : "#777", boxShadow: active ? "0 1px 2px #0001" : "none", fontSize: 11.5, fontWeight: 680, cursor: "pointer" }}>{children}</button>;
-}
-function Empty({ children }: { children: React.ReactNode }) {
-  return <div style={{ minHeight: 180, display: "grid", placeItems: "center", color: "#999", fontSize: 13 }}>{children}</div>;
-}
-const inputStyle: React.CSSProperties = { height: 34, border: "1px solid #dededb", borderRadius: 8, background: "#fff", padding: "0 10px", color: "#333", fontSize: 11.5 };
-const buttonStyle: React.CSSProperties = { border: "1px solid #dededb", borderRadius: 8, background: "#fff", color: "#333", padding: "8px 11px", fontSize: 11.5, fontWeight: 650, cursor: "pointer" };
 const ALERT_GRID = "110px minmax(180px,.75fr) minmax(280px,1.5fr) 135px 150px";
