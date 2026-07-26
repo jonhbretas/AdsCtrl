@@ -10,6 +10,7 @@ const ITEMS = [
   { href: "/creatives", label: "Criativos", icon: "◉" },
   { href: "/meta-assets", label: "Raio-X", icon: "⌁" },
   { href: "/alerts", label: "Alertas", icon: "△" },
+  { href: "/tarefas", label: "Tarefas", icon: "☑" },
   { href: "/admin", label: "Configurações", icon: "⚙" },
 ];
 

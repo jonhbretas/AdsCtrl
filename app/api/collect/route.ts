@@ -167,6 +167,41 @@ async function persistAlerts(allAlerts: Alert[], processedAccountIds: string[]) 
   await query;
 }
 
+// Alertas que exigem uma ação minha, não só ciência. Queda de gasto e "sem
+// gasto" ficam de fora de propósito: viram tarefa todo dia numa conta pausada
+// e o quadro deixa de ser lido.
+const ACTIONABLE_ALERTS: Alert["type"][] = [
+  "low_balance",
+  "payment_issue",
+  "account_disabled",
+  "rejected_creative",
+];
+
+// Abre tarefa para o que precisa de mão. Enquanto o problema durar, a coleta
+// reencontra o mesmo alerta todos os dias — o índice único por
+// alert_fingerprint garante uma tarefa só, e o ON CONFLICT não reabre o que já
+// foi concluído.
+async function openTasksForAlerts(allAlerts: Alert[]) {
+  const actionable = allAlerts.filter((alert) => ACTIONABLE_ALERTS.includes(alert.type));
+  if (!actionable.length) return;
+  const sb = getServiceClient();
+  const rows = actionable.map((alert) => ({
+    title: `${alert.account_name}: ${alert.title}`,
+    notes: alert.detail,
+    status: "todo",
+    priority: alert.level === "critical" ? "high" : "normal",
+    account_id: alert.account_id,
+    source: "auto",
+    alert_fingerprint: `${alert.account_id}:${alert.type}`,
+  }));
+  // Falha aqui não pode derrubar a coleta: a tabela pode não existir ainda
+  // (supabase-migration-tasks.sql) e tarefa é consequência, não a coleta.
+  await sb
+    .from("tasks")
+    .upsert(rows, { onConflict: "alert_fingerprint", ignoreDuplicates: true })
+    .then(() => undefined, () => undefined);
+}
+
 async function runCollect(triggerSource: "manual" | "cron") {
   const sb = getServiceClient();
   const started = Date.now();
@@ -352,6 +387,8 @@ async function runCollect(triggerSource: "manual" | "cron") {
   }
 
   await persistAlerts(alerts, processedAccountIds);
+  // O que exige ação minha vira tarefa no quadro, com o contexto pronto.
+  await openTasksForAlerts(alerts);
   if (runId) await sb.from("collection_runs").update({
     finished_at: new Date().toISOString(),
     status: failed ? (processed ? "partial" : "error") : "success",
