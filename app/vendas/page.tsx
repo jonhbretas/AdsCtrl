@@ -276,9 +276,17 @@ export default function VendasPage() {
                       className="ec-input"
                       inputMode="decimal"
                       placeholder="—"
-                      value={rascunho[`${chave}::r`] ?? (m.revenue != null ? String(m.revenue).replace(".", ",") : "")}
+                      value={rascunho[`${chave}::r`] ?? paraTexto(m.revenue, emFoco === `${chave}::r`)}
+                      onFocus={() => setEmFoco(`${chave}::r`)}
                       onChange={(e) => setRascunho((p) => ({ ...p, [`${chave}::r`]: e.target.value }))}
                       onBlur={(e) => {
+                        setEmFoco(null);
+                        // Sai do rascunho para o valor voltar formatado.
+                        setRascunho((p) => {
+                          const n = { ...p };
+                          delete n[`${chave}::r`];
+                          return n;
+                        });
                         const texto = e.target.value;
                         const novo = paraNumero(texto);
                         if (novo === m.revenue) return;
