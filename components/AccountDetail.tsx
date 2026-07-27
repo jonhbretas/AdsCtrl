@@ -29,6 +29,7 @@ import {
   usePersistentSort,
 } from "@/components/SortableHeader";
 import { Menu } from "@/components/ui";
+import DuplicateCampaign from "@/components/DuplicateCampaign";
 
 interface Vals { results: Record<string, number>; values: Record<string, number> }
 interface Row extends Vals {
@@ -174,6 +175,8 @@ export default function AccountDetail({
   // Alteração de veiculação: id em andamento e o último recado ao usuário.
   const [changing, setChanging] = useState<string | null>(null);
   const [changeNote, setChangeNote] = useState<{ text: string; bad?: boolean } | null>(null);
+  // Campanha escolhida para duplicar; null = diálogo fechado.
+  const [duplicating, setDuplicating] = useState<{ id: string; name: string } | null>(null);
   const [tableSort, setTableSort] = usePersistentSort<DetailSortKey>(
     "adsctrl:sort:account-detail",
     { key: "spend", direction: "desc" },
@@ -549,12 +552,17 @@ export default function AccountDetail({
                 <Th sortKey="result" sort={tableSort} onSort={setTableSort} initialDirection="desc">Resultado</Th>
                 <Th sortKey="cpr" sort={tableSort} onSort={setTableSort}>CPR</Th>
                 <Th sortKey="roas" sort={tableSort} onSort={setTableSort} initialDirection="desc">ROAS</Th>
+                {/* Duplicar existe só para campanha: conjunto solto sem a
+                    campanha mãe não tem para onde ir na outra conta. */}
+                {platform === "meta" && tab === "campaigns" && (
+                  <th style={{ padding: "10px 14px", textAlign: "right", fontWeight: 500, width: 108 }}>Ação</th>
+                )}
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={platform === "meta" ? 9 : 8} style={{ padding: 0 }}>
+                  <td colSpan={(platform === "meta" ? 9 : 8) + (platform === "meta" && tab === "campaigns" ? 1 : 0)} style={{ padding: 0 }}>
                     <div className="ec-inline-empty">
                       Nenhuma {tab === "ads" ? "peça" : tab === "adsets" ? "conjunto" : "campanha"} com entrega neste
                       período.
@@ -588,6 +596,19 @@ export default function AccountDetail({
                     <Td>{formatMoney(r.spend)}</Td><Td>{num(r.impressions)}</Td><Td>{num(r.clicks)}</Td><Td>{pct(r.ctr)}</Td>
                     <Td accent>{num(res)}</Td><Td>{res ? formatMoney(r.spend / res) : "—"}</Td>
                     <Td>{rv > 0 && r.spend > 0 ? `${(rv / r.spend).toFixed(2)}x` : "—"}</Td>
+                    {platform === "meta" && tab === "campaigns" && (
+                      <td style={{ padding: "10px 14px", textAlign: "right" }}>
+                        <button
+                          className="ec-btn"
+                          data-variant="ghost"
+                          data-size="sm"
+                          onClick={() => setDuplicating({ id: r.id, name: r.name })}
+                          title="Copiar campanha e conjuntos para outra conta de anúncios"
+                        >
+                          ⧉ Duplicar
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 );
               })}
@@ -595,6 +616,15 @@ export default function AccountDetail({
           </table>
         </div>
       </div>
+
+      {duplicating && (
+        <DuplicateCampaign
+          sourceAccountId={accountId}
+          campaignId={duplicating.id}
+          campaignName={duplicating.name}
+          onClose={() => setDuplicating(null)}
+        />
+      )}
 
       {/* TERMOS DE BUSCA (Google, campanhas de Pesquisa) */}
       {platform === "google" && <SearchTerms terms={data.searchTerms} currency={currency} accountId={accountId} />}

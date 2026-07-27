@@ -571,6 +571,82 @@
   }
 }
 
+/* ----------------------------------------------------------------- modal --- */
+.ec-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-4);
+  background: rgb(15 42 54 / 45%);
+}
+.ec-modal__panel {
+  width: min(620px, 100%);
+  max-height: min(88vh, 820px);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+.ec-modal__head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  border-bottom: 1px solid var(--border);
+}
+.ec-modal__head strong {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 14.5px;
+  color: var(--text-strong);
+}
+.ec-modal__head small {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.ec-modal__head > div:first-child {
+  flex: 1;
+  min-width: 0;
+}
+.ec-modal__body {
+  padding: var(--sp-4);
+  overflow-y: auto;
+  display: grid;
+  gap: var(--sp-3);
+}
+.ec-modal__foot {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+  border-top: 1px solid var(--border);
+  background: var(--surface-sunken);
+}
+/* Empilhado, os três botões do rodapé não cabem lado a lado. */
+@media (max-width: 560px) {
+  .ec-modal {
+    padding: 0;
+    align-items: flex-end;
+  }
+  .ec-modal__panel {
+    max-height: 92vh;
+    border-radius: var(--r-lg) var(--r-lg) 0 0;
+  }
+  .ec-modal__foot {
+    flex-wrap: wrap;
+  }
+  .ec-modal__foot > .ec-btn {
+    flex: 1 1 auto;
+  }
+}
+
 /* ------------------------------------------------- folha inferior ("Mais") --- */
 .ec-sheet {
   position: fixed;

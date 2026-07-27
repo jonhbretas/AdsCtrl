@@ -39,14 +39,30 @@ if (!TOKEN) {
 type FbEdge<T> = { data: T[]; paging?: { next?: string } };
 
 // Helper genérico que segue paginação automaticamente.
+// Transforma o erro da Meta em frase legível. O corpo cru é um JSON aninhado
+// que, jogado na tela, esconde a única linha que interessa — e o limite de
+// requisições, que é o erro mais comum aqui, vira um paredão de chaves.
+function metaErrorMessage(status: number, body: string): string {
+  try {
+    const e = JSON.parse(body)?.error;
+    if (e?.code === 17 || e?.code === 4 || e?.code === 613) {
+      return "A Meta limitou temporariamente as chamadas desta conta. Espere alguns minutos e tente de novo.";
+    }
+    const texto = e?.error_user_msg || e?.message;
+    if (texto) return e?.error_user_title ? `${e.error_user_title}: ${texto}` : texto;
+  } catch {
+    // corpo não-JSON: usa o texto cru, cortado
+  }
+  return `Meta API ${status}: ${body.slice(0, 200)}`;
+}
+
 async function fbGetAll<T>(url: string): Promise<T[]> {
   const out: T[] = [];
   let next: string | undefined = url;
   while (next) {
     const res = await fetch(next);
     if (!res.ok) {
-      const body = await res.text();
-      throw new Error(`Meta API ${res.status}: ${body}`);
+      throw new Error(metaErrorMessage(res.status, await res.text()));
     }
     const json = (await res.json()) as FbEdge<T>;
     out.push(...json.data);
@@ -732,6 +748,367 @@ export async function setObjectStatus(
     }
     throw new Error(`Meta API ${res.status}: ${message}`);
   }
+}
+
+/* ------------------------------------ duplicar estrutura entre contas ---
+   Copia campanha e conjuntos para OUTRA conta de anúncios. Não copia anúncio
+   nem criativo, e isso não é preguiça: criar criativo publica COMO a Página e
+   exige permissão que o usuário de sistema não tem hoje — verificado com
+   execution_options:["validate_only"], recusado até na própria conta. Já
+   conjunto com a Página do DESTINO passa, e é o que esta função faz.
+
+   O que não atravessa e por quê:
+    - page_id / instagram_user_id / pixel_id: são de outro cliente. Remapeados
+      com o que vem do formulário, nunca herdados da origem;
+    - público personalizado: existe só dentro da conta de origem. Removido do
+      targeting, e a função avisa quais saíram;
+    - anúncios e criativos: bloqueio de Página (acima).
+
+   Tudo nasce PAUSADO. Uma cópia que começa gastando é um acidente esperando. */
+
+export interface StructureAdSet {
+  id: string;
+  name: string;
+  optimization_goal?: string;
+  billing_event?: string;
+  bid_amount?: number;
+  bid_strategy?: string;
+  daily_budget?: string;
+  lifetime_budget?: string;
+  destination_type?: string;
+  start_time?: string;
+  end_time?: string;
+  targeting?: any;
+  promoted_object?: any;
+  attribution_spec?: any;
+  ads: number;
+}
+
+export interface CampaignStructure {
+  id: string;
+  /** Conta dona da campanha. A rota compara com a conta informada. */
+  accountId: string;
+  name: string;
+  objective: string;
+  buying_type?: string;
+  bid_strategy?: string;
+  daily_budget?: string;
+  lifetime_budget?: string;
+  special_ad_categories: string[];
+  adsets: StructureAdSet[];
+  /** Referências presas à conta de origem que precisam ser trocadas. */
+  needsRemap: { pages: string[]; pixels: string[]; instagram: string[]; audiences: number };
+}
+
+// fbGetAll segue paginação e devolve lista; para UM objeto (uma campanha, por
+// exemplo) a resposta não tem `data` e aquele helper não serve.
+async function fbGetOne<T>(url: string): Promise<T> {
+  const res = await fetch(url, { cache: "no-store" });
+  const text = await res.text();
+  let json: any = {};
+  try { json = text ? JSON.parse(text) : {}; } catch { json = {}; }
+  if (!res.ok || json?.error) throw new Error(metaErrorMessage(res.status, text));
+  return json as T;
+}
+
+async function fbPost(path: string, params: Record<string, string>, token: string, dryRun: boolean): Promise<any> {
+  const body = new URLSearchParams({ ...params, access_token: token });
+  if (dryRun) body.set("execution_options", JSON.stringify(["validate_only"]));
+  const res = await fetch(`${GRAPH}/${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+    cache: "no-store",
+  });
+  const text = await res.text();
+  let json: any = {};
+  try { json = text ? JSON.parse(text) : {}; } catch { json = { raw: text }; }
+  // error_user_msg é a frase que a Meta escreveu para humano; message é a
+  // técnica. metaErrorMessage prefere a primeira.
+  if (!res.ok || json?.error) throw new Error(metaErrorMessage(res.status, text));
+  return json;
+}
+
+/** Lê a estrutura completa de uma campanha, com o que precisa ser remapeado. */
+export async function getCampaignStructure(
+  campaignId: string,
+  token: string = TOKEN
+): Promise<CampaignStructure> {
+  if (!/^\d+$/.test(campaignId)) throw new Error("Identificador de campanha inválido.");
+  const campaignFields = [
+    "id", "account_id", "name", "objective", "buying_type", "bid_strategy",
+    "daily_budget", "lifetime_budget", "special_ad_categories",
+  ].join(",");
+  const campaign = await fbGetOne<any>(
+    `${GRAPH}/${campaignId}?fields=${campaignFields}&access_token=${token}`
+  );
+
+  const adsetFields = [
+    "id", "name", "optimization_goal", "billing_event", "bid_amount", "bid_strategy",
+    "daily_budget", "lifetime_budget", "destination_type", "start_time", "end_time",
+    "targeting", "promoted_object", "attribution_spec", "ads.summary(true).limit(0)",
+  ].join(",");
+  const raw = await fbGetAll<any>(
+    `${GRAPH}/${campaignId}/adsets?fields=${adsetFields}&limit=100&access_token=${token}`
+  );
+
+  const pages = new Set<string>();
+  const pixels = new Set<string>();
+  const instagram = new Set<string>();
+  let audiences = 0;
+
+  const adsets: StructureAdSet[] = raw.map((s: any) => {
+    const promoted = s.promoted_object || {};
+    if (promoted.page_id) pages.add(String(promoted.page_id));
+    if (promoted.pixel_id) pixels.add(String(promoted.pixel_id));
+    if (promoted.instagram_profile_id) instagram.add(String(promoted.instagram_profile_id));
+    const targeting = s.targeting || {};
+    audiences += (targeting.custom_audiences || []).length + (targeting.excluded_custom_audiences || []).length;
+    return {
+      id: s.id,
+      name: s.name,
+      optimization_goal: s.optimization_goal,
+      billing_event: s.billing_event,
+      bid_amount: s.bid_amount != null ? Number(s.bid_amount) : undefined,
+      bid_strategy: s.bid_strategy,
+      daily_budget: s.daily_budget,
+      lifetime_budget: s.lifetime_budget,
+      destination_type: s.destination_type,
+      start_time: s.start_time,
+      end_time: s.end_time,
+      targeting,
+      promoted_object: s.promoted_object,
+      attribution_spec: s.attribution_spec,
+      ads: Number(s.ads?.summary?.total_count || 0),
+    };
+  });
+
+  return {
+    id: campaign.id,
+    accountId: String(campaign.account_id || ""),
+    name: campaign.name,
+    objective: campaign.objective,
+    buying_type: campaign.buying_type,
+    bid_strategy: campaign.bid_strategy,
+    daily_budget: campaign.daily_budget,
+    lifetime_budget: campaign.lifetime_budget,
+    special_ad_categories: campaign.special_ad_categories || [],
+    adsets,
+    needsRemap: {
+      pages: [...pages],
+      pixels: [...pixels],
+      instagram: [...instagram],
+      audiences,
+    },
+  };
+}
+
+/** Páginas e pixels que a conta DESTINO já usa — as opções do formulário.
+    /promote_pages volta vazio com token de usuário de sistema, então as
+    páginas são deduzidas do promoted_object dos conjuntos que já existem
+    ali: se um anúncio da conta já promove aquela página, ela serve. */
+export async function getTargetAssets(
+  actId: string,
+  token: string = TOKEN
+): Promise<{ pages: string[]; pixels: { id: string; name?: string }[] }> {
+  if (!actId.startsWith("act_")) actId = `act_${actId}`;
+  const [adsets, pixels] = await Promise.all([
+    fbGetAll<any>(`${GRAPH}/${actId}/adsets?fields=promoted_object&limit=200&access_token=${token}`)
+      .catch(() => [] as any[]),
+    fbGetAll<any>(`${GRAPH}/${actId}/adspixels?fields=id,name&limit=50&access_token=${token}`)
+      .catch(() => [] as any[]),
+  ]);
+  const pages = new Set<string>();
+  for (const s of adsets) {
+    const p = s.promoted_object?.page_id;
+    if (p) pages.add(String(p));
+  }
+  return {
+    pages: [...pages],
+    pixels: pixels.map((p: any) => ({ id: String(p.id), name: p.name })),
+  };
+}
+
+export interface DuplicateInput {
+  sourceCampaignId: string;
+  targetActId: string;
+  /** Página do DESTINO. Obrigatória quando algum conjunto promove página. */
+  pageId?: string;
+  /** Pixel do DESTINO. Obrigatório quando algum conjunto otimiza por pixel. */
+  pixelId?: string;
+  /** Sufixo no nome, para a cópia não se confundir com a original. */
+  nameSuffix?: string;
+  dryRun: boolean;
+}
+
+export interface DuplicateResult {
+  dryRun: boolean;
+  campaign: { id?: string; name: string };
+  /** `approximate` marca recusa vinda da campanha emprestada na conferência:
+      pode não acontecer na cópia real, onde a campanha é a nova. */
+  adsets: { name: string; id?: string; error?: string; approximate?: boolean }[];
+  skipped: { ads: number; audiences: number };
+  warnings: string[];
+}
+
+export async function duplicateCampaignStructure(
+  input: DuplicateInput,
+  sourceToken: string = TOKEN,
+  targetToken: string = TOKEN
+): Promise<DuplicateResult> {
+  const target = input.targetActId.startsWith("act_") ? input.targetActId : `act_${input.targetActId}`;
+  const structure = await getCampaignStructure(input.sourceCampaignId, sourceToken);
+  const warnings: string[] = [];
+
+  if (structure.needsRemap.pages.length && !input.pageId) {
+    throw new Error("Esta campanha promove uma Página. Escolha a Página da conta de destino.");
+  }
+  if (structure.needsRemap.pixels.length && !input.pixelId) {
+    throw new Error("Esta campanha otimiza por pixel. Escolha o pixel da conta de destino.");
+  }
+
+  const sufixo = (input.nameSuffix || "").trim();
+  const nomeCampanha = sufixo ? `${structure.name} ${sufixo}` : structure.name;
+
+  // O orçamento pode estar na campanha (CBO) ou nos conjuntos (ABO). Copiar o
+  // da campanha só quando ele existe: mandar daily_budget vazio dá erro.
+  const campaignParams: Record<string, string> = {
+    name: nomeCampanha,
+    objective: structure.objective,
+    status: "PAUSED",
+    special_ad_categories: JSON.stringify(structure.special_ad_categories),
+    buying_type: structure.buying_type || "AUCTION",
+  };
+  if (structure.daily_budget) campaignParams.daily_budget = String(structure.daily_budget);
+  if (structure.lifetime_budget) campaignParams.lifetime_budget = String(structure.lifetime_budget);
+  if (structure.daily_budget || structure.lifetime_budget) {
+    if (structure.bid_strategy) campaignParams.bid_strategy = structure.bid_strategy;
+  } else {
+    // Sem orçamento na campanha, a Meta exige dizer explicitamente se os
+    // conjuntos compartilham orçamento. Sem este campo ela recusa.
+    campaignParams.is_adset_budget_sharing_enabled = "false";
+  }
+
+  const created = await fbPost(`${target}/campaigns`, campaignParams, targetToken, input.dryRun);
+  const newCampaignId: string | undefined = created?.id;
+
+  // No dry-run não nasce campanha, e conjunto precisa de um campaign_id que
+  // exista NO DESTINO — apontar para a campanha de origem faz a Meta responder
+  // "esta campanha pertence a uma conta diferente", que não valida nada.
+  // Solução: validar contra uma campanha do destino com o MESMO objetivo. Não
+  // é a campanha final, mas exercita targeting, orçamento, meta de otimização
+  // e a permissão da Página, que é o que pode dar errado.
+  let baseValidacao: string | undefined = newCampaignId;
+  // A base emprestada pode ter estratégia de lance diferente da campanha nova.
+  // Se tiver, o limite de lance não é validável: enviá-lo produz uma recusa
+  // que NÃO aconteceria na cópia real. Melhor não validar do que assustar.
+  let lanceValidavel = true;
+  if (input.dryRun) {
+    const candidatas = await fbGetAll<any>(
+      `${GRAPH}/${target}/campaigns?fields=id,name,objective,bid_strategy&limit=200&access_token=${targetToken}`
+    ).catch(() => [] as any[]);
+    const mesmoObjetivo = candidatas.filter((c: any) => c.objective === structure.objective);
+    // Prefere uma base que também case a estratégia de lance.
+    const igual =
+      mesmoObjetivo.find((c: any) => c.bid_strategy === structure.bid_strategy) || mesmoObjetivo[0];
+    baseValidacao = igual?.id;
+    if (!igual) {
+      warnings.push(
+        `A conta de destino não tem campanha de ${structure.objective} para servir de base, então os conjuntos não puderam ser conferidos antes. A campanha em si foi validada.`
+      );
+    } else {
+      warnings.push(
+        `Conjuntos conferidos contra "${igual.name}", do destino, que tem o mesmo objetivo. No envio real eles vão para a campanha nova.`
+      );
+      if (structure.bid_strategy && igual.bid_strategy !== structure.bid_strategy) {
+        lanceValidavel = false;
+        warnings.push(
+          `O limite de lance não foi conferido: a campanha usada na conferência usa ${igual.bid_strategy} e a original usa ${structure.bid_strategy}.`
+        );
+      }
+    }
+  }
+
+  const adsets: DuplicateResult["adsets"] = [];
+  let ads = 0;
+
+  for (const adset of structure.adsets) {
+    ads += adset.ads;
+    const targeting = { ...(adset.targeting || {}) };
+    // Público personalizado é da conta de origem: não existe no destino e
+    // faria a criação falhar. Sai, e o aviso registra que saiu.
+    delete targeting.custom_audiences;
+    delete targeting.excluded_custom_audiences;
+
+    const promoted: Record<string, any> = {};
+    const origem = adset.promoted_object || {};
+    if (origem.page_id && input.pageId) promoted.page_id = input.pageId;
+    if (origem.pixel_id && input.pixelId) promoted.pixel_id = input.pixelId;
+    if (origem.custom_event_type) promoted.custom_event_type = origem.custom_event_type;
+    if (origem.application_id) promoted.application_id = origem.application_id;
+
+    const nomeConjunto = sufixo ? `${adset.name} ${sufixo}` : adset.name;
+    if (!baseValidacao) {
+      adsets.push({ name: nomeConjunto, error: "não validado (sem campanha de base no destino)" });
+      continue;
+    }
+    const params: Record<string, string> = {
+      name: nomeConjunto,
+      campaign_id: baseValidacao,
+      status: "PAUSED",
+      targeting: JSON.stringify(targeting),
+    };
+    if (adset.optimization_goal) params.optimization_goal = adset.optimization_goal;
+    if (adset.billing_event) params.billing_event = adset.billing_event;
+    if (adset.destination_type) params.destination_type = adset.destination_type;
+    if (adset.bid_strategy) params.bid_strategy = adset.bid_strategy;
+    // O conjunto guarda um bid_amount mesmo quando a estratégia em vigor é
+    // "menor custo sem limite" — e aí a Meta recusa se ele for enviado. Só vai
+    // junto nas estratégias que de fato usam limite de lance.
+    const estrategia = adset.bid_strategy || structure.bid_strategy;
+    const usaLimite = estrategia === "LOWEST_COST_WITH_BID_CAP" || estrategia === "COST_CAP" || estrategia === "TARGET_COST";
+    if (adset.bid_amount != null && usaLimite && lanceValidavel) params.bid_amount = String(adset.bid_amount);
+    if (adset.daily_budget) params.daily_budget = String(adset.daily_budget);
+    if (adset.lifetime_budget) params.lifetime_budget = String(adset.lifetime_budget);
+    if (Object.keys(promoted).length) params.promoted_object = JSON.stringify(promoted);
+    if (adset.attribution_spec) params.attribution_spec = JSON.stringify(adset.attribution_spec);
+    // Data no passado é recusada; a cópia começa agora e mantém o fim.
+    if (adset.end_time) params.end_time = adset.end_time;
+
+    try {
+      const res = await fbPost(`${target}/adsets`, params, targetToken, input.dryRun);
+      adsets.push({ name: params.name, id: res?.id });
+    } catch (error: any) {
+      // Um conjunto que falha não derruba os outros: a campanha está pausada,
+      // e é melhor entregar cinco de seis dizendo qual faltou.
+      adsets.push({
+        name: params.name,
+        error: error?.message || "Falha ao criar o conjunto.",
+        // Na conferência a campanha de base é emprestada; parte das recusas
+        // vem dela, não da cópia. Só o envio real dá resposta definitiva.
+        approximate: input.dryRun && !newCampaignId,
+      });
+    }
+  }
+
+  if (ads > 0) {
+    warnings.push(
+      `${ads} anúncio(s) não foram copiados: criar criativo publica como a Página e exige permissão que o token não tem. Suba os criativos no Gerenciador.`
+    );
+  }
+  if (structure.needsRemap.audiences > 0) {
+    warnings.push(
+      `${structure.needsRemap.audiences} público(s) personalizado(s) foram removidos da segmentação: eles existem só na conta de origem.`
+    );
+  }
+
+  return {
+    dryRun: input.dryRun,
+    campaign: { id: newCampaignId, name: nomeCampanha },
+    adsets,
+    skipped: { ads, audiences: structure.needsRemap.audiences },
+    warnings,
+  };
 }
 
 // Diagnóstico: devolve o payload cru de UMA conta (todos os campos financeiros
