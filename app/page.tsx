@@ -177,6 +177,9 @@ export default function Dashboard() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [acking, setAcking] = useState<number | null>(null);
   const [live, setLive] = useState<LiveOverview | null>(null);
+  // Métricas das contas Google vinculadas, buscadas sob demanda ao abrir a
+  // conta Meta. Fora daqui elas não entram no overview, que é por plataforma.
+  const [linkedLive, setLinkedLive] = useState<Record<string, Metrics>>({});
   const [liveLoading, setLiveLoading] = useState(false);
   const [tableSort, setTableSort] = usePersistentSort<AccountSortKey>(
     "adsctrl:sort:overview",
@@ -209,7 +212,10 @@ export default function Dashboard() {
 
   // Métricas da conta no período selecionado (cache p/ presets, live p/ hoje/custom).
   function accMetrics(a: Account): M {
-    if (isLive) return norm(live?.metrics?.[a.account_id]);
+    // linkedLive cobre a conta Google mostrada DENTRO de uma conta Meta: a
+    // busca ao vivo é filtrada por plataforma, então com o filtro em Meta ela
+    // não traz Google e aquele resumo ficava em R$ 0,00.
+    if (isLive) return norm(live?.metrics?.[a.account_id] || linkedLive[a.account_id]);
     return norm((periodKey && a.metricsByPeriod?.[periodKey]) || a.metrics);
   }
   function accPrev(a: Account): M {
@@ -274,6 +280,41 @@ export default function Dashboard() {
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [period, range.since, range.until, platformFilter]);
+
+  // Ao abrir uma conta Meta, busca as métricas das contas Google vinculadas a
+  // ela. O overview é filtrado por plataforma e nunca as traz junto — por isso
+  // o resumo "Google Ads vinculado ao cliente" aparecia zerado mesmo com a
+  // conta faturando. Só as vinculadas àquela conta, e só quando ela é aberta.
+  useEffect(() => {
+    if (!expanded) return;
+    const aberta = accounts.find((a) => a.account_id === expanded);
+    if (!aberta || aberta.platform !== "meta") return;
+    const ids = accounts
+      .filter((g) => g.platform === "google" && g.linked_meta_account_id === expanded && !g.hidden)
+      .map((g) => g.account_id)
+      .filter((id) => !live?.metrics?.[id] && !linkedLive[id]);
+    if (!ids.length) return;
+
+    let alive = true;
+    const params = new URLSearchParams({
+      since: range.since,
+      until: range.until,
+      accounts: ids.join(","),
+    });
+    fetch(`/api/accounts/overview?${params}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (alive && d?.metrics) setLinkedLive((prev) => ({ ...prev, ...d.metrics }));
+      })
+      .catch(() => { /* o resumo continua em branco; o detalhe abaixo tem o dado */ });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expanded, accounts, range.since, range.until]);
+
+  // Período novo invalida o que foi buscado para o período antigo.
+  useEffect(() => {
+    setLinkedLive({});
+  }, [range.since, range.until]);
 
   async function refresh() {
     setRefreshing(true);

@@ -46,12 +46,26 @@ export async function GET(req: Request) {
     const platform = searchParams.get("platform");
     const prev = previousRange(since, until);
 
+    // `accounts` pede ids específicos e ignora a plataforma. Existe para o
+    // bloco "Google Ads vinculado ao cliente", que aparece DENTRO de uma conta
+    // Meta: com o filtro em Meta, a busca ao vivo não trazia conta Google
+    // nenhuma e aquele resumo ficava zerado. Buscar as duas plataformas
+    // sempre resolveria, e custaria o dobro de chamada em toda troca de
+    // período — aqui só se pede o que a tela abriu.
+    const idsPedidos = (searchParams.get("accounts") || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .slice(0, 25);
+
     const supabase = getServiceClient();
     let accountQuery = supabase
       .from("ad_accounts")
       .select("account_id, platform, hidden, token_ref")
       .eq("hidden", false);
-    if (platform === "meta" || platform === "google") {
+    if (idsPedidos.length) {
+      accountQuery = accountQuery.in("account_id", idsPedidos);
+    } else if (platform === "meta" || platform === "google") {
       accountQuery = accountQuery.eq("platform", platform);
     }
     const { data: accounts } = await accountQuery;
