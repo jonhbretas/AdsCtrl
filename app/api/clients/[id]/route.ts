@@ -54,6 +54,12 @@ export async function PATCH(req: Request, { params }: RouteContext) {
         { status: 503 }
       );
     }
+    if (error && /track_sales/.test(error.message || "")) {
+      return NextResponse.json(
+        { error: "Rode supabase-migration-vendas.sql no SQL Editor do Supabase para acompanhar vendas." },
+        { status: 503 }
+      );
+    }
     if (error) throw error;
     if (!data) {
       return NextResponse.json({ error: "Cliente não encontrado." }, { status: 404 });
