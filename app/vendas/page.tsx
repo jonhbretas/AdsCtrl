@@ -68,6 +68,15 @@ function paraTexto(valor: number | null, emEdicao: boolean): string {
   return valor.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+/** As duas leituras que a quantidade abre, e que o valor sozinho não dá:
+    quanto entra por venda, e quanto custa conquistar uma. Um retorno de 4x com
+    ticket caindo é um negócio diferente de um retorno de 4x com ticket estável —
+    e é a quantidade que separa os dois casos. */
+const ticketMedio = (revenue: number | null, orders: number | null) =>
+  revenue != null && orders != null && orders > 0 ? revenue / orders : null;
+const custoPorVenda = (spend: number, orders: number | null) =>
+  orders != null && orders > 0 && spend > 0 ? spend / orders : null;
+
 export default function VendasPage() {
   const [data, setData] = useState<Payload | null>(null);
   const [meses, setMeses] = useState(6);
@@ -159,7 +168,13 @@ export default function VendasPage() {
     return data.months.map((mes) => {
       let spend = 0;
       let revenue = 0;
+      let orders = 0;
       let temVenda = false;
+      // Quantidade e valor são informados de forma independente: há mês com
+      // valor e sem quantidade. Somar só quem informou evita um custo por venda
+      // calculado com o gasto de todos sobre a quantidade de alguns.
+      let temQtd = false;
+      let clientesComQtd = 0;
       // Se QUALQUER cliente tem histórico furado no mês, o total também está
       // furado. Sem herdar a marca, a última linha mostrava 6,43x limpo num
       // mês com 7 dias de dado — exatamente o número que não se pode comparar.
@@ -175,14 +190,20 @@ export default function VendasPage() {
         if (m.spend > 0) clientesComGasto++;
         if (m.partial) parcial = true;
         if (m.revenue != null) { revenue += m.revenue; temVenda = true; clientesComVenda++; }
+        if (m.orders != null) { orders += m.orders; temQtd = true; clientesComQtd++; }
       }
       return {
         mes,
         spend,
         revenue: temVenda ? revenue : null,
+        orders: temQtd ? orders : null,
         parcial,
         incompleto: clientesComVenda > 0 && clientesComVenda < clientesComGasto,
+        // Quantidade parcial tem o mesmo problema do valor parcial, e por um
+        // motivo pior: o gasto do total é de todos os clientes.
+        qtdIncompleta: clientesComQtd > 0 && clientesComQtd < clientesComGasto,
         clientesComVenda,
+        clientesComQtd,
         clientesComGasto,
       };
     });
@@ -295,7 +316,7 @@ export default function VendasPage() {
                     />
                   </label>
                   <label className="ec-field" style={{ minWidth: 0 }}>
-                    <span className="ec-field__label">Pedidos</span>
+                    <span className="ec-field__label">Vendas (qtd)</span>
                     <input
                       className="ec-input"
                       inputMode="numeric"
@@ -303,16 +324,38 @@ export default function VendasPage() {
                       value={rascunho[`${chave}::o`] ?? (m.orders != null ? String(m.orders) : "")}
                       onChange={(e) => setRascunho((p) => ({ ...p, [`${chave}::o`]: e.target.value }))}
                       onBlur={(e) => {
+                        // Sai do rascunho como no valor: se o salvamento falhar,
+                        // o campo volta ao que está no banco em vez de mostrar
+                        // um número que não foi gravado.
+                        setRascunho((p) => {
+                          const n = { ...p };
+                          delete n[`${chave}::o`];
+                          return n;
+                        });
                         const novo = paraNumero(e.target.value);
                         if (novo === m.orders) return;
                         salvar(linha.client_id, mesVigente, "orders", e.target.value);
                       }}
                     />
                   </label>
-                  <div style={{ textAlign: "right", minWidth: 92 }}>
+                  <div style={{ textAlign: "right", minWidth: 108 }}>
                     <div className="ec-field__label">Retorno</div>
                     <div style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 15, color: roas == null ? "var(--text-faint)" : roas >= 1 ? "var(--ok-600)" : "var(--danger-600)" }}>
                       {roas == null ? "—" : `${roas.toFixed(2)}x`}
+                    </div>
+                    {/* Valor e quantidade lado a lado no momento do lançamento:
+                        é ali que se percebe o ticket que caiu. */}
+                    <div style={{ fontSize: 10.5, color: "var(--text-faint)", lineHeight: 1.45, marginTop: 2 }}>
+                      {ticketMedio(m.revenue, m.orders) != null && (
+                        <div title="Ticket médio: valor vendido ÷ quantidade de vendas">
+                          ticket {money(ticketMedio(m.revenue, m.orders)!, linha.currency)}
+                        </div>
+                      )}
+                      {custoPorVenda(m.spend, m.orders) != null && (
+                        <div title="Custo por venda: investido ÷ quantidade de vendas">
+                          custo/venda {money(custoPorVenda(m.spend, m.orders)!, linha.currency)}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div style={{ width: 58, textAlign: "right", fontSize: 11, color: "var(--text-faint)" }}>
@@ -330,7 +373,8 @@ export default function VendasPage() {
         <section className="ec-section">
           <h2 className="ec-section__title">Mês a mês</h2>
           <p className="ec-section__hint">
-            Investido, vendido e o retorno real. Qualquer mês é editável — clique no valor para corrigir ou preencher o
+            Investido, vendido em <strong>valor</strong> e em <strong>quantidade</strong>, e as duas leituras que saem
+            daí: retorno (×) e custo por venda. Qualquer mês é editável — clique no campo para corrigir ou preencher o
             passado. <strong>parcial</strong> marca mês em que o histórico de investimento não cobre todos os dias, e
             nesse caso o retorno não é comparável com os outros.
           </p>
@@ -363,8 +407,8 @@ export default function VendasPage() {
                             <input
                               className="ec-salescell__input"
                               inputMode="decimal"
-                              placeholder="vendas"
-                              aria-label={`Vendas de ${linha.name} em ${rotuloMes(m.month, true)}`}
+                              placeholder="valor"
+                              aria-label={`Valor vendido por ${linha.name} em ${rotuloMes(m.month, true)}`}
                               value={
                                 rascunho[`${chave}::r`]
                                 ?? paraTexto(m.revenue, emFoco === `${chave}::r`)
@@ -385,6 +429,28 @@ export default function VendasPage() {
                                 salvar(linha.client_id, m.month, "revenue", e.target.value);
                               }}
                             />
+                            {/* Quantidade na mesma célula do valor: sem isso o
+                                passado só podia receber valor, e metrificar por
+                                quantidade ficava preso ao mês vigente. */}
+                            <input
+                              className="ec-salescell__input"
+                              data-kind="qty"
+                              inputMode="numeric"
+                              placeholder="qtd"
+                              aria-label={`Quantidade de vendas de ${linha.name} em ${rotuloMes(m.month, true)}`}
+                              value={rascunho[`${chave}::o`] ?? (m.orders != null ? String(m.orders) : "")}
+                              onChange={(e) => setRascunho((p) => ({ ...p, [`${chave}::o`]: e.target.value }))}
+                              onBlur={(e) => {
+                                setRascunho((p) => {
+                                  const n = { ...p };
+                                  delete n[`${chave}::o`];
+                                  return n;
+                                });
+                                const novo = paraNumero(e.target.value);
+                                if (novo === m.orders) return;
+                                salvar(linha.client_id, m.month, "orders", e.target.value);
+                              }}
+                            />
                             <span
                               className="ec-salescell__roas"
                               data-tone={roas == null ? undefined : roas >= 1 ? "ok" : "bad"}
@@ -399,6 +465,14 @@ export default function VendasPage() {
                                 </em>
                               )}
                             </span>
+                            {custoPorVenda(m.spend, m.orders) != null && (
+                              <span
+                                className="ec-salescell__unit"
+                                title="Custo por venda: investido ÷ quantidade de vendas"
+                              >
+                                {money(custoPorVenda(m.spend, m.orders)!, linha.currency)}/venda
+                              </span>
+                            )}
                           </div>
                         </td>
                       );
@@ -416,6 +490,17 @@ export default function VendasPage() {
                           <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 13 }}>
                             {t.revenue != null ? money(t.revenue, "BRL") : "—"}
                           </span>
+                          <span className="ec-salescell__unit" style={{ fontWeight: 650 }}>
+                            {t.orders != null ? `${num(t.orders)} venda${t.orders === 1 ? "" : "s"}` : " "}
+                            {t.orders != null && t.qtdIncompleta && (
+                              <em
+                                title={`${t.clientesComQtd} de ${t.clientesComGasto} clientes com quantidade informada. O custo por venda usa o investimento de todos, então está superestimado.`}
+                                style={{ fontStyle: "normal", color: "var(--warn-700)", marginLeft: 4 }}
+                              >
+                                {t.clientesComQtd}/{t.clientesComGasto}
+                              </em>
+                            )}
+                          </span>
                           <span className="ec-salescell__roas" data-tone={roas == null ? undefined : roas >= 1 ? "ok" : "bad"}>
                             {roas == null ? " " : `${roas.toFixed(2)}x`}
                             {t.parcial && (
@@ -432,6 +517,11 @@ export default function VendasPage() {
                               </em>
                             )}
                           </span>
+                          {custoPorVenda(t.spend, t.orders) != null && (
+                            <span className="ec-salescell__unit" title="Custo por venda: investido ÷ quantidade de vendas">
+                              {money(custoPorVenda(t.spend, t.orders)!, "BRL")}/venda
+                            </span>
+                          )}
                         </div>
                       </td>
                     );
@@ -448,12 +538,17 @@ export default function VendasPage() {
         </section>
       )}
 
-      {/* Quantidade de pedidos, quando informada, vira ticket médio — é a
-          leitura que explica um retorno que caiu sem a venda cair. */}
+      {/* A quantidade informada abre duas leituras que o valor sozinho não dá:
+          quanto entra por venda e quanto custa comprar uma. Juntas explicam um
+          retorno que caiu sem o faturamento cair. */}
       {data && data.rows.some((l) => l.months.some((m) => m.orders != null)) && (
         <section className="ec-section">
-          <h2 className="ec-section__title">Ticket médio</h2>
-          <p className="ec-section__hint">Só aparece onde você informou a quantidade de pedidos.</p>
+          <h2 className="ec-section__title">Por venda: ticket médio e custo</h2>
+          <p className="ec-section__hint">
+            Só aparece onde você informou a quantidade. <strong>Ticket</strong> é o valor vendido ÷ quantidade;{" "}
+            <strong>custo</strong> é o investido ÷ quantidade. Quando o custo por venda passa o ticket, cada venda
+            nova custa mais do que traz.
+          </p>
           <div className="ec-card ec-scroll-x">
             <table className="ec-salestable">
               <thead>
@@ -466,18 +561,72 @@ export default function VendasPage() {
                 {data.rows.map((linha) => (
                   <tr key={linha.client_id}>
                     <th scope="row" style={{ textAlign: "left" }}>{linha.name}</th>
-                    {linha.months.map((m) => (
-                      <td key={m.month}>
-                        {m.orders != null && m.orders > 0 && m.revenue != null
-                          ? money(m.revenue / m.orders, linha.currency)
-                          : "—"}
-                        {m.orders != null && m.orders > 0 && (
-                          <div style={{ fontSize: 10.5, color: "var(--text-faint)" }}>{num(m.orders)} ped.</div>
-                        )}
-                      </td>
-                    ))}
+                    {linha.months.map((m) => {
+                      const ticket = ticketMedio(m.revenue, m.orders);
+                      const custo = custoPorVenda(m.spend, m.orders);
+                      // Custo acima do ticket é o sinal que a tela existe para
+                      // dar: aparece em vermelho porque a venda dá prejuízo
+                      // antes de qualquer custo de produto.
+                      const noPrejuizo = ticket != null && custo != null && custo > ticket;
+                      return (
+                        <td key={m.month}>
+                          <div className="ec-salescell">
+                            <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 13 }}>
+                              {ticket != null ? money(ticket, linha.currency) : "—"}
+                            </span>
+                            {custo != null && (
+                              <span
+                                className="ec-salescell__unit"
+                                data-tone={noPrejuizo ? "bad" : undefined}
+                                title={
+                                  noPrejuizo
+                                    ? "O custo por venda está acima do ticket médio deste mês."
+                                    : "Custo por venda: investido ÷ quantidade de vendas"
+                                }
+                              >
+                                custo {money(custo, linha.currency)}
+                              </span>
+                            )}
+                            {m.orders != null && (
+                              <span className="ec-salescell__unit">
+                                {num(m.orders)} venda{m.orders === 1 ? "" : "s"}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                      );
+                    })}
                   </tr>
                 ))}
+                <tr className="ec-salestable__total">
+                  <th scope="row" style={{ textAlign: "left" }}>Todos</th>
+                  {totaisPorMes.map((t) => {
+                    const ticket = ticketMedio(t.revenue, t.orders);
+                    const custo = custoPorVenda(t.spend, t.orders);
+                    return (
+                      <td key={t.mes}>
+                        <div className="ec-salescell">
+                          <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 13 }}>
+                            {ticket != null ? money(ticket, "BRL") : "—"}
+                          </span>
+                          {custo != null && (
+                            <span
+                              className="ec-salescell__unit"
+                              data-tone={ticket != null && custo > ticket ? "bad" : undefined}
+                            >
+                              custo {money(custo, "BRL")}
+                            </span>
+                          )}
+                          {t.orders != null && (
+                            <span className="ec-salescell__unit">
+                              {num(t.orders)} venda{t.orders === 1 ? "" : "s"}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    );
+                  })}
+                </tr>
               </tbody>
             </table>
           </div>
