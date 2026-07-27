@@ -171,6 +171,14 @@ export function clientPatchFromBody(body: unknown, creating = false): Record<str
     patch.brand_name = nullableText(input.brand_name, "brand_name", 60);
   }
 
+  // Entra na tela de vendas reais. Fora dela, nenhuma linha é pedida.
+  if (Object.prototype.hasOwnProperty.call(input, "track_sales")) {
+    if (typeof input.track_sales !== "boolean") {
+      throw new ClientInputError("track_sales deve ser true ou false.");
+    }
+    patch.track_sales = input.track_sales;
+  }
+
   return patch;
 }
 

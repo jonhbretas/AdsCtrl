@@ -45,6 +45,8 @@ interface ClientRecord {
   report_email?: string | null;
   report_enabled?: boolean;
   report_last_sent_at?: string | null;
+  /** Entra na tela de Vendas, onde o valor real é informado mês a mês. */
+  track_sales?: boolean;
   accounts: Account[];
 }
 type ClientAdminSortKey =
@@ -975,6 +977,20 @@ function ReportDelivery({
           onChange={(e) => onUpdate(client.id, { report_enabled: e.target.checked })}
         />
         Enviar toda segunda
+      </label>
+      {/* Vendas reais: a plataforma reporta conversão, não venda. Em campanha
+          de mensagem o pedido fecha no WhatsApp e nunca volta. Marcar aqui
+          coloca o cliente na tela de Vendas para o valor ser informado. */}
+      <label
+        title="Coloca este cliente na tela de Vendas, para você informar o valor vendido em cada mês"
+        style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#333" }}
+      >
+        <input
+          type="checkbox"
+          checked={Boolean(client.track_sales)}
+          onChange={(e) => onUpdate(client.id, { track_sales: e.target.checked })}
+        />
+        Acompanhar vendas reais
       </label>
       <button
         onClick={sendTest}

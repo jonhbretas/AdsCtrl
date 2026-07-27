@@ -18,6 +18,7 @@ const GROUPS: { items: { href: string; label: string; icon: string; title: strin
   },
   {
     items: [
+      { href: "/vendas", label: "Vendas", icon: "◈", title: "Vendas reais informadas, contra o investido" },
       { href: "/creatives", label: "Criativos", icon: "◉", title: "Qual peça merece continuar no ar" },
       { href: "/meta-assets", label: "Raio-X", icon: "⌁", title: "Estrutura e ativos das contas" },
       { href: "/alerts", label: "Alertas", icon: "△", title: "Saldo, pagamento, reprovação" },

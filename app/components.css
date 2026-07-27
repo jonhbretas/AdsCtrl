@@ -571,6 +571,127 @@
   }
 }
 
+/* ------------------------------------------------------------- vendas --- */
+/* Lançamento do mês: nome, dois campos e o retorno. Em telas estreitas o
+   nome ocupa a linha inteira e os campos vão abaixo, em vez de encolherem
+   até o número não caber. */
+.ec-salesrow {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) 150px 110px auto auto;
+  gap: var(--sp-3);
+  align-items: end;
+  padding-bottom: var(--sp-3);
+  border-bottom: 1px solid var(--border);
+}
+.ec-salesrow:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+@media (max-width: 720px) {
+  .ec-salesrow {
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+  }
+  .ec-salesrow > *:first-child {
+    grid-column: 1 / -1;
+  }
+}
+
+.ec-salestable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  /* Uma coluna por mês, e cada uma precisa caber "R$ 12.345,67" sem quebrar. */
+  min-width: 760px;
+}
+.ec-salestable th,
+.ec-salestable td {
+  padding: 8px 10px;
+  text-align: right;
+  vertical-align: top;
+  border-top: 1px solid var(--border);
+}
+.ec-salestable thead th {
+  border-top: none;
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: var(--surface-sunken);
+  position: sticky;
+  top: 0;
+}
+.ec-salestable tbody th {
+  font-family: var(--font-display);
+  font-weight: 650;
+  font-size: 13px;
+  color: var(--text-strong);
+  white-space: nowrap;
+}
+.ec-salestable td[data-empty] {
+  background: var(--surface-sunken);
+}
+.ec-salestable__total th,
+.ec-salestable__total td {
+  border-top: 2px solid var(--border-strong);
+  background: var(--surface-sunken);
+}
+.ec-salescell {
+  display: grid;
+  gap: 3px;
+  justify-items: end;
+}
+.ec-salescell__spend {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.ec-salescell__input {
+  width: 100%;
+  min-width: 84px;
+  max-width: 128px;
+  padding: 4px 7px;
+  text-align: right;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-strong);
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+/* Sem borda até o toque: uma grade de 24 caixas desenhadas é ilegível. A
+   borda aparece no hover e no foco, que é quando ela informa. */
+.ec-salescell__input:hover {
+  border-color: var(--border-strong);
+}
+.ec-salescell__input:focus {
+  outline: none;
+  border-color: var(--brand-500);
+  background: var(--surface);
+  box-shadow: 0 0 0 3px var(--brand-100);
+}
+.ec-salescell__input::placeholder {
+  color: var(--text-faint);
+  font-weight: 400;
+}
+.ec-salescell__roas {
+  font-size: 11px;
+  font-weight: 700;
+  font-family: var(--font-display);
+  color: var(--text-faint);
+  min-height: 14px;
+}
+.ec-salescell__roas[data-tone="ok"] {
+  color: var(--ok-600);
+}
+.ec-salescell__roas[data-tone="bad"] {
+  color: var(--danger-600);
+}
+
 /* ----------------------------------------------------------------- modal --- */
 .ec-modal {
   position: fixed;
