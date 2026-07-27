@@ -1594,6 +1594,15 @@
 .ec-collapse__body {
   padding: 0 var(--sp-4);
 }
+/* Seção de configuração: o conteúdo precisa de respiro em cima e embaixo,
+   coisa que o uso original (lista dentro de uma linha de conta) não pedia. */
+.ec-stack {
+  display: grid;
+  gap: var(--sp-3);
+}
+.ec-stack > .ec-collapse > .ec-collapse__body {
+  padding: var(--sp-4);
+}
 
 /* ==========================================================================
    Interruptor de veiculação

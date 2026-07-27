@@ -309,6 +309,22 @@ export default function AccountDetail({
   if (!data) return null;
 
   const k = data.kpis, p = data.prevKpis;
+
+  // Separa o recorte que tem número do que não tem, para a métrica escolhida.
+  // Depende de demoMetric: "Cliques" pode ter dado onde "Conversões" não tem.
+  const segments = (() => {
+    const candidates: { title: string; rows: Breakdown[] }[] = [
+      { title: "PLATAFORMA", rows: data.breakdowns.platform },
+      { title: "DISPOSITIVO", rows: data.breakdowns.device },
+      { title: "POSIÇÃO (TOP 10)", rows: data.breakdowns.position.slice(0, 10) },
+      { title: "REGIÃO (TOP 10)", rows: data.breakdowns.region.slice(0, 10) },
+      { title: "IDADE E GÊNERO", rows: data.breakdowns.age_gender.slice(0, 12) },
+      { title: "DIA DA SEMANA", rows: byWeekday },
+    ];
+    const withData = candidates.filter((c) => c.rows.some((row) => metricOf(row, demoMetric) > 0));
+    const empty = candidates.filter((c) => !withData.includes(c)).map((c) => c.title.replace(/ \(TOP \d+\)/, ""));
+    return { withData, empty };
+  })();
   const primaryRes = resultOf(k);
   const prevPrimaryRes = resultOf(p);
   const cpr = primaryRes ? k.spend / primaryRes : 0;
@@ -608,36 +624,60 @@ export default function AccountDetail({
         </ChartCard>
       </div>
 
-      {/* DEMOGRÁFICOS + DISPOSITIVO */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "8px 0 12px" }}>
-        <SectionTitle noMargin>Segmentações</SectionTitle>
-        <span style={{ flex: 1 }} />
-        <label style={{ fontSize: 12, color: "#888" }}>Visualizar por:</label>
-        <select value={demoMetric} onChange={(e) => setDemoMetric(e.target.value as MetricKey)} style={{ padding: "5px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13 }}>
-          {(Object.keys(METRIC_LABELS) as MetricKey[]).map((m) => <option key={m} value={m}>{METRIC_LABELS[m]}</option>)}
-        </select>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
-        <DemoCard title="PLATAFORMA" rows={data.breakdowns.platform} metric={demoMetric} metricOf={metricOf} fmt={fmtMetric} />
-        <DemoCard title="DISPOSITIVO" rows={data.breakdowns.device} metric={demoMetric} metricOf={metricOf} fmt={fmtMetric} />
-        <DemoCard title="POSIÇÃO (TOP 10)" rows={data.breakdowns.position.slice(0, 10)} metric={demoMetric} metricOf={metricOf} fmt={fmtMetric} />
-        <DemoCard title="REGIÃO (TOP 10)" rows={data.breakdowns.region.slice(0, 10)} metric={demoMetric} metricOf={metricOf} fmt={fmtMetric} />
-        <DemoCard title="IDADE E GÊNERO" rows={data.breakdowns.age_gender.slice(0, 12)} metric={demoMetric} metricOf={metricOf} fmt={fmtMetric} />
-        <DemoCard title="DIA DA SEMANA" rows={byWeekday} metric={demoMetric} metricOf={metricOf} fmt={fmtMetric} />
-      </div>
+      {/* DEMOGRÁFICOS + DISPOSITIVO
+          Cinco dos seis cartões vinham escritos "Sem dados para o período" em
+          conta Google — e vão continuar vindo, porque a API do Google Ads não
+          entrega estes recortes por esta via (lib/google-ads.ts devolve
+          breakdowns vazios de propósito). Cartão vazio não é informação: ocupa
+          metade da tela e some com o que tem dado. Agora só entra o recorte
+          que tem número, e o rodapé diz o que ficou de fora e por quê. */}
+      {segments.withData.length > 0 && (
+        <>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "8px 0 12px" }}>
+            <SectionTitle noMargin>Segmentações</SectionTitle>
+            <span style={{ flex: 1 }} />
+            <label style={{ fontSize: 12, color: "#888" }}>Visualizar por:</label>
+            <select value={demoMetric} onChange={(e) => setDemoMetric(e.target.value as MetricKey)} style={{ padding: "5px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13 }}>
+              {(Object.keys(METRIC_LABELS) as MetricKey[]).map((m) => <option key={m} value={m}>{METRIC_LABELS[m]}</option>)}
+            </select>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))", gap: 12, marginBottom: 12 }}>
+            {segments.withData.map((segment) => (
+              <DemoCard
+                key={segment.title}
+                title={segment.title}
+                rows={segment.rows}
+                metric={demoMetric}
+                metricOf={metricOf}
+                fmt={fmtMetric}
+              />
+            ))}
+          </div>
+          {segments.empty.length > 0 && (
+            <p style={{ fontSize: 11.5, color: "var(--text-muted)", margin: "0 0 16px", lineHeight: 1.5 }}>
+              Sem dado em {segments.empty.join(", ").toLowerCase()} para {METRIC_LABELS[demoMetric].toLowerCase()}
+              {platform === "google"
+                ? ". O Google Ads não expõe estes recortes por esta via — o que dá para agir aqui são os termos de busca acima."
+                : ". Pode ser recorte que a Meta não devolve para este objetivo, ou volume baixo demais no período."}
+            </p>
+          )}
+        </>
+      )}
 
-      {/* POR HORA */}
-      <ChartCard height={200} title="Por hora do dia">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data.breakdowns.hour.map((h) => ({ label: h.key, v: metricOf(h, demoMetric) }))} margin={{ top: 6, right: 8, left: 8, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eee" />
-            <XAxis dataKey="label" tick={{ fontSize: 10, fill: "#999" }} tickLine={false} axisLine={false} interval={1} />
-            <YAxis tick={{ fontSize: 11, fill: "#999" }} tickLine={false} axisLine={false} width={48} tickFormatter={(v) => (demoMetric === "spend" || demoMetric === "cpm" || demoMetric === "cpr" ? formatMoneyShort(v) : num(v))} />
-            <Tooltip formatter={(v: any) => fmtMetric(Number(v), demoMetric)} />
-            <Bar dataKey="v" fill={ACCENT} radius={[3, 3, 0, 0]} maxBarSize={22} />
-          </BarChart>
-        </ResponsiveContainer>
-      </ChartCard>
+      {/* POR HORA — só quando existe hora. Em conta Google o eixo vinha vazio. */}
+      {data.breakdowns.hour.some((h) => metricOf(h, demoMetric) > 0) && (
+        <ChartCard height={200} title="Por hora do dia">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={data.breakdowns.hour.map((h) => ({ label: h.key, v: metricOf(h, demoMetric) }))} margin={{ top: 6, right: 8, left: 8, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eee" />
+              <XAxis dataKey="label" tick={{ fontSize: 10, fill: "#999" }} tickLine={false} axisLine={false} interval={1} />
+              <YAxis tick={{ fontSize: 11, fill: "#999" }} tickLine={false} axisLine={false} width={48} tickFormatter={(v) => (demoMetric === "spend" || demoMetric === "cpm" || demoMetric === "cpr" ? formatMoneyShort(v) : num(v))} />
+              <Tooltip formatter={(v: any) => fmtMetric(Number(v), demoMetric)} />
+              <Bar dataKey="v" fill={ACCENT} radius={[3, 3, 0, 0]} maxBarSize={22} />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartCard>
+      )}
     </div>
   );
 }
@@ -741,33 +781,123 @@ function Td({ children, accent }: { children: React.ReactNode; accent?: boolean 
 // Não há botão de negativar: negativar pela API mexe na estrutura da conta
 // (lista de negativas, nível de campanha ou de grupo) e isso é escrita de outra
 // natureza. A tabela mostra o que decidir; a decisão sai no Google Ads.
-const TERM_STATE: Record<SearchTerm["state"], { tone: "ok" | "danger" | "neutral" | "warn"; label: string }> = {
-  "palavra-chave": { tone: "ok", label: "já é chave" },
-  negativado: { tone: "neutral", label: "negativado" },
-  ambos: { tone: "warn", label: "chave e negativa" },
-  novo: { tone: "warn", label: "sem tratar" },
+// "já é chave" e "negativado" não dizem nada a quem não vive dentro do Google
+// Ads. O rótulo é curto porque a coluna é estreita; a explicação vem no title,
+// que o navegador mostra ao pousar o mouse e o leitor de tela anuncia.
+const TERM_STATE: Record<
+  SearchTerm["state"],
+  { tone: "ok" | "danger" | "neutral" | "warn"; label: string; help: string }
+> = {
+  "palavra-chave": {
+    tone: "ok",
+    label: "já é chave",
+    help: "Você já cadastrou este termo como palavra-chave. O Google está comprando este tráfego de propósito.",
+  },
+  negativado: {
+    tone: "neutral",
+    label: "negativado",
+    help: "Termo já na lista de palavras negativas. Não deve gerar novos cliques; o custo aqui é do que rodou antes de negativar.",
+  },
+  ambos: {
+    tone: "warn",
+    label: "chave e negativa",
+    help: "O termo está como palavra-chave em um lugar e como negativa em outro. Vale conferir: normalmente é conflito entre campanhas ou grupos.",
+  },
+  novo: {
+    tone: "warn",
+    label: "sem tratar",
+    help: "O termo apareceu numa busca real e ainda não é palavra-chave nem negativa. Se gastou e não converteu, é candidato a negativar; se converteu, a virar palavra-chave.",
+  },
 };
+
+const SUSPECT_HELP =
+  "Gastou, não converteu e continua sem tratamento — é o primeiro candidato a virar palavra negativa.";
+
+type TermSortKey = "state" | "term" | "campaign" | "cost" | "impressions" | "clicks" | "ctr" | "conversions" | "costPerConversion";
 
 function SearchTerms({ terms, currency }: { terms?: SearchTerm[]; currency: string }) {
   const [showAll, setShowAll] = useState(false);
-  const list = terms || [];
-  const untreated = list.filter((t) => t.state === "novo");
-  const wasted = untreated.filter((t) => t.conversions === 0 && t.cost > 0);
+  const [campaign, setCampaign] = useState("all");
+  const [sort, setSort] = useState<SortState<TermSortKey>>({ key: "cost", direction: "desc" });
+  const all = terms || [];
+
+  // Uma conta de Pesquisa mistura campanhas com intenção diferente (marca,
+  // genérico, concorrente). Somados, o "sem tratar" de uma esconde o da outra.
+  const campaigns = useMemo(() => {
+    const byName = new Map<string, number>();
+    for (const term of all) {
+      const name = term.campaign || "(sem campanha)";
+      byName.set(name, (byName.get(name) || 0) + 1);
+    }
+    return [...byName.entries()].sort((a, b) => b[1] - a[1]);
+  }, [all]);
+
+  const list = useMemo(() => {
+    const filtered = campaign === "all"
+      ? all
+      : all.filter((term) => (term.campaign || "(sem campanha)") === campaign);
+    return [...filtered].sort((a, b) => {
+      const pick = (term: SearchTerm) => {
+        switch (sort.key) {
+          case "state": return TERM_STATE[term.state].label;
+          case "term": return term.term;
+          case "campaign": return term.campaign || "";
+          // Sem custo por conversão é ausência de dado, não zero: mandar para
+          // o fim das duas ordens evita que "—" ocupe o topo do "mais barato".
+          case "costPerConversion": return term.costPerConversion ?? null;
+          default: return term[sort.key];
+        }
+      };
+      return compareSortValues(pick(a), pick(b), sort.direction);
+    });
+  }, [all, campaign, sort]);
+
+  const wasted = list.filter((t) => t.state === "novo" && t.conversions === 0 && t.cost > 0);
   const visible = showAll ? list : list.slice(0, 12);
+  const Th = ({ column, children, align = "right", initialDirection = "desc" }: {
+    column: TermSortKey;
+    children: React.ReactNode;
+    align?: "left" | "right";
+    initialDirection?: "asc" | "desc";
+  }) => (
+    <th style={{ padding: "10px 14px", textAlign: align, fontWeight: 500 }}>
+      <SortButton column={column} sort={sort} onSort={setSort} align={align} initialDirection={initialDirection}>
+        {children}
+      </SortButton>
+    </th>
+  );
 
   return (
     <>
       <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "8px 0 12px", flexWrap: "wrap" }}>
         <SectionTitle noMargin>Termos de busca</SectionTitle>
-        {list.length > 0 && (
+        {all.length > 0 && (
           <>
             <span style={{ fontSize: 11.5, color: "var(--text-muted)" }}>
-              {list.length} termos, por custo
+              {list.length}
+              {list.length !== all.length ? ` de ${all.length}` : ""} termos
             </span>
             {wasted.length > 0 && (
-              <span className="ec-badge" data-tone="warn">
+              <span className="ec-badge" data-tone="warn" title={SUSPECT_HELP}>
                 {wasted.length} sem conversão e sem tratamento
               </span>
+            )}
+            <span style={{ flex: 1 }} />
+            {campaigns.length > 1 && (
+              <label className="ec-inline-field">
+                <span>Campanha</span>
+                <select
+                  className="ec-input"
+                  value={campaign}
+                  onChange={(event) => { setCampaign(event.target.value); setShowAll(false); }}
+                  style={{ width: "auto", maxWidth: 260, fontSize: 12 }}
+                >
+                  <option value="all">Todas ({all.length})</option>
+                  {campaigns.map(([name, count]) => (
+                    <option key={name} value={name}>{name} ({count})</option>
+                  ))}
+                </select>
+              </label>
             )}
           </>
         )}
@@ -785,14 +915,14 @@ function SearchTerms({ terms, currency }: { terms?: SearchTerm[]; currency: stri
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 720 }}>
             <thead>
               <tr style={{ color: "var(--text-muted)", textAlign: "right" }}>
-                <th style={{ padding: "10px 14px", textAlign: "left", fontWeight: 500, width: 116 }}>Situação</th>
-                <th style={{ padding: "10px 14px", textAlign: "left", fontWeight: 500 }}>Termo digitado</th>
-                <th style={{ padding: "10px 14px", fontWeight: 500 }}>Custo</th>
-                <th style={{ padding: "10px 14px", fontWeight: 500 }}>Impr.</th>
-                <th style={{ padding: "10px 14px", fontWeight: 500 }}>Cliques</th>
-                <th style={{ padding: "10px 14px", fontWeight: 500 }}>CTR</th>
-                <th style={{ padding: "10px 14px", fontWeight: 500 }}>Conv.</th>
-                <th style={{ padding: "10px 14px", fontWeight: 500 }}>Custo/conv.</th>
+                <Th column="state" align="left" initialDirection="asc">Situação</Th>
+                <Th column="term" align="left" initialDirection="asc">Termo digitado</Th>
+                <Th column="cost">Custo</Th>
+                <Th column="impressions">Impr.</Th>
+                <Th column="clicks">Cliques</Th>
+                <Th column="ctr">CTR</Th>
+                <Th column="conversions">Conv.</Th>
+                <Th column="costPerConversion">Custo/conv.</Th>
               </tr>
             </thead>
             <tbody>
@@ -803,7 +933,13 @@ function SearchTerms({ terms, currency }: { terms?: SearchTerm[]; currency: stri
                 return (
                   <tr key={`${term.term}-${index}`} style={{ borderTop: "1px solid var(--border)" }}>
                     <td style={{ padding: "10px 14px" }}>
-                      <span className="ec-badge" data-tone={suspect ? "danger" : state.tone}>
+                      {/* O title é o que explica o rótulo. Vem junto com o
+                          motivo de estar em vermelho, quando for o caso. */}
+                      <span
+                        className="ec-badge"
+                        data-tone={suspect ? "danger" : state.tone}
+                        title={suspect ? `${state.help}\n\n${SUSPECT_HELP}` : state.help}
+                      >
                         {state.label}
                       </span>
                     </td>

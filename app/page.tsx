@@ -289,13 +289,20 @@ export default function Dashboard() {
     setRefreshing(false);
   }
 
-  // Dispara a coleta completa (insights + alertas) na hora, sem esperar o cron.
-  async function collectNow() {
+  // Dispara a coleta (insights + alertas) na hora, sem esperar o cron. Coletar
+  // uma plataforma só é seguro: o fechamento de alerta é feito conta a conta,
+  // sobre as processadas na rodada — o que ficou de fora não é tocado.
+  async function collectNow(platform: "all" | "meta" | "google" = "all") {
     if (collecting) return;
     setCollecting(true);
-    setSyncMsg("Coletando dados das contas ativas… (pode levar até 1 min)");
+    const escopo = platform === "meta" ? "do Meta" : platform === "google" ? "do Google" : "de todas as plataformas";
+    setSyncMsg(`Coletando dados ${escopo}… (pode levar até 1 min)`);
     try {
-      const r = await fetch("/api/collect", { method: "POST" });
+      const r = await fetch("/api/collect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ platform }),
+      });
       const d = await r.json();
       if (!r.ok || d.error) throw new Error(d.error || `Falha (HTTP ${r.status}).`);
       await load();
@@ -549,6 +556,7 @@ export default function Dashboard() {
   ].filter(Boolean).length;
   const periodLabel =
     period === "custom" ? "personalizado" : PRESETS.find((p) => p.key === period)?.label || period;
+  const platformLabel = platformFilter === "google" ? "Google" : "Meta";
   const short = PERIOD_SHORT[period];
   const fam = RESULT_FAMILY_BY_SLUG[focus] || RESULT_FAMILIES[0];
   const primaryCurrency = totals.currencyTotals[0]?.currency || "BRL";
@@ -630,8 +638,17 @@ export default function Dashboard() {
         meta={lastUpdated ? <Badge>Coleta: {lastUpdated}</Badge> : undefined}
         actions={
           <>
-            <Button variant="ghost" size="sm" onClick={refresh} disabled={refreshing}>
-              {refreshing ? "Atualizando…" : "↻ Atualizar"}
+            {/* Atualizar já obedece ao filtro de Plataforma — só relê o que
+                está na tela. Um segundo seletor aqui poderia contradizer o
+                filtro; o rótulo diz o escopo em vez de duplicá-lo. */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={refresh}
+              disabled={refreshing}
+              title={`Reler os números ${platformLabel} do período em tela`}
+            >
+              {refreshing ? "Atualizando…" : `↻ Atualizar ${platformLabel}`}
             </Button>
             <Menu
               label={syncing ? "Sincronizando…" : "⇅ Sincronizar"}
@@ -659,15 +676,29 @@ export default function Dashboard() {
               ⚙ Grupos
             </a>
             {/* Coletar é a ação que traz dado novo: é a dominante da tela. */}
-            <Button
+            <Menu
               variant="primary"
-              size="sm"
-              onClick={collectNow}
+              label={collecting ? "Coletando…" : "⟳ Coletar agora"}
               disabled={collecting}
-              title="Buscar métricas e alertas de todas as contas agora"
-            >
-              {collecting ? "Coletando…" : "⟳ Coletar agora"}
-            </Button>
+              title="Buscar métricas e alertas das contas ativas agora"
+              items={[
+                {
+                  label: "Só Meta",
+                  hint: "métricas e alertas das contas Meta ativas",
+                  onSelect: () => collectNow("meta"),
+                },
+                {
+                  label: "Só Google",
+                  hint: "métricas e alertas das contas Google ativas",
+                  onSelect: () => collectNow("google"),
+                },
+                {
+                  label: "Tudo",
+                  hint: "as duas plataformas; é o que o cron faz de madrugada",
+                  onSelect: () => collectNow("all"),
+                },
+              ]}
+            />
           </>
         }
       />

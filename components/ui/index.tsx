@@ -237,20 +237,71 @@ export const Select = React.forwardRef<HTMLSelectElement, React.SelectHTMLAttrib
    expandido disparava as consultas de TODAS as contas vinculadas de uma vez,
    fechadas ou não. Montando sob demanda, só paga quem abre. */
 export function Collapsible({
+  id,
   summary,
   children,
   defaultOpen = false,
   tone,
+  storageKey,
 }: {
+  /** Âncora da seção. Um link com #id abre a seção ao chegar. */
+  id?: string;
   summary: React.ReactNode;
   children: React.ReactNode;
   defaultOpen?: boolean;
   tone?: "brand" | "neutral";
+  /** Guarda aberto/fechado entre visitas. Sem isto, toda visita recomeça. */
+  storageKey?: string;
 }) {
   const [open, setOpen] = React.useState(defaultOpen);
+  const ref = React.useRef<HTMLElement>(null);
+
+  // localStorage e location só depois de montar: ler durante o render quebra
+  // a hidratação, porque o servidor não tem como saber o que ficou aberto.
+  React.useEffect(() => {
+    // A âncora vence o que estava guardado: quem clicou num link para esta
+    // seção quer vê-la aberta, não descobrir um cabeçalho fechado.
+    const openFromHash = () => {
+      if (!id || window.location.hash !== `#${id}`) return false;
+      setOpen(true);
+      // O navegador já tentou rolar antes de a seção existir no DOM.
+      window.requestAnimationFrame(() => ref.current?.scrollIntoView({ block: "start" }));
+      return true;
+    };
+    // Ir de /admin para /admin#clients é navegação no MESMO documento: o React
+    // não remonta e só o evento de hash avisa. Sem escutá-lo, um link para a
+    // seção não abre nada quando já se está na página.
+    window.addEventListener("hashchange", openFromHash);
+    const cleanup = () => window.removeEventListener("hashchange", openFromHash);
+
+    if (openFromHash()) return cleanup;
+    if (!storageKey) return cleanup;
+    try {
+      const saved = window.localStorage.getItem(`ec-collapse:${storageKey}`);
+      if (saved === "1" || saved === "0") setOpen(saved === "1");
+    } catch {
+      /* modo privado ou storage cheio: fica no padrão */
+    }
+    return cleanup;
+  }, [id, storageKey]);
+
+  function toggle() {
+    setOpen((wasOpen) => {
+      const next = !wasOpen;
+      if (storageKey) {
+        try {
+          window.localStorage.setItem(`ec-collapse:${storageKey}`, next ? "1" : "0");
+        } catch {
+          /* idem */
+        }
+      }
+      return next;
+    });
+  }
+
   return (
-    <section className="ec-collapse" data-open={open ? "true" : undefined} data-tone={tone}>
-      <button className="ec-collapse__head" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+    <section id={id} ref={ref} className="ec-collapse" data-open={open ? "true" : undefined} data-tone={tone}>
+      <button className="ec-collapse__head" onClick={toggle} aria-expanded={open}>
         <span className="ec-collapse__summary">{summary}</span>
         <span className="ec-collapse__chevron" aria-hidden="true">{open ? "▲" : "▼"}</span>
       </button>

@@ -11,7 +11,7 @@ import {
   usePersistentSort,
 } from "@/components/SortableHeader";
 import { RESULT_FAMILY_BY_SLUG } from "@/lib/format";
-import { Badge, Notice, PageHeader, Skeleton, SkeletonCard, WideScreenHint } from "@/components/ui";
+import { Badge, Collapsible, Notice, PageHeader, Skeleton, SkeletonCard, WideScreenHint } from "@/components/ui";
 
 interface Group {
   id: string;
@@ -98,6 +98,8 @@ export default function Admin() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [clients, setClients] = useState<ClientRecord[]>([]);
   const [clientsUnavailable, setClientsUnavailable] = useState<string | null>(null);
+  // Aparece no cabeçalho da seção recolhida: é o número que diz se vale abrir.
+  const collectingCount = accounts.filter((account) => !account.hidden).length;
   const [loading, setLoading] = useState(true);
   const [loadRevision, setLoadRevision] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -490,11 +492,23 @@ export default function Admin() {
         </div>
       )}
 
-      <section id="clients" className="ec-section">
-        <h2 className="ec-section__title">Metas e orçamento por cliente</h2>
-        <p className="ec-section__hint">
-          Esses valores alimentam o pacing, a projeção mensal e os alertas do Cockpit Hoje.
-        </p>
+      {/* Cinco assuntos independentes numa página de 8.000px: cada um vira uma
+          linha, e só o que se vai mexer é montado. Recolhido não é só mais
+          curto — o corpo nem entra no DOM, então 27 formulários de cliente e
+          37 linhas de conta deixam de ser renderizados a cada visita. */}
+      <div className="ec-stack">
+      <Collapsible
+        id="clients"
+        storageKey="admin:clients"
+        summary={
+          <SectionHead
+            icon="◎"
+            title="Metas e orçamento por cliente"
+            hint="Objetivo, orçamento, KPI e ciclo. Alimenta o pacing e os alertas do Hoje."
+            meta={`${clients.length} cliente${clients.length === 1 ? "" : "s"}`}
+          />
+        }
+      >
         {clientsUnavailable ? (
           <Notice tone="warn">Fundação de clientes ainda não aplicada: {clientsUnavailable}</Notice>
         ) : (
@@ -626,13 +640,18 @@ export default function Admin() {
             </div>
           </div>
         )}
-      </section>
+      </Collapsible>
 
-      <section style={{ marginBottom: 32 }}>
-        <h2 style={{ fontSize: 16, fontWeight: 600, margin: "0 0 8px" }}>Sincronizar plataformas</h2>
-        <p style={{ color: "#777", fontSize: 13, margin: "0 0 12px" }}>
-          Contas novas entram desativadas. Nenhuma métrica será consultada até você ativá-las.
-        </p>
+      <Collapsible
+        storageKey="admin:sync"
+        summary={
+          <SectionHead
+            icon="⇅"
+            title="Sincronizar plataformas"
+            hint="Contas novas entram desativadas. Nenhuma métrica é consultada até você ativá-las."
+          />
+        }
+      >
         <div style={{ display: "flex", gap: 8 }}>
           <button disabled={busy} onClick={() => sync("meta")} style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid #d8e6fb", background: "#f5f9ff", color: "#1877f2", cursor: "pointer" }}>
             Sincronizar Meta
@@ -641,11 +660,19 @@ export default function Admin() {
             Sincronizar Google
           </button>
         </div>
-      </section>
+      </Collapsible>
 
       {/* CRIAR GRUPO */}
-      <section style={{ marginBottom: 32 }}>
-        <h2 style={{ fontSize: 16, fontWeight: 600, margin: "0 0 12px" }}>Novo grupo</h2>
+      <Collapsible
+        storageKey="admin:new-group"
+        summary={
+          <SectionHead
+            icon="＋"
+            title="Novo grupo"
+            hint="Cria um grupo para filtrar o overview por cliente ou carteira."
+          />
+        }
+      >
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <input
             value={newName}
@@ -687,13 +714,22 @@ export default function Admin() {
             Criar
           </button>
         </div>
-      </section>
+      </Collapsible>
 
       {/* LISTA DE GRUPOS */}
-      <section style={{ marginBottom: 32 }}>
-        <h2 style={{ fontSize: 16, fontWeight: 600, margin: "0 0 12px" }}>Grupos ({groups.length})</h2>
+      <Collapsible
+        storageKey="admin:groups"
+        summary={
+          <SectionHead
+            icon="◇"
+            title="Grupos"
+            hint="Renomear, recolorir ou excluir."
+            meta={`${groups.length} grupo${groups.length === 1 ? "" : "s"}`}
+          />
+        }
+      >
         {groups.length === 0 ? (
-          <p style={{ color: "#888", fontSize: 14 }}>Nenhum grupo ainda. Crie o primeiro acima.</p>
+          <p style={{ color: "#888", fontSize: 14 }}>Nenhum grupo ainda. Crie o primeiro em “Novo grupo”.</p>
         ) : (
           <div style={{ border: "1px solid #eee", borderRadius: 12, overflowX: "auto" }}>
             <div style={{ minWidth: 500 }}>
@@ -745,14 +781,20 @@ export default function Admin() {
             </div>
           </div>
         )}
-      </section>
+      </Collapsible>
 
       {/* ATRIBUIR CONTAS */}
-      <section>
-        <h2 style={{ fontSize: 16, fontWeight: 600, margin: "0 0 6px" }}>Contas: coleta, cliente e grupo</h2>
-        <p style={{ color: "#777", fontSize: 13, margin: "0 0 12px" }}>
-          Ativa = aparece no dashboard e tem dados coletados. Oculta = não gera chamadas à API.
-        </p>
+      <Collapsible
+        storageKey="admin:accounts"
+        summary={
+          <SectionHead
+            icon="▤"
+            title="Contas: coleta, cliente e grupo"
+            hint="Ativa = aparece no dashboard e tem dados coletados. Oculta = não gera chamadas à API."
+            meta={`${accounts.length} contas · ${collectingCount} coletando`}
+          />
+        }
+      >
         <div style={{ border: "1px solid #eee", borderRadius: 12, overflowX: "auto" }}>
           <div style={{ minWidth: 1020 }}>
             <div style={{ display: "grid", gridTemplateColumns: ACCOUNT_GRID, alignItems: "center", gap: 12, padding: "9px 16px", color: "#888", background: "#fafaf9", borderBottom: "1px solid #eee", fontSize: 10, fontWeight: 750, textTransform: "uppercase", letterSpacing: 0.25 }}>
@@ -825,7 +867,8 @@ export default function Admin() {
             ))}
           </div>
         </div>
-      </section>
+      </Collapsible>
+      </div>
     </div>
   );
 }
@@ -990,6 +1033,31 @@ function FocusChip({ family }: { family: string | null }) {
     <Badge tone="warn" title="Defina o Resultado do relatório nos dados do cliente para o relatório medir o que importa">
       foco automático
     </Badge>
+  );
+}
+
+// Cabeçalho de seção recolhida. O número à direita é o que decide se vale
+// abrir: "37 contas · 20 coletando" responde a pergunta sem expandir nada.
+function SectionHead({
+  icon,
+  title,
+  hint,
+  meta,
+}: {
+  icon: string;
+  title: string;
+  hint?: string;
+  meta?: string;
+}) {
+  return (
+    <>
+      <span className="ec-collapse__icon" aria-hidden="true">{icon}</span>
+      <span style={{ display: "grid", gap: 1, minWidth: 0, flex: 1 }}>
+        <span className="ec-collapse__title">{title}</span>
+        {hint && <span className="ec-collapse__hint">{hint}</span>}
+      </span>
+      {meta && <span className="ec-collapse__meta">{meta}</span>}
+    </>
   );
 }
 

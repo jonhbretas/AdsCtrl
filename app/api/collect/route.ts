@@ -226,13 +226,20 @@ async function openTasksForAlerts(allAlerts: Alert[]) {
   }
 }
 
-async function runCollect(triggerSource: "manual" | "cron") {
+// Coletar uma plataforma só é seguro porque persistAlerts fecha alerta apenas
+// das contas processadas nesta rodada: rodar só o Meta não resolve por engano
+// nada do Google. O cron continua rodando as duas.
+type CollectScope = "all" | "meta" | "google";
+
+async function runCollect(triggerSource: "manual" | "cron", platform: CollectScope = "all") {
   const sb = getServiceClient();
   const started = Date.now();
-  const { data: selected, error } = await sb
+  let accountQuery = sb
     .from("ad_accounts")
     .select("account_id, name, platform, currency, status, token_ref")
     .eq("hidden", false);
+  if (platform !== "all") accountQuery = accountQuery.eq("platform", platform);
+  const { data: selected, error } = await accountQuery;
   if (error) throw error;
   const staleBefore = new Date(Date.now() - 15 * 60 * 1000).toISOString();
   await sb.from("collection_runs").update({
@@ -451,9 +458,11 @@ export async function GET(req: Request) {
   }
 }
 
-export async function POST() {
+export async function POST(req: Request) {
   try {
-    return NextResponse.json(await runCollect("manual"));
+    const body = await req.json().catch(() => ({}));
+    const platform: CollectScope = ["meta", "google"].includes(body?.platform) ? body.platform : "all";
+    return NextResponse.json({ ...(await runCollect("manual", platform)), platform });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Erro na coleta." }, { status: 500 });
   }
