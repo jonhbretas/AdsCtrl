@@ -302,6 +302,18 @@ const BENCHMARK_SOURCE_LABEL: Record<BenchmarkSource, string> = {
   Gestão: "Gestão",
 };
 
+// Anúncio reprovado, como a Meta o reporta agora. Vem de /api/creatives/rejected
+// e não do laboratório: peça recusada costuma ter entrega zero no período, e o
+// que não gastou não aparece na tabela de performance.
+type RejectedAd = {
+  ad_id: string;
+  ad_name: string;
+  campaign_name: string | null;
+  reasons: string[];
+  effective_status: string | null;
+  thumbnail: string | null;
+};
+
 export default function CreativesPage() {
   const [accounts, setAccounts] = useState<AccountOption[]>([]);
   const [accountId, setAccountId] = useState("");
@@ -319,13 +331,72 @@ export default function CreativesPage() {
   );
   const [search, setSearch] = useState("");
 
+  // Chegada por link do quadro de tarefas: ?account=<id>&issue=rejected&ads=<ids>.
+  // A tela abre na conta certa, mostra os anúncios recusados e já filtra a
+  // tabela neles — é o que transforma "3 criativos reprovados" em "estes três".
+  const [focusAds, setFocusAds] = useState<Set<string>>(new Set());
+  const [issue, setIssue] = useState<string | null>(null);
+  const [onlyFocus, setOnlyFocus] = useState(true);
+  const [rejected, setRejected] = useState<RejectedAd[] | null>(null);
+  const [rejectedError, setRejectedError] = useState<string | null>(null);
+  const [deepLinkNotice, setDeepLinkNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const ads = (params.get("ads") || "").split(",").map((id) => id.trim()).filter(Boolean);
+    if (ads.length) setFocusAds(new Set(ads));
+    setIssue(params.get("issue"));
+  }, []);
+
   useEffect(() => {
     fetch("/api/accounts").then((r) => r.json()).then((data) => {
       const meta = (data.accounts || []).filter((a: AccountOption) => a.platform === "meta" && !a.hidden && a.status === "ACTIVE");
       setAccounts(meta);
+      // Ler os parâmetros aqui e não numa dependência: este callback só roda no
+      // navegador, e a lista de contas é o que valida o pedido.
+      const requested = (new URLSearchParams(window.location.search).get("account") || "")
+        .trim()
+        .replace(/^act_/, "");
+      if (requested && meta.some((a: AccountOption) => a.account_id === requested)) {
+        setAccountId(requested);
+        return;
+      }
+      if (requested) {
+        setDeepLinkNotice(
+          "A conta indicada pelo alerta não está ativa e visível no catálogo — abrindo a primeira conta disponível."
+        );
+      }
       if (meta[0]) setAccountId(meta[0].account_id);
     }).catch(() => setError("Não foi possível carregar as contas Meta."));
   }, []);
+
+  // Os reprovados de agora, para a conta aberta. Só quando o link pede: é uma
+  // chamada extra à Meta e não faz parte da leitura de performance.
+  useEffect(() => {
+    if (issue !== "rejected" || !accountId) return;
+    let alive = true;
+    setRejected(null);
+    setRejectedError(null);
+    fetch(`/api/creatives/rejected?account_id=${encodeURIComponent(accountId)}`, { cache: "no-store" })
+      .then(async (response) => {
+        const payload = await response.json();
+        if (!response.ok || payload.error) throw new Error(payload.error || "Falha ao consultar os reprovados.");
+        return payload.ads as RejectedAd[];
+      })
+      .then((ads) => {
+        if (!alive) return;
+        setRejected(ads);
+        // O status atual manda sobre os IDs do dia da coleta: peça já corrigida
+        // sai do foco, peça recusada depois entra.
+        setFocusAds(new Set(ads.map((ad) => ad.ad_id)));
+      })
+      .catch((cause: any) => {
+        if (alive) setRejectedError(cause?.message || "Falha ao consultar os anúncios reprovados.");
+      });
+    return () => {
+      alive = false;
+    };
+  }, [issue, accountId]);
 
   async function analyze() {
     if (!accountId) return;
@@ -385,6 +456,9 @@ export default function CreativesPage() {
 
   const creatives = useMemo(() => {
     let rows = [...benchmarkCohort];
+    // O foco filtra a tabela, mas não o coorte de medianas (benchmarkCohort):
+    // comparar três anúncios só entre eles não diz nada sobre a conta.
+    if (onlyFocus && focusAds.size) rows = rows.filter((c) => focusAds.has(c.adId));
     if (format !== "all") rows = rows.filter((c) => formatBucket(c.mediaType) === format);
     if (search.trim()) {
       const q = search.toLowerCase();
@@ -483,7 +557,7 @@ export default function CreativesPage() {
         compareSortValues(left.adName, right.adName, "asc")
       );
     });
-  }, [benchmarkCohort, format, search, sort]);
+  }, [benchmarkCohort, format, search, sort, onlyFocus, focusAds]);
 
   const scatter = useMemo(() => creatives.filter((c) =>
     c.sampleStatus !== "insufficient" && c.metrics.video.hookRate != null && c.metrics.outboundCtr != null
@@ -523,6 +597,19 @@ export default function CreativesPage() {
         <div style={{ marginBottom: "var(--sp-4)" }}>
           <Notice tone="danger" onDismiss={() => setError(null)}>{error}</Notice>
         </div>
+      )}
+      {deepLinkNotice && (
+        <div style={{ marginBottom: "var(--sp-4)" }}>
+          <Notice tone="warn" onDismiss={() => setDeepLinkNotice(null)}>{deepLinkNotice}</Notice>
+        </div>
+      )}
+      {issue === "rejected" && (
+        <RejectedPanel
+          ads={rejected}
+          error={rejectedError}
+          accountId={accountId}
+          onDismiss={() => setIssue(null)}
+        />
       )}
       {loading && !lab && (
         <div style={{ display: "grid", gap: "var(--sp-3)" }}>
@@ -580,6 +667,18 @@ export default function CreativesPage() {
                   </Toggle>
                 ))}
               </div>
+              {/* Só aparece quando se chegou por um alerta. O filtro vem ligado:
+                  quem clicou em "ver os reprovados" quer ver os reprovados. */}
+              {focusAds.size > 0 && (
+                <div style={{ display: "flex", gap: 3, background: "#fdf3e3", padding: 3, borderRadius: 9 }}>
+                  <Toggle active={onlyFocus} onClick={() => setOnlyFocus(true)}>
+                    Só os do alerta ({focusAds.size})
+                  </Toggle>
+                  <Toggle active={!onlyFocus} onClick={() => setOnlyFocus(false)}>
+                    Toda a conta
+                  </Toggle>
+                </div>
+              )}
               <Field label="Objetivo">
                 <select
                   className="ec-touch"
@@ -671,11 +770,117 @@ export default function CreativesPage() {
               account={lab}
               sort={sort}
               onSort={setSort}
+              focusAds={focusAds}
             />
           </section>
         </>
       )}
     </div>
+  );
+}
+
+// Os reprovados, em primeiro plano. Fica acima do laboratório porque quem chegou
+// por este link não vem estudar performance — vem descobrir quais peças caíram e
+// por quê. Cada linha diz o motivo que a Meta devolveu e abre o anúncio lá.
+function RejectedPanel({
+  ads,
+  error,
+  accountId,
+  onDismiss,
+}: {
+  ads: RejectedAd[] | null;
+  error: string | null;
+  accountId: string;
+  onDismiss: () => void;
+}) {
+  if (error) {
+    return (
+      <div style={{ marginBottom: "var(--sp-4)" }}>
+        <Notice tone="danger">{error}</Notice>
+      </div>
+    );
+  }
+  if (!ads) {
+    return (
+      <div style={{ marginBottom: "var(--sp-4)" }}>
+        <SkeletonCard lines={3} />
+      </div>
+    );
+  }
+  if (!ads.length) {
+    return (
+      <div style={{ marginBottom: "var(--sp-4)" }}>
+        <Notice tone="ok" onDismiss={onDismiss}>
+          Nenhum anúncio reprovado nesta conta agora — a reprovação que abriu a tarefa já foi resolvida.
+          Pode dar baixa no quadro.
+        </Notice>
+      </div>
+    );
+  }
+  return (
+    <section
+      style={{ ...panelStyle, marginBottom: "var(--sp-4)", borderColor: "#efd2ce", background: "#fffaf9" }}
+      aria-label="Anúncios reprovados"
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 11, flexWrap: "wrap" }}>
+        <PanelTitle
+          title={`${ads.length} anúncio${ads.length > 1 ? "s" : ""} reprovado${ads.length > 1 ? "s" : ""}`}
+          subtitle="Status atual na Meta · o motivo é o texto que a própria plataforma devolve"
+        />
+        <span style={{ flex: 1 }} />
+        <Button variant="ghost" size="sm" onClick={onDismiss}>ocultar</Button>
+      </div>
+      <div style={{ display: "grid", gap: 7 }}>
+        {ads.map((ad) => (
+          <div
+            key={ad.ad_id}
+            style={{
+              display: "flex",
+              gap: 10,
+              alignItems: "flex-start",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--r-sm)",
+              background: "var(--surface)",
+              padding: "8px 10px",
+            }}
+          >
+            {ad.thumbnail ? (
+              <img
+                src={ad.thumbnail}
+                alt=""
+                width={44}
+                height={44}
+                style={{ width: 44, height: 44, borderRadius: 7, objectFit: "cover", background: "#eee", flexShrink: 0 }}
+              />
+            ) : (
+              <div style={{ width: 44, height: 44, borderRadius: 7, background: "#eee", display: "grid", placeItems: "center", color: "#aaa", flexShrink: 0 }}>◫</div>
+            )}
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
+                <strong style={{ fontSize: 12.5, color: "var(--text-strong)" }}>{ad.ad_name}</strong>
+                <Badge tone={ad.effective_status === "DISAPPROVED" ? "danger" : "warn"}>
+                  {ad.effective_status === "DISAPPROVED" ? "reprovado" : "com pendência"}
+                </Badge>
+              </div>
+              {ad.campaign_name && (
+                <div style={{ fontSize: 10.5, color: "var(--text-muted)", marginTop: 2 }}>{ad.campaign_name}</div>
+              )}
+              <div style={{ fontSize: 11, color: "#a2453e", marginTop: 4, lineHeight: 1.45 }}>
+                {ad.reasons.join(" · ")}
+              </div>
+            </div>
+            <a
+              href={`https://adsmanager.facebook.com/ads/manager/ads?act=${encodeURIComponent(accountId)}&selected_ad_ids=${encodeURIComponent(ad.ad_id)}`}
+              target="_blank"
+              rel="noreferrer"
+              style={{ fontSize: 11, fontWeight: 700, color: "#2b6fc4", textDecoration: "none", whiteSpace: "nowrap" }}
+            >
+              corrigir na Meta ↗
+            </a>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -846,12 +1051,15 @@ function CreativeTable({
   account,
   sort,
   onSort,
+  focusAds,
 }: {
   creatives: Creative[];
   benchmarkCohort: Creative[];
   account: LabAccount;
   sort: SortState<CreativeSortKey>;
   onSort: (next: SortState<CreativeSortKey>) => void;
+  /** Anúncios apontados por um alerta: ficam marcados mesmo sem filtro. */
+  focusAds?: Set<string>;
 }) {
   const benchmarksByGoal = useMemo(() => {
     const output = new Map<CreativeGoal, VisibleCreativeBenchmarks>();
@@ -910,14 +1118,18 @@ function CreativeTable({
           const roasApplicable = hasApplicableRoas(c);
           const canFunnel = c.metrics.video.isVideo && c.metrics.video.hookRate != null;
           const isOpen = openAd === c.adId;
+          const isFocus = Boolean(focusAds?.has(c.adId));
           return (
             <Fragment key={c.adId}>
-            <tr style={{ borderTop: "1px solid #efefed", opacity: c.sampleStatus === "no_delivery" ? 0.58 : 1, background: isOpen ? "#f8fbff" : undefined }}>
+            <tr style={{ borderTop: "1px solid #efefed", opacity: c.sampleStatus === "no_delivery" ? 0.58 : 1, background: isOpen ? "#f8fbff" : isFocus ? "#fffaf0" : undefined }}>
               <td style={{ padding: "9px 12px", minWidth: 265 }}>
                 <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                   {c.asset.thumbnail ? <img src={c.asset.thumbnail} alt="" width={52} height={52} style={{ width: 52, height: 52, borderRadius: 8, objectFit: "cover", background: "#eee" }} /> : <div style={{ width: 52, height: 52, borderRadius: 8, background: "#eee", display: "grid", placeItems: "center", color: "#aaa", fontSize: 18 }}>◫</div>}
                   <div style={{ minWidth: 0 }}>
-                    <div title={c.adName} style={{ maxWidth: 250, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontSize: 12.5, fontWeight: 650 }}>{c.adName}</div>
+                    <div style={{ display: "flex", gap: 6, alignItems: "center", maxWidth: 250 }}>
+                      {isFocus && <Badge tone="warn" title="Apontado pelo alerta que abriu a tarefa">alerta</Badge>}
+                      <div title={c.adName} style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontSize: 12.5, fontWeight: 650 }}>{c.adName}</div>
+                    </div>
                     <div style={{ fontSize: 10, color: "#999", marginTop: 3 }}>{c.campaignName || "—"} · <span style={{ color: "#3970b7", fontWeight: 700 }}>{c.goalLabel}</span> · {FORMAT_LABELS[c.mediaType]} · {c.sample.label}</div>
                     {canFunnel && (
                       <button

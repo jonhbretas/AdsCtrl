@@ -129,6 +129,11 @@ export interface RejectedAd {
   ad_name: string;
   campaign_name?: string;
   reasons: string[];
+  // Os dois últimos servem à tela que mostra os reprovados: DISAPPROVED e
+  // WITH_ISSUES pedem ações diferentes, e a miniatura é o que faz reconhecer a
+  // peça sem abrir o Gerenciador.
+  effective_status?: string;
+  thumbnail_url?: string | null;
 }
 
 // Mapa do código numérico da Meta -> status legível.
@@ -313,7 +318,9 @@ export async function getRejectedAds(accountId: string, token: string = TOKEN): 
       { field: "effective_status", operator: "IN", value: ["DISAPPROVED", "WITH_ISSUES"] },
     ])
   );
-  const fields = "id,name,campaign{name},ad_review_feedback";
+  const fields =
+    "id,name,effective_status,campaign{name},ad_review_feedback," +
+    "creative{thumbnail_url,image_url}";
   const url = `${GRAPH}/${accountId}/ads?fields=${fields}&filtering=${filtering}&limit=100&access_token=${token}`;
   const ads = await fbGetAll<any>(url);
   return ads.map((ad) => {
@@ -325,6 +332,8 @@ export async function getRejectedAds(accountId: string, token: string = TOKEN): 
       ad_name: ad.name,
       campaign_name: ad.campaign?.name,
       reasons: reasons.length ? reasons : ["Reprovado (motivo não detalhado)"],
+      effective_status: ad.effective_status,
+      thumbnail_url: ad.creative?.thumbnail_url || ad.creative?.image_url || null,
     };
   });
 }

@@ -27,6 +27,9 @@ single-user percorre as contas vinculadas ao Google Ads MCC.
    - `supabase-migration-clients.sql`
    - `supabase-migration-operations.sql`
    - `supabase-migration-security.sql`
+   - `supabase-migration-tasks.sql` (quadro de tarefas)
+   - `supabase-migration-projects.sql` (projetos com prazo, contexto do alerta na
+     tarefa e histórico do lembrete por e-mail)
 
 ### 2. Variáveis de ambiente
 Copie `.env.example` para `.env.local` e preencha:

@@ -26,6 +26,10 @@ export interface Alert {
     | "no_spend";
   title: string;
   detail: string;
+  // O que o alerta encontrou, quando isso é uma lista de entidades. Existe para
+  // a tarefa automática poder abrir a tela certa já filtrada: sem os IDs, o
+  // cartão "3 criativos reprovados" obriga a procurar quais são na mão.
+  entities?: { adIds: string[]; adNames: string[] };
 }
 
 interface BuildAlertsInput {
@@ -110,6 +114,10 @@ export function buildAlertsForAccount(input: BuildAlertsInput): Alert[] {
         .slice(0, 3)
         .map((r) => `${r.ad_name}: ${r.reasons[0]}`)
         .join(" · "),
+      entities: {
+        adIds: rejected.map((r) => r.ad_id).filter(Boolean),
+        adNames: rejected.map((r) => r.ad_name).filter(Boolean),
+      },
     });
   }
 

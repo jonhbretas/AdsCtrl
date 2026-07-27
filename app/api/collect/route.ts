@@ -10,6 +10,7 @@ import {
   getGoogleDailyMetrics, googleAdsConfigured, googleCustomerId, GoogleDailyMetric,
 } from "@/lib/google-ads";
 import { buildAlertsForAccount, Alert } from "@/lib/alerts";
+import { sendTaskDigest } from "@/lib/task-digest";
 import { getServiceClient } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
@@ -204,22 +205,37 @@ async function openTasksForAlerts(allAlerts: Alert[]) {
     if (error) return; // tabela ausente (migração não rodada) ou indisponível
     const known = new Set((existing || []).map((row: any) => row.alert_fingerprint));
 
+    const today = new Date().toISOString().slice(0, 10);
     for (const alert of actionable) {
       const fingerprint = fingerprintOf(alert);
       if (known.has(fingerprint)) continue;
-      await sb
-        .from("tasks")
-        .insert({
-          title: `${alert.account_name}: ${alert.title}`,
-          notes: alert.detail,
-          status: "todo",
-          priority: alert.level === "critical" ? "high" : "normal",
-          account_id: alert.account_id,
-          source: "auto",
-          alert_fingerprint: fingerprint,
-        })
-        // Corrida com outra coleta: o índice único barra e está tudo bem.
-        .then(() => undefined, () => undefined);
+      const base = {
+        title: `${alert.account_name}: ${alert.title}`,
+        notes: alert.detail,
+        status: "todo",
+        priority: alert.level === "critical" ? "high" : "normal",
+        // Prazo de hoje: um alerta que exige ação já está atrasado por
+        // definição, e é o prazo que faz a tarefa entrar no lembrete diário.
+        due_date: today,
+        account_id: alert.account_id,
+        source: "auto",
+        alert_fingerprint: fingerprint,
+      };
+      // O tipo e os IDs são o que permite ao cartão abrir a tela do problema.
+      const withContext = {
+        ...base,
+        alert_type: alert.type,
+        context: alert.entities
+          ? { ad_ids: alert.entities.adIds, ad_names: alert.entities.adNames }
+          : null,
+      };
+      // Corrida com outra coleta: o índice único barra e está tudo bem. Se as
+      // colunas novas ainda não existem (migração de projetos não rodada), a
+      // tarefa nasce sem contexto em vez de não nascer.
+      const insert = (row: Record<string, any>) =>
+        sb.from("tasks").insert(row).then((result) => result.error?.message || "", () => "");
+      const failure = await insert(withContext);
+      if (failure && /alert_type|context/i.test(failure)) await insert(base);
     }
   } catch {
     // Tarefa é consequência da coleta, nunca condição dela.
@@ -420,6 +436,16 @@ async function runCollect(triggerSource: "manual" | "cron", platform: CollectSco
   await persistAlerts(alerts, processedAccountIds);
   // O que exige ação minha vira tarefa no quadro, com o contexto pronto.
   await openTasksForAlerts(alerts);
+  // …e o que está atrasado ou vence hoje vai atrás de mim por e-mail. Aqui e
+  // não num cron próprio: o plano Hobby limita os crons, e este é o instante
+  // certo — as tarefas automáticas do dia acabaram de nascer, logo acima.
+  //
+  // Vale também para a coleta manual, com uma trava de um envio por dia: se o
+  // cron falhou de manhã, rodar a coleta na mão ainda cobra as pendências.
+  const digest = await sendTaskDigest({ trigger: "auto" }).catch((error: any) => ({
+    status: "error" as const,
+    reason: error?.message || "falha ao enviar o lembrete",
+  }));
   if (runId) await sb.from("collection_runs").update({
     finished_at: new Date().toISOString(),
     status: failed ? (processed ? "partial" : "error") : "success",
@@ -432,6 +458,7 @@ async function runCollect(triggerSource: "manual" | "cron", platform: CollectSco
     failed,
     failed_account_ids: [...failedAccountIds],
     alerts: alerts.length,
+    digest: { status: digest.status, reason: digest.reason },
     took_ms: Date.now() - started,
   };
   } catch (error: any) {

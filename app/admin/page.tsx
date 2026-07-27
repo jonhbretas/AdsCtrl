@@ -870,7 +870,96 @@ export default function Admin() {
           </div>
         </div>
       </Collapsible>
+
+      <Collapsible
+        storageKey="admin:reminders"
+        summary={
+          <SectionHead
+            icon="✉"
+            title="Lembrete de pendências por e-mail"
+            hint="Sai junto da coleta diária, para mim, com o que está atrasado ou vence hoje."
+            meta="interno"
+          />
+        }
+      >
+        <TaskReminders onError={setError} />
+      </Collapsible>
       </div>
+    </div>
+  );
+}
+
+// Lembrete interno de pendências. O envio automático acontece no fim da coleta
+// diária (app/api/collect/route.ts) — aqui só se confere e se dispara na mão,
+// que é o que faz falta quando se mexe no texto ou se quer testar o Resend.
+function TaskReminders({ onError }: { onError: (message: string) => void }) {
+  const [busy, setBusy] = useState<"preview" | "send" | null>(null);
+  const [result, setResult] = useState<string | null>(null);
+  const [tone, setTone] = useState<"ok" | "warn" | "brand">("brand");
+
+  async function call(kind: "preview" | "send") {
+    setBusy(kind);
+    setResult(null);
+    try {
+      const response = await fetch(
+        kind === "preview" ? "/api/tasks/digest?preview=1" : "/api/tasks/digest",
+        { method: kind === "preview" ? "GET" : "POST", cache: "no-store" }
+      );
+      const payload = await response.json();
+      if (!response.ok || payload.error) throw new Error(payload.error || "Falha no lembrete.");
+      const resumo = `${payload.late_tasks} atrasada(s) · ${payload.today_tasks} para hoje · ${payload.projects} projeto(s) no prazo final`;
+      if (kind === "preview") {
+        setTone(payload.would_send ? "brand" : "ok");
+        setResult(
+          payload.would_send
+            ? `Sairia para ${payload.recipient}: “${payload.subject}” — ${resumo}.`
+            : `Nada sairia agora (${resumo}). O lembrete só é enviado quando há pendência.`
+        );
+        return;
+      }
+      setTone(payload.status === "sent" ? "ok" : "warn");
+      setResult(
+        payload.status === "sent"
+          ? `Enviado para ${payload.recipient} — ${resumo}.`
+          : `Não enviado: ${payload.reason || payload.status}.`
+      );
+    } catch (e: any) {
+      onError(e?.message ?? "Falha ao acionar o lembrete.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div style={{ display: "grid", gap: 11 }}>
+      <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.6, color: "#5c6470" }}>
+        Todo dia, junto da coleta, sai um e-mail com as tarefas atrasadas ou que vencem hoje e com
+        os projetos no prazo final. Tarefa aberta por alerta (saldo, pagamento, status da conta,
+        criativo reprovado) nasce com prazo de hoje, então entra no mesmo e-mail — com link direto
+        para a tela onde o problema se resolve. Quando não há nada pendente, nada é enviado: e-mail
+        diário que não exige ação deixa de ser lido.
+      </p>
+      <p style={{ margin: 0, fontSize: 11.5, color: "#8a919b" }}>
+        Destinatário: <code>TASK_ALERT_EMAIL</code> (padrão jonathanbretas@gmail.com) · remetente:{" "}
+        <code>REPORT_FROM_EMAIL</code>, o mesmo do relatório semanal.
+      </p>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <button
+          onClick={() => call("preview")}
+          disabled={busy !== null}
+          style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid #d7dee8", background: "#fff", fontSize: 13, cursor: "pointer" }}
+        >
+          {busy === "preview" ? "Conferindo…" : "Ver o que sairia agora"}
+        </button>
+        <button
+          onClick={() => call("send")}
+          disabled={busy !== null}
+          style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid #102d4f", background: "#102d4f", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+        >
+          {busy === "send" ? "Enviando…" : "Enviar agora"}
+        </button>
+      </div>
+      {result && <Notice tone={tone} onDismiss={() => setResult(null)}>{result}</Notice>}
     </div>
   );
 }

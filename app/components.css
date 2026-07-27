@@ -1043,6 +1043,107 @@
   margin-top: var(--sp-2);
   align-items: center;
 }
+/* Nome do cliente como link. Sublinhado só no hover: dentro da linha de meta,
+   três itens sublinhados de partida virariam ruído. */
+.ec-task__client {
+  color: var(--text-strong);
+  text-decoration: none;
+  font-weight: 650;
+  border-bottom: 1px dotted var(--border-strong);
+}
+.ec-task__client:hover {
+  color: var(--brand-600);
+  border-bottom-color: currentColor;
+}
+.ec-task__project {
+  color: var(--brand-600);
+  font-weight: 600;
+}
+/* O caminho até o problema. Tem cara de botão porque é a ação que a tarefa
+   automática existe para provocar — mas continua sendo um link, para abrir em
+   nova aba quem quiser. */
+.ec-task__resolve {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: var(--sp-2);
+  padding: 5px 10px;
+  border: 1px solid var(--brand-200);
+  border-radius: var(--r-sm);
+  background: var(--brand-50);
+  color: var(--brand-700);
+  font-size: 11.5px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.ec-task__resolve:hover {
+  border-color: var(--brand-500);
+  background: var(--surface);
+}
+/* Seletor de projeto dentro do cartão: pequeno de propósito, é ajuste e não
+   ação principal. */
+.ec-task__pick {
+  height: 26px;
+  max-width: 118px;
+  padding: 0 4px;
+  font-size: 11px;
+}
+
+/* Faixa de projetos, acima do quadro. Uma linha por compromisso: nome, quem é,
+   quanto falta e o prazo — editável no próprio lugar em que é lido. */
+.ec-project {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+}
+.ec-project[data-selected] {
+  border-color: var(--brand-500);
+  box-shadow: var(--shadow-sm);
+}
+.ec-project[data-done] {
+  background: var(--surface-sunken);
+}
+.ec-project[data-busy] {
+  opacity: 0.55;
+}
+.ec-project__name {
+  border: 0;
+  background: none;
+  padding: 0;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-strong);
+  text-align: left;
+  cursor: pointer;
+}
+.ec-project__name:hover {
+  color: var(--brand-600);
+}
+.ec-project[data-done] .ec-project__name {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+.ec-project__meta {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+  flex-wrap: wrap;
+  margin-right: auto;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.ec-project__hint {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
 
 /* ==========================================================================
    Visão geral (Clientes)
