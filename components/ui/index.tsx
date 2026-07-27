@@ -259,6 +259,80 @@ export function Collapsible({
   );
 }
 
+/* ------------------------------------------------------------------ Menu ---
+   Botão que abre uma lista de ações. Existe para o caso em que a ação é uma
+   só mas o alvo varia (sincronizar Meta, Google ou as duas): três botões
+   lado a lado pesariam mais na tela do que a escolha merece. */
+export function Menu({
+  label,
+  items,
+  disabled,
+  variant = "secondary",
+  size = "sm",
+  title,
+}: {
+  label: React.ReactNode;
+  items: { label: React.ReactNode; hint?: string; onSelect: () => void }[];
+  disabled?: boolean;
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+  title?: string;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef<HTMLDivElement>(null);
+
+  // Sem isto o menu fica aberto atrás do próximo clique — e o usuário não
+  // tem para onde clicar para desistir.
+  React.useEffect(() => {
+    if (!open) return;
+    const onDown = (event: MouseEvent) => {
+      if (!ref.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => event.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div className="ec-menu" ref={ref}>
+      <Button
+        variant={variant}
+        size={size}
+        disabled={disabled}
+        title={title}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        onClick={() => setOpen((v) => !v)}
+      >
+        {label} <span aria-hidden="true" style={{ fontSize: "0.8em" }}>▾</span>
+      </Button>
+      {open && (
+        <div className="ec-menu__list" role="menu">
+          {items.map((item, index) => (
+            <button
+              key={index}
+              type="button"
+              role="menuitem"
+              className="ec-menu__item"
+              onClick={() => {
+                setOpen(false);
+                item.onSelect();
+              }}
+            >
+              <span>{item.label}</span>
+              {item.hint && <small>{item.hint}</small>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------ SegmentedControl ---
    Substitui as fileiras de "chips" que hoje se repetem em cada tela com
    estilo próprio. Um só componente, um só comportamento de teclado. */

@@ -15,6 +15,7 @@ import {
   Button,
   Collapsible,
   Input,
+  Menu,
   Notice,
   PageHeader,
   Segmented,
@@ -310,19 +311,26 @@ export default function Dashboard() {
     }
   }
 
-  // Puxa o catálogo das duas plataformas; contas novas entram ocultas.
-  async function syncAccounts() {
+  // Puxa o catálogo; contas novas entram ocultas. A plataforma é escolhida
+  // porque quase sempre a conta nova está em UMA delas: varrer as duas gasta
+  // o dobro de chamada e de tempo de função para descobrir o mesmo.
+  async function syncAccounts(platform: "all" | "meta" | "google" = "all") {
     setSyncing(true);
     setSyncMsg(null);
+    const escopo = platform === "meta" ? "no Meta" : platform === "google" ? "no Google" : "nas plataformas";
     try {
-      const r = await fetch("/api/accounts/sync", { method: "POST" });
+      const r = await fetch("/api/accounts/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ platform }),
+      });
       const d = await r.json();
       if (!r.ok || d.error) throw new Error(d.error || `Falha (HTTP ${r.status}).`);
       await load();
       setSyncMsg(
         d.added > 0
           ? `+${d.added} conta(s) nova(s): ${d.addedNames.join(", ")}`
-          : `Nenhuma conta nova. ${d.total} contas acessíveis nas plataformas.`
+          : `Nenhuma conta nova. ${d.total} contas acessíveis ${escopo}.`
       );
     } catch (e: any) {
       setSyncMsg(e?.message ?? "Erro ao sincronizar.");
@@ -387,6 +395,13 @@ export default function Dashboard() {
   }
 
   const hiddenCount = useMemo(() => accounts.filter((a) => a.hidden).length, [accounts]);
+  const platformCounts = useMemo(
+    () => ({
+      meta: accounts.filter((a) => a.platform !== "google").length,
+      google: accounts.filter((a) => a.platform === "google").length,
+    }),
+    [accounts]
+  );
 
   const filtered = useMemo(() => {
     let list = accounts;
@@ -618,15 +633,28 @@ export default function Dashboard() {
             <Button variant="ghost" size="sm" onClick={refresh} disabled={refreshing}>
               {refreshing ? "Atualizando…" : "↻ Atualizar"}
             </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={syncAccounts}
+            <Menu
+              label={syncing ? "Sincronizando…" : "⇅ Sincronizar"}
               disabled={syncing}
-              title="Buscar novas contas Meta e Google; elas entram ocultas"
-            >
-              {syncing ? "Sincronizando…" : "⇅ Sincronizar contas"}
-            </Button>
+              title="Buscar novas contas no catálogo; elas entram ocultas"
+              items={[
+                {
+                  label: "Só Meta",
+                  hint: `${platformCounts.meta} contas no catálogo`,
+                  onSelect: () => syncAccounts("meta"),
+                },
+                {
+                  label: "Só Google",
+                  hint: `${platformCounts.google} contas no catálogo`,
+                  onSelect: () => syncAccounts("google"),
+                },
+                {
+                  label: "As duas",
+                  hint: "mais lento; use quando não souber onde entrou",
+                  onSelect: () => syncAccounts("all"),
+                },
+              ]}
+            />
             <a href="/admin" className="ec-btn" data-variant="secondary" data-size="sm">
               ⚙ Grupos
             </a>
