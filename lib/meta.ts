@@ -1072,8 +1072,13 @@ export async function duplicateCampaignStructure(
     if (adset.lifetime_budget) params.lifetime_budget = String(adset.lifetime_budget);
     if (Object.keys(promoted).length) params.promoted_object = JSON.stringify(promoted);
     if (adset.attribution_spec) params.attribution_spec = JSON.stringify(adset.attribution_spec);
-    // Data no passado é recusada; a cópia começa agora e mantém o fim.
-    if (adset.end_time) params.end_time = adset.end_time;
+    // start_time não é copiado de propósito: data no passado é recusada, e a
+    // cópia nasce pausada mesmo. O fim só vai junto se ainda estiver por vir —
+    // duplicar uma campanha que já acabou mandaria um end_time vencido, que a
+    // Meta também recusa, e derrubaria o conjunto por um detalhe sem valor.
+    if (adset.end_time && new Date(adset.end_time).getTime() > Date.now()) {
+      params.end_time = adset.end_time;
+    }
 
     try {
       const res = await fbPost(`${target}/adsets`, params, targetToken, input.dryRun);
