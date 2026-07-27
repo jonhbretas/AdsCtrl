@@ -142,8 +142,11 @@ export default function DuplicateCampaign({
           source_account_id: sourceAccountId,
           target_account_id: destino,
           campaign_id: campaignId,
-          page_id: pagina || undefined,
-          pixel_id: pixel || undefined,
+          // Só manda o que esta campanha realmente precisa remapear. O pixel
+          // vinha junto mesmo em campanha que não usa pixel, porque a conta de
+          // destino só tinha um e ele é pré-selecionado.
+          page_id: precisaPagina ? pagina || undefined : undefined,
+          pixel_id: precisaPixel ? pixel || undefined : undefined,
           name_suffix: sufixo,
           dry_run: dryRun,
         }),
