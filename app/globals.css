@@ -75,6 +75,35 @@
   --font-display: var(--font-inter), system-ui, -apple-system, sans-serif;
   --font-text: var(--font-inter), system-ui, -apple-system, sans-serif;
 
+  /* ---------- cor: plataforma ----------
+     Cores das plataformas de anúncio para badges e indicadores. */
+  --platform-meta: #1877f2;
+  --platform-meta-bg: #e7f0fd;
+  --platform-google: #4285f4;
+  --platform-google-bg: #f5f7fa;
+  --platform-meta-linked: #315b91;
+
+  /* ---------- cor: dados ----------
+     Paleta para visualização de dados (sparklines, charts). */
+  --data-1: #3987e5;
+  --data-2: #22c55e;
+  --data-3: #f59e0b;
+  --data-4: #ef4444;
+  --data-5: #a855f7;
+  --data-6: #06b6d4;
+
+  /* ---------- cor: saldo ----------
+     Tons para indicador de saldo/pista (runway). */
+  --bal-ok: #2b7143;
+  --bal-ok-bg: #f1f8f3;
+  --bal-ok-border: #c9dfcf;
+  --bal-warn: #8a6117;
+  --bal-warn-bg: #fff8e9;
+  --bal-warn-border: #edd49f;
+  --bal-danger: #ad3d36;
+  --bal-danger-bg: #fff1ef;
+  --bal-danger-border: #efc0bb;
+
   /* ---------- movimento ---------- */
   --t-fast: 120ms;
   --t: 180ms;
@@ -132,6 +161,45 @@ h4 {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/* ==========================================================================
+   Dark Mode — Apple-inspired dark palette.
+   Como todo o CSS usa variáveis, este bloco propaga para todos os
+   componentes sem tocar em um seletor de componente que seja.
+   ========================================================================== */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --brand-500: #0a84ff;
+    --brand-600: #409cff;
+    --brand-700: #0a84ff;
+    --brand-800: #0066cc;
+    --brand-900: #004999;
+    --brand-50: #1a2a3f;
+    --brand-100: #1a3456;
+    --brand-200: #254b70;
+
+    --surface: #1c1c1e;
+    --surface-sunken: #000000;
+    --surface-raised: rgba(28, 28, 30, 0.85);
+    --border: #38383a;
+    --border-strong: #48484a;
+
+    --text-strong: #f5f5f7;
+    --text: #e5e5ea;
+    --text-muted: #98989d;
+    --text-faint: #636366;
+
+    --ok-600: #30d158;
+    --ok-50: #1a2e1e;
+    --warn-700: #ffd60a;
+    --warn-50: #2a2410;
+    --danger-600: #ff453a;
+    --danger-50: #2e1412;
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
   }
 }
 

@@ -70,12 +70,13 @@ export async function GET() {
       throw error;
     }
 
-    const [clientsResult, linksResult, accountsResult, projectsResult] = await Promise.all([
+    const [clientsResult, linksResult, accountsResult, projectsResult, groupsResult] = await Promise.all([
       supabase.from("clients").select("id,name,source_meta_account_id").neq("status", "archived"),
       supabase.from("client_ad_accounts").select("client_id,account_id,is_primary"),
       // Tarefa automática não tem cliente, só a conta que gerou o alerta — é
-      // por aqui que o cartão consegue dizer de quem é o problema.
-      supabase.from("ad_accounts").select("account_id,name"),
+      // por aqui que o cartão consegue dizer de quem é o problema. O group_id
+      // é o que colore o selo do grupo ao lado do nome.
+      supabase.from("ad_accounts").select("account_id,name,group_id"),
       // Projetos podem não existir ainda (migração não rodada): o quadro
       // continua funcionando sem eles.
       supabase
@@ -83,21 +84,85 @@ export async function GET() {
         .select("id,name,client_id,due_date,status,notes")
         .neq("status", "archived")
         .order("due_date", { ascending: true, nullsFirst: false }),
+      supabase.from("client_groups").select("id,name,color"),
     ]);
 
     const links = linksResult.data || [];
-    const clients = (clientsResult.data || []).map((client: any) => ({
-      id: client.id,
-      name: client.name,
+    const groupById = new Map(
+      (groupsResult.data || []).map((group: any) => [group.id, { name: group.name, color: group.color }])
+    );
+    const groupOfAccount = (accountId: string | null | undefined) => {
+      if (!accountId) return null;
+      const account = (accountsResult.data || []).find((row: any) => row.account_id === accountId);
+      return account?.group_id ? groupById.get(account.group_id) || null : null;
+    };
+    const clients = (clientsResult.data || []).map((client: any) => {
       // A tela de clientes abre por conta de anúncios (?account=<id>), não por
       // id de cliente. Mesma ordem de preferência do envio semanal.
-      account_id: accountForClient(client, links),
+      const account_id = accountForClient(client, links);
+      return { id: client.id, name: client.name, account_id, group: groupOfAccount(account_id) };
+    });
+
+    // Selo do grupo por conta, para a tarefa automática (que não tem cliente).
+    const accounts = (accountsResult.data || []).map((account: any) => ({
+      account_id: account.account_id,
+      name: account.name,
+      group: account.group_id ? groupById.get(account.group_id) || null : null,
     }));
 
+    // Contadores do cartão (comentários + progresso das listas). Sem a
+    // migração de extras, as consultas falham e o quadro segue com zeros —
+    // o selo simplesmente não aparece até a migração rodar.
+    const taskIds = (data || []).map((task: any) => task.id);
+    const stats = new Map<string, { comments: number; checkDone: number; checkTotal: number }>();
+    if (taskIds.length) {
+      const [commentsResult, checklistsResult] = await Promise.all([
+        supabase.from("task_comments").select("task_id").in("task_id", taskIds),
+        supabase.from("task_checklists").select("id,task_id").in("task_id", taskIds),
+      ]);
+      if (!commentsResult.error) {
+        for (const row of commentsResult.data || []) {
+          const entry = stats.get(row.task_id) || { comments: 0, checkDone: 0, checkTotal: 0 };
+          entry.comments += 1;
+          stats.set(row.task_id, entry);
+        }
+      }
+      if (!checklistsResult.error) {
+        const checklistIds = (checklistsResult.data || []).map((row: any) => row.id);
+        const taskByChecklist = new Map(
+          (checklistsResult.data || []).map((row: any) => [row.id, row.task_id])
+        );
+        if (checklistIds.length) {
+          const { data: items } = await supabase
+            .from("task_checklist_items")
+            .select("checklist_id,done")
+            .in("checklist_id", checklistIds);
+          for (const item of items || []) {
+            const taskId = taskByChecklist.get(item.checklist_id);
+            if (!taskId) continue;
+            const entry = stats.get(taskId) || { comments: 0, checkDone: 0, checkTotal: 0 };
+            entry.checkTotal += 1;
+            if (item.done) entry.checkDone += 1;
+            stats.set(taskId, entry);
+          }
+        }
+      }
+    }
+
+    const tasks = (data || []).map((task: any) => {
+      const entry = stats.get(task.id);
+      return {
+        ...task,
+        comments_count: entry?.comments || 0,
+        check_done: entry?.checkDone || 0,
+        check_total: entry?.checkTotal || 0,
+      };
+    });
+
     return NextResponse.json({
-      tasks: data || [],
+      tasks,
       clients,
-      accounts: accountsResult.data || [],
+      accounts,
       projects: projectsResult.data || [],
     });
   } catch (e: any) {

@@ -166,16 +166,22 @@ export function SortButton<Key extends string>({
         textTransform: "inherit",
         letterSpacing: "inherit",
         cursor: "pointer",
-        whiteSpace: "nowrap",
+        // nowrap aqui era o que fazia um título comprido ("Investimento
+        // (período)") vazar por cima do título da coluna vizinha. Com quebra,
+        // o cabeçalho cresce para baixo em vez de para o lado.
+        whiteSpace: "normal",
+        lineHeight: 1.25,
+        textAlign: align,
       }}
     >
-      <span>{children}</span>
+      <span style={{ minWidth: 0 }}>{children}</span>
       <span
         aria-hidden="true"
         style={{
           color: active ? "#286fc9" : "#c5c5c0",
           fontSize: "0.95em",
           lineHeight: 1,
+          flexShrink: 0,
         }}
       >
         {arrow}

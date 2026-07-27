@@ -36,6 +36,7 @@ interface LinhaCliente {
   name: string;
   currency: string;
   accounts: number;
+  group?: { name: string; color: string } | null;
   months: MesDoCliente[];
 }
 interface Payload {
@@ -45,6 +46,26 @@ interface Payload {
 }
 
 const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+
+// Selo do grupo ao lado do nome do cliente, no mesmo formato das outras telas.
+function SeloGrupo({ grupo }: { grupo: { name: string; color: string } }) {
+  return (
+    <span
+      style={{
+        marginLeft: 6,
+        fontSize: 10,
+        padding: "0 6px",
+        borderRadius: 8,
+        background: grupo.color + "22",
+        color: grupo.color,
+        fontWeight: 600,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {grupo.name}
+    </span>
+  );
+}
 
 function rotuloMes(iso: string, longo = false) {
   const [ano, mes] = iso.split("-");
@@ -285,7 +306,10 @@ export default function VendasPage() {
               return (
                 <div key={linha.client_id} className="ec-salesrow">
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontFamily: "var(--font-display)", fontWeight: 650, fontSize: 13.5 }}>{linha.name}</div>
+                    <div style={{ fontFamily: "var(--font-display)", fontWeight: 650, fontSize: 13.5 }}>
+                      {linha.name}
+                      {linha.group && <SeloGrupo grupo={linha.group} />}
+                    </div>
                     <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>
                       investido {money(m.spend, linha.currency)}
                       {m.inProgress && " · mês em curso"}
@@ -392,7 +416,10 @@ export default function VendasPage() {
                 {data.rows.map((linha) => (
                   <tr key={linha.client_id}>
                     <th scope="row" style={{ textAlign: "left" }}>
-                      <span title={`${linha.accounts} conta(s) de anúncio`}>{linha.name}</span>
+                      <span title={`${linha.accounts} conta(s) de anúncio`}>
+                        {linha.name}
+                        {linha.group && <SeloGrupo grupo={linha.group} />}
+                      </span>
                     </th>
                     {linha.months.map((m) => {
                       const chave = `${linha.client_id}::${m.month}`;
@@ -560,7 +587,10 @@ export default function VendasPage() {
               <tbody>
                 {data.rows.map((linha) => (
                   <tr key={linha.client_id}>
-                    <th scope="row" style={{ textAlign: "left" }}>{linha.name}</th>
+                    <th scope="row" style={{ textAlign: "left" }}>
+                      {linha.name}
+                      {linha.group && <SeloGrupo grupo={linha.group} />}
+                    </th>
                     {linha.months.map((m) => {
                       const ticket = ticketMedio(m.revenue, m.orders);
                       const custo = custoPorVenda(m.spend, m.orders);

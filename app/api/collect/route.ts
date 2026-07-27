@@ -170,7 +170,9 @@ async function persistAlerts(allAlerts: Alert[], processedAccountIds: string[]) 
 
 // Alertas que exigem uma ação minha, não só ciência. Queda de gasto e "sem
 // gasto" ficam de fora de propósito: viram tarefa todo dia numa conta pausada
-// e o quadro deixa de ser lido.
+// e o quadro deixa de ser lido. creative_issue (erro de veiculação) também
+// fica de fora: não é infração de política e quase sempre se resolve sozinho
+// — tarefa diária sobre ele seria choro de alerta falso.
 const ACTIONABLE_ALERTS: Alert["type"][] = [
   "low_balance",
   "payment_issue",

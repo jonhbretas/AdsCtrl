@@ -73,14 +73,16 @@ export async function GET() {
       { data: accountRuns, error: accountRunsError },
       { data: alerts },
       { data: lastRun },
+      { data: groups },
     ] = await Promise.all([
       sb.from("clients").select("*").eq("status", "active").order("name"),
       sb.from("client_ad_accounts").select("*"),
-      sb.from("ad_accounts").select("account_id,name,platform,status,hidden,currency,updated_at"),
+      sb.from("ad_accounts").select("account_id,name,platform,status,hidden,currency,updated_at,group_id"),
       sb.from("daily_account_metrics").select("*").gte("metric_date", since).order("metric_date"),
       sb.from("collection_account_runs").select("account_id,status,finished_at").eq("status", "success").order("finished_at", { ascending: false }).limit(5000),
       sb.from("alerts").select("*").eq("resolved", false).eq("acknowledged", false),
       sb.from("collection_runs").select("*").order("started_at", { ascending: false }).limit(1).maybeSingle(),
+      sb.from("client_groups").select("id,name,color"),
     ]);
     if (clientsError) throw clientsError;
     if (linksError) throw linksError;
@@ -89,6 +91,16 @@ export async function GET() {
     if (accountRunsError) throw accountRunsError;
 
     const accountById = new Map((accounts || []).map((a: any) => [a.account_id, a]));
+    const groupById = new Map((groups || []).map((g: any) => [g.id, { name: g.name, color: g.color }]));
+    // O grupo mora na conta, não no cliente: o do cliente é o da conta de
+    // origem (source_meta_account_id) ou da primeira conta vinculada.
+    const groupOfClient = (client: any, clientAccounts: any[]) => {
+      const sourceAccount = client.source_meta_account_id
+        ? accountById.get(client.source_meta_account_id)
+        : null;
+      const withGroup = [sourceAccount, ...clientAccounts].find((a: any) => a?.group_id);
+      return withGroup?.group_id ? groupById.get(withGroup.group_id) || null : null;
+    };
     const factsByAccount = new Map<string, any[]>();
     for (const fact of facts || []) {
       const list = factsByAccount.get(fact.account_id) || [];
@@ -222,6 +234,7 @@ export async function GET() {
       return {
         ...client,
         result_family: resultFamily,
+        group: groupOfClient(client, clientAccounts),
         accounts: clientAccounts,
         metrics: { mtd, last7, prev7, kpiValue, mtdByCurrency },
         pacing: {
@@ -242,7 +255,7 @@ export async function GET() {
     });
 
     const priorities = enriched.flatMap((client: any) =>
-      client.priorities.map((priority: any) => ({ ...priority, client_id: client.id, client_name: client.name, client_currency: client.currency }))
+      client.priorities.map((priority: any) => ({ ...priority, client_id: client.id, client_name: client.name, client_currency: client.currency, client_group: client.group || null }))
     ).sort((a: any, b: any) => {
       const order: Record<string, number> = { critical: 0, warning: 1, info: 2 };
       return order[a.level] - order[b.level] || Number(b.impact || 0) - Number(a.impact || 0);

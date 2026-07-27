@@ -20,12 +20,14 @@ import {
 type Priority = {
   client_id: string; client_name: string; type: string;
   client_currency?: string;
+  client_group?: { name: string; color: string } | null;
   level: "critical" | "warning" | "info"; title: string; detail: string; impact?: number | null;
 };
 type Client = {
   id: string; name: string; source_meta_account_id?: string | null;
   primary_kpi?: string | null; target_value?: number | null;
   currency: string; accounts: { account_id: string; platform: string; hidden: boolean }[];
+  group?: { name: string; color: string } | null;
   metrics: {
     mtd: { spend: number; impressions: number; clicks: number; conversions: number; value: number };
     last7: { spend: number; impressions: number; clicks: number; conversions: number; value: number };
@@ -411,7 +413,14 @@ function ClientRow({ client }: { client: Client }) {
   return (
     <a href={targetAccount ? `/?account=${encodeURIComponent(targetAccount)}` : "/"} style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr .85fr .85fr .9fr 70px", gap: 12, padding: "14px 16px", borderBottom: "1px solid #f0f0ee", alignItems: "center", color: "#222", textDecoration: "none" }}>
       <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: 14, fontWeight: 650, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{client.name}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 650, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{client.name}</div>
+          {client.group && (
+            <span style={{ fontSize: 10, padding: "0 6px", borderRadius: 8, background: client.group.color + "22", color: client.group.color, fontWeight: 600, flexShrink: 0 }}>
+              {client.group.name}
+            </span>
+          )}
+        </div>
         <div style={{ display: "flex", gap: 5, marginTop: 4 }}>
           {[...new Set(client.accounts.filter((a) => !a.hidden).map((a) => a.platform))].map((platform) => (
             <span key={platform} style={{ fontSize: 9, fontWeight: 800, padding: "2px 6px", borderRadius: 6, color: platform === "google" ? "#2f6fcd" : "#176cd2", background: platform === "google" ? "#edf3fd" : "#eaf2fd", textTransform: "uppercase" }}>{platform}</span>
@@ -497,7 +506,14 @@ function PriorityCard({ item }: { item: Priority }) {
           </span>
         )}
       </div>
-      <div className="ec-prio__client">{item.client_name}</div>
+      <div className="ec-prio__client">
+        {item.client_name}
+        {item.client_group && (
+          <span style={{ marginLeft: 6, fontSize: 10, padding: "0 6px", borderRadius: 8, background: item.client_group.color + "22", color: item.client_group.color, fontWeight: 600 }}>
+            {item.client_group.name}
+          </span>
+        )}
+      </div>
       <div className="ec-prio__title">{item.title}</div>
       <div className="ec-prio__detail">{item.detail}</div>
     </div>

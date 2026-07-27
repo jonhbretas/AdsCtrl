@@ -8,6 +8,7 @@
 // detalhe expandido usem a mesma consolidação da plataforma.
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import AccountDetail from "@/components/AccountDetail";
 import AccountChanges from "@/components/AccountChanges";
 import {
@@ -96,10 +97,10 @@ interface LiveOverview {
   errors?: { account_id: string; platform: string; message: string }[];
 }
 
-const LEVEL_STYLE: Record<string, { bg: string; fg: string; dot: string; label: string }> = {
-  critical: { bg: "#fceceb", fg: "#a32d2d", dot: "#dc2626", label: "Crítico" },
-  warning: { bg: "#faeeda", fg: "#854f0b", dot: "#f59e0b", label: "Atenção" },
-  info: { bg: "#e6f1fb", fg: "#0c447c", dot: "#3987e5", label: "Info" },
+const LEVEL_LABEL: Record<string, string> = {
+  critical: "Crítico",
+  warning: "Atenção",
+  info: "Info",
 };
 
 type Period = "today" | "7d" | "14d" | "30d" | "custom";
@@ -713,9 +714,9 @@ export default function Dashboard() {
                 },
               ]}
             />
-            <a href="/admin" className="ec-btn" data-variant="secondary" data-size="sm">
+            <Link href="/admin" className="ec-btn" data-variant="secondary" data-size="sm">
               ⚙ Grupos
-            </a>
+            </Link>
             {/* Coletar é a ação que traz dado novo: é a dominante da tela. */}
             <Menu
               variant="primary"
@@ -773,7 +774,7 @@ export default function Dashboard() {
       <div className="ec-filters" id="filtros-visao-geral" data-open={filtersOpen ? "true" : undefined}>
       {/* GRUPOS (chips) */}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
-        <Chip active={groupFilter === "all"} onClick={() => setGroupFilter("all")} label="Todos" color="#111" />
+        <Chip active={groupFilter === "all"} onClick={() => setGroupFilter("all")} label="Todos" color="var(--text-strong)" />
         {groups.map((g) => (
           <Chip key={g.id} active={groupFilter === g.id} onClick={() => setGroupFilter(g.id)} label={g.name} color={g.color} />
         ))}
@@ -911,7 +912,7 @@ export default function Dashboard() {
       <div className="ec-split">
         {/* ALERTAS */}
         <aside id="alerts" className="ec-split__side">
-          <div style={{ display: "flex", gap: 4, background: "var(--surface-sunken)", border: "1px solid var(--border)", borderRadius: "var(--r-sm)", padding: 3, marginBottom: "var(--sp-3)" }}>
+          <div className="ec-tabgroup ec-tabgroup--mb">
             <TabBtn active={alertTab === "active"} onClick={() => setAlertTab("active")}>
               Ativos {visibleAlerts.length > 0 && <b>({visibleAlerts.length})</b>}
             </TabBtn>
@@ -920,34 +921,30 @@ export default function Dashboard() {
             </TabBtn>
           </div>
 
-          <div style={{ display: "grid", gap: 8, maxHeight: "74vh", overflowY: "auto", paddingRight: 2 }}>
+          <div className="ec-ackwrap">
             {alertTab === "active" && (
               <>
                 {visibleAlerts.length === 0 && <Empty>Nenhum alerta ativo. 🎉</Empty>}
-                {visibleAlerts.map((a) => {
-                  const st = LEVEL_STYLE[a.level];
-                  return (
-                    <div key={a.id} style={{ background: st.bg, borderRadius: 10, padding: "10px 12px" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
-                        <span style={{ width: 7, height: 7, borderRadius: "50%", background: st.dot }} />
-                        <span style={{ fontSize: 11, fontWeight: 700, color: st.fg }}>{st.label}</span>
-                      </div>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: st.fg }}>{a.account_name}</div>
-                      <div style={{ fontSize: 12, color: "#666", marginTop: 2 }}>{a.title}</div>
-                      <div style={{ fontSize: 12, color: "#888", marginTop: 1 }}>{a.detail}</div>
-                      <label className="ec-ack" style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8, fontSize: 12, color: st.fg, cursor: "pointer", userSelect: "none" }}>
-                        <input
-                          type="checkbox"
-                          checked={false}
-                          disabled={acking === a.id}
-                          onChange={() => setAck(a.id, true)}
-                          style={{ accentColor: st.dot, width: 15, height: 15, cursor: "pointer" }}
-                        />
-                        Estou ciente
-                      </label>
+                {visibleAlerts.map((a) => (
+                  <div key={a.id} className="ec-alert" data-tone={a.level}>
+                    <div className="ec-alert__row">
+                      <span className="ec-alert__dot" data-tone={a.level} />
+                      <span className="ec-alert__level" data-tone={a.level}>{LEVEL_LABEL[a.level]}</span>
                     </div>
-                  );
-                })}
+                    <div className="ec-alert__client" data-tone={a.level}>{a.account_name}</div>
+                    <div className="ec-alert__title">{a.title}</div>
+                    <div className="ec-alert__detail">{a.detail}</div>
+                    <label className="ec-alert__ack" data-tone={a.level}>
+                      <input
+                        type="checkbox"
+                        checked={false}
+                        disabled={acking === a.id}
+                        onChange={() => setAck(a.id, true)}
+                      />
+                      Estou ciente
+                    </label>
+                  </div>
+                ))}
               </>
             )}
 
@@ -957,24 +954,23 @@ export default function Dashboard() {
                 {!historyLoading && visibleHistory.length === 0 && <Empty>Sem histórico ainda.</Empty>}
                 {!historyLoading &&
                   visibleHistory.map((a) => {
-                    const st = LEVEL_STYLE[a.level];
                     const badge = a.resolved ? { t: "Resolvido", c: "#16a34a" } : { t: "Ciente", c: "#6b7280" };
                     const when = a.resolved_at || a.acknowledged_at || a.last_seen_at;
                     return (
-                      <div key={a.id} style={{ background: "#fafafa", border: "1px solid #eee", borderRadius: 10, padding: "10px 12px", opacity: 0.92 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
-                          <span style={{ width: 7, height: 7, borderRadius: "50%", background: st.dot }} />
-                          <span style={{ fontSize: 11, fontWeight: 700, color: "#888" }}>{st.label}</span>
-                          <span style={{ marginLeft: "auto", fontSize: 10, fontWeight: 700, color: badge.c, background: badge.c + "18", padding: "1px 7px", borderRadius: 8 }}>
+                      <div key={a.id} className="ec-history">
+                        <div className="ec-history__row">
+                          <span className="ec-alert__dot" data-tone={a.level} />
+                          <span className="ec-alert__level" data-tone={a.level} style={{ color: "var(--text-muted)" }}>{LEVEL_LABEL[a.level]}</span>
+                          <span className="ec-history__badge" style={{ marginLeft: "auto", color: badge.c, background: badge.c + "18" }}>
                             {badge.t}
                           </span>
                         </div>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: "#444" }}>{a.account_name}</div>
-                        <div style={{ fontSize: 12, color: "#777", marginTop: 2 }}>{a.title}</div>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6 }}>
-                          <span style={{ fontSize: 11, color: "#aaa" }}>{when ? new Date(when).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : ""}</span>
+                        <div className="ec-history__client">{a.account_name}</div>
+                        <div className="ec-history__title">{a.title}</div>
+                        <div className="ec-history__last">
+                          <span className="ec-history__when">{when ? new Date(when).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : ""}</span>
                           {a.acknowledged && !a.resolved && (
-                            <button onClick={() => setAck(a.id, false)} disabled={acking === a.id} style={{ fontSize: 11, color: "#3987e5", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                            <button className="ec-history__reopen" onClick={() => setAck(a.id, false)} disabled={acking === a.id}>
                               reabrir
                             </button>
                           )}
@@ -989,7 +985,7 @@ export default function Dashboard() {
 
         {/* TABELA */}
         <main className="ec-card ec-scroll-x" style={{ minWidth: 0 }}>
-          <div style={{ minWidth: 900, display: "grid", gridTemplateColumns: GRID, padding: "12px 16px", borderBottom: "1px solid #f0f0f0", fontSize: 12, color: "#999", fontWeight: 600, alignItems: "center" }}>
+          <div className="ec-thead" style={{ minWidth: 900, display: "grid", gridTemplateColumns: GRID, padding: "12px 16px 10px", alignItems: "end", columnGap: 8 }}>
             <GridSortHeader sortKey="name" sort={tableSort} onSort={setTableSort} align="left">Cliente</GridSortHeader>
             <GridSortHeader sortKey="channels" sort={tableSort} onSort={setTableSort} align="left" initialDirection="desc">Canais</GridSortHeader>
             <GridSortHeader sortKey="trend" sort={tableSort} onSort={setTableSort} align="center" initialDirection="desc">Tendência</GridSortHeader>
@@ -999,8 +995,8 @@ export default function Dashboard() {
             <span />
             <span />
           </div>
-          {isLive && !liveReady && <div style={{ padding: 28, textAlign: "center", color: "#aaa" }}>Buscando dados ao vivo nas plataformas…</div>}
-          {liveReady && filtered.length === 0 && <div style={{ padding: 28, textAlign: "center", color: "#aaa" }}>Nenhuma conta com os filtros atuais.</div>}
+          {isLive && !liveReady && <div style={{ padding: 28, textAlign: "center", color: "var(--text-faint)" }}>Buscando dados ao vivo nas plataformas…</div>}
+          {liveReady && filtered.length === 0 && <div style={{ padding: 28, textAlign: "center", color: "var(--text-faint)" }}>Nenhuma conta com os filtros atuais.</div>}
           {liveReady && filtered.map((a) => {
             const g = groupById(a.group_id);
             const open = !a.hidden && expanded === a.account_id;
@@ -1021,50 +1017,52 @@ export default function Dashboard() {
                 )
               : [];
             return (
-              <div id={`account-${a.account_id}`} key={a.account_id} style={{ borderBottom: "1px solid #f4f4f4", opacity: a.hidden ? 0.55 : 1 }}>
+              <div id={`account-${a.account_id}`} key={a.account_id} className="ec-accrow" data-hidden={a.hidden ? "true" : undefined}>
                 <div
                   onClick={() => { if (!a.hidden) setExpanded(open ? null : a.account_id); }}
-                  style={{ minWidth: 900, display: "grid", gridTemplateColumns: GRID, padding: "12px 16px", alignItems: "center", cursor: a.hidden ? "default" : "pointer", background: open ? "#fafafa" : "#fff" }}
+                  className={"ec-accrow__grid" + (a.hidden ? "" : " ec-row")}
+                  style={{ minWidth: 900, display: "grid", gridTemplateColumns: GRID, padding: "12px 16px", alignItems: "center", columnGap: 8 }}
+                  data-open={open ? "true" : undefined}
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-                    <span style={{ width: 30, height: 30, borderRadius: "50%", background: g?.color || "#cbd5e1", color: "#fff", display: "grid", placeItems: "center", fontSize: 13, fontWeight: 700, flexShrink: 0 }}>
+                    <span className="ec-accavatar" style={{ background: g?.color || "var(--text-faint)" }}>
                       {initials(a.name)}
                     </span>
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={a.name}>{a.name}</div>
+                      <div className="ec-accname" title={a.name}>{a.name}</div>
                       <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                        {g && <span style={{ fontSize: 10, padding: "0 6px", borderRadius: 8, background: g.color + "22", color: g.color }}>{g.name}</span>}
-                        {linkedMeta && <span style={{ fontSize: 10, padding: "0 6px", borderRadius: 8, background: "#e7f0fd", color: "#315b91" }}>Cliente: {linkedMeta.name}</span>}
-                        {a.status !== "ACTIVE" && <span style={{ fontSize: 10, color: "#a32d2d" }}>● {a.status}</span>}
-                        {a.hidden && <span style={{ fontSize: 10, color: "#999" }}>oculta</span>}
+                        {g && <span className="ec-accbadge" style={{ background: g.color + "22", color: g.color }}>{g.name}</span>}
+                        {linkedMeta && <span className="ec-accbadge" style={{ background: "var(--platform-meta-bg)", color: "var(--platform-meta-linked)" }}>Cliente: {linkedMeta.name}</span>}
+                        {a.status !== "ACTIVE" && <span className="ec-accstatus">● {a.status}</span>}
+                        {a.hidden && <span style={{ fontSize: 10, color: "var(--text-faint)" }}>oculta</span>}
                       </div>
                     </div>
                   </div>
                   <div style={{ display: "flex", gap: 4 }}>
                     {a.platform === "google" ? (
-                      <span title="Google Ads" style={{ fontSize: 12, width: 22, height: 22, borderRadius: 6, background: "#f5f7fa", color: "#4285f4", display: "grid", placeItems: "center", fontWeight: 700 }}>G</span>
+                      <span title="Google Ads" className="ec-accbadge" data-platform="google" style={{ width: 22, height: 22, display: "grid", placeItems: "center", fontWeight: 700, fontSize: 12, borderRadius: 6 }}>G</span>
                     ) : (
-                      <span title="Meta / Instagram" style={{ fontSize: 12, width: 22, height: 22, borderRadius: 6, background: "#e7f0fd", color: "#1877f2", display: "grid", placeItems: "center", fontWeight: 700 }}>f</span>
+                      <span title="Meta / Instagram" className="ec-accbadge" data-platform="meta" style={{ width: 22, height: 22, display: "grid", placeItems: "center", fontWeight: 700, fontSize: 12, borderRadius: 6 }}>f</span>
                     )}
                     {a.platform === "meta" && linkedGoogle.length > 0 && (
-                      <span title={`${linkedGoogle.length} conta(s) Google vinculada(s)`} style={{ fontSize: 11, width: 22, height: 22, borderRadius: 6, background: "#f5f7fa", color: "#4285f4", display: "grid", placeItems: "center", fontWeight: 700 }}>G</span>
+                      <span title={`${linkedGoogle.length} conta(s) Google vinculada(s)`} className="ec-glinked" data-platform="google" style={{ width: 22, height: 22, display: "grid", placeItems: "center", fontWeight: 700, fontSize: 11, borderRadius: 6 }}>G</span>
                     )}
                   </div>
-                  <div style={{ display: "grid", justifyItems: "center", gap: 2 }}>
-                    <Sparkline points={(m.daily || []).map((d) => d.spend)} color={g?.color || "#3987e5"} width={72} height={22} />
-                    <span style={{ fontSize: 9.5, fontWeight: 650, color: spendTrend == null ? "#aaa" : spendTrend >= 0 ? "#27874e" : "#c54a4a" }}>
+                  <div className="ec-trend">
+                    <Sparkline points={(m.daily || []).map((d) => d.spend)} color={g?.color || "var(--brand-500)"} width={72} height={22} />
+                    <span className="ec-trend__pct" data-tone={spendTrend == null ? "flat" : spendTrend >= 0 ? "good" : "bad"}>
                       {spendTrend == null ? "—" : `${spendTrend >= 0 ? "+" : ""}${spendTrend.toFixed(1)}%`}
                     </span>
                   </div>
-                  <div title={liveError?.message} style={{ textAlign: "right", fontSize: 14, fontWeight: 600, color: liveError ? "#a16207" : undefined }}>
+                  <div title={liveError?.message} className="ec-cellspend" data-error={liveError ? "true" : undefined}>
                     {liveError ? "Indisponível" : money(m.spend, a.currency)}
                   </div>
-                  <div style={{ textAlign: "right" }}>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: m.result > 0 ? "#111" : "#bbb" }}>
+                  <div className="ec-cellresult">
+                    <div className="ec-cellresult__num" data-empty={m.result <= 0 ? "true" : undefined}>
                       {liveError ? "—" : m.result > 0 ? num(m.result) : "—"}
                     </div>
                     {fam.sales && m.value > 0 && m.spend > 0 && (
-                      <div style={{ fontSize: 10.5, color: "#16a34a" }}>{(m.value / m.spend).toFixed(1)}x ROAS</div>
+                      <div className="ec-roas">{(m.value / m.spend).toFixed(1)}x ROAS</div>
                     )}
                   </div>
                   <BalanceCell account={a} />
@@ -1072,14 +1070,14 @@ export default function Dashboard() {
                     className="ec-touch"
                     onClick={(e) => { e.stopPropagation(); toggleHidden(a.account_id, !a.hidden); }}
                     title={a.hidden ? "Reexibir esta conta" : "Ocultar esta conta do dashboard"}
-                    style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14, color: "#bbb", padding: 0, lineHeight: 1 }}
+                    style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14, color: "var(--text-faint)", padding: 0, lineHeight: 1 }}
                   >
                     {a.hidden ? "↩" : "🚫"}
                   </button>
-                  <div style={{ textAlign: "center", color: "#bbb", fontSize: 14 }}>{a.hidden ? "—" : open ? "▲" : "▼"}</div>
+                  <div style={{ textAlign: "center", color: "var(--text-faint)", fontSize: 14 }}>{a.hidden ? "—" : open ? "▲" : "▼"}</div>
                 </div>
                 {open && (
-                  <div style={{ borderTop: "1px solid #f0f0f0", padding: "0 16px" }}>
+                  <div className="ec-row__detail" style={{ borderTop: "1px solid var(--border)", padding: "0 16px" }}>
                     <OperationalLinks
                       accountId={a.account_id}
                       accountName={a.name}
@@ -1125,12 +1123,12 @@ export default function Dashboard() {
                       />
                     </Collapsible>
                     {a.platform === "meta" && (
-                      <div style={{ borderTop: "1px solid #e8edf5", padding: "22px 0 28px" }}>
-                        <div style={{ fontSize: 12, fontWeight: 700, color: "#4285f4", letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 10 }}>
+                      <div className="ec-gsection">
+                        <div className="ec-gsection__title">
                           Google Ads vinculado ao cliente
                         </div>
                         {linkedGoogle.length === 0 ? (
-                          <div style={{ padding: "14px 16px", borderRadius: 10, background: "#f8f9fb", color: "#888", fontSize: 13 }}>
+                          <div className="ec-gsection__empty">
                             Nenhuma conta Google ativa vinculada. Faça o vínculo em Configurações → Contas.
                           </div>
                         ) : linkedGoogle.map((google) => {
@@ -1192,7 +1190,19 @@ export default function Dashboard() {
 
 // ---------- subcomponentes ----------
 
-const GRID = "1fr 40px 92px 120px 96px 100px 26px 24px";
+// Largura das colunas da tabela. Dois defeitos que esta grade precisa evitar:
+//
+//   1. "1fr" só na coluna Cliente fazia ela engolir todo o espaço que sobrava
+//      — o nome ficava isolado à esquerda e as métricas espremidas à direita,
+//      com um vão enorme entre os dois. Agora toda coluna de conteúdo tem um
+//      mínimo e uma fatia do que sobra, então o conjunto cresce junto.
+//
+//   2. Coluna fixa estreita demais para o próprio título ("Investimento
+//      (período)" não cabe em 120px) fazia o rótulo vazar por cima do vizinho.
+//      O mínimo abaixo já considera o título + a seta de ordenação; o que
+//      ainda assim não couber quebra em duas linhas (ver SortButton).
+const GRID =
+  "minmax(200px,1.7fr) minmax(48px,.5fr) minmax(96px,.8fr) minmax(128px,1fr) minmax(96px,.9fr) minmax(104px,.9fr) 28px 26px";
 
 // Saldo e fatura na mesma coluna, mas nunca com a mesma cara.
 //
@@ -1203,46 +1213,42 @@ const GRID = "1fr 40px 92px 120px 96px 100px 26px 24px";
 // tanto disponível. Aqui o número vem sempre com o que ele é.
 function BalanceCell({ account }: { account: Account }) {
   if (account.platform !== "meta") {
-    return <div style={{ textAlign: "right", fontSize: 14, color: "#bbb" }}>—</div>;
+    return <div className="ec-cellbal"><div className="ec-cellbal__val" data-tone="void">—</div></div>;
   }
 
   const prepaid = account.is_prepaid;
   const balance = account.balance;
   const unbilled = account.unbilled_amount ?? null;
 
-  // Pré-paga: saldo restante. Zerado ou baixo é urgente — a veiculação para.
   if (prepaid === true && balance != null) {
     const empty = balance <= 0;
     return (
-      <div style={{ textAlign: "right", lineHeight: 1.2 }}>
-        <div style={{ fontSize: 14, fontWeight: empty ? 700 : 500, color: empty ? "#c54a4a" : "#111" }}>
+      <div className="ec-cellbal">
+        <div className="ec-cellbal__val" data-tone={empty ? "danger" : undefined}>
           {money(balance, account.currency)}
         </div>
-        <div style={{ fontSize: 9.5, color: empty ? "#c54a4a" : "#9aa1ad" }}>
+        <div className="ec-cellbal__label" data-tone={empty ? "danger" : "muted"}>
           {empty ? "sem saldo" : "saldo"}
         </div>
       </div>
     );
   }
 
-  // Pós-paga: fatura em aberto. Não é dinheiro disponível, então não compete
-  // visualmente com o saldo — fica em cinza e com o rótulo dizendo o que é.
   if (prepaid === false) {
     return (
-      <div style={{ textAlign: "right", lineHeight: 1.2 }} title="Gasto já realizado que ainda será cobrado no cartão ou no PayPal. Não é saldo disponível.">
-        <div style={{ fontSize: 13, fontWeight: 400, color: "#7c8493" }}>
+      <div className="ec-cellbal" title="Gasto já realizado que ainda será cobrado no cartão ou no PayPal. Não é saldo disponível.">
+        <div className="ec-cellbal__val" data-tone="muted">
           {unbilled != null ? money(unbilled, account.currency) : "—"}
         </div>
-        <div style={{ fontSize: 9.5, color: "#a8adb7" }}>a faturar</div>
+        <div className="ec-cellbal__label" data-tone="muted">a faturar</div>
       </div>
     );
   }
 
-  // Ainda não classificada (antes da primeira coleta com a migração).
   return (
-    <div style={{ textAlign: "right", lineHeight: 1.2 }} title="A próxima coleta identifica se a conta é pré-paga ou pós-paga.">
-      <div style={{ fontSize: 14, color: "#bbb" }}>—</div>
-      <div style={{ fontSize: 9.5, color: "#c4c8ce" }}>sem classificação</div>
+    <div className="ec-cellbal" title="A próxima coleta identifica se a conta é pré-paga ou pós-paga.">
+      <div className="ec-cellbal__val" data-tone="void">—</div>
+      <div className="ec-cellbal__label" data-tone="void">sem classificação</div>
     </div>
   );
 }
@@ -1275,52 +1281,7 @@ function GridSortHeader({
   );
 }
 
-const btnStyle: React.CSSProperties = {
-  padding: "8px 14px",
-  borderRadius: 10,
-  border: "1px solid #e2e2e2",
-  background: "#fff",
-  fontSize: 13,
-  fontWeight: 500,
-  color: "#333",
-  cursor: "pointer",
-};
-const selectStyle: React.CSSProperties = {
-  padding: "8px 12px",
-  borderRadius: 10,
-  border: "1px solid #e2e2e2",
-  fontSize: 13,
-  background: "#fff",
-};
-const dateStyle: React.CSSProperties = {
-  padding: "6px 10px",
-  borderRadius: 8,
-  border: "1px solid #e2e2e2",
-  fontSize: 13,
-  background: "#fff",
-  color: "#333",
-};
 
-function PeriodBtn({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        padding: "6px 12px",
-        borderRadius: 8,
-        border: "none",
-        background: active ? "#fff" : "transparent",
-        boxShadow: active ? "0 1px 2px rgba(0,0,0,.08)" : "none",
-        fontSize: 13,
-        fontWeight: 500,
-        color: active ? "#111" : "#777",
-        cursor: "pointer",
-      }}
-    >
-      {label}
-    </button>
-  );
-}
 
 function OperationalLinks({
   accountId,
@@ -1464,39 +1425,22 @@ function OperationalLinks({
     `acesse o link abaixo para conferir o faturamento e adicionar saldo.${balanceText}\n\n${billingUrl}\n\n` +
     "É necessário entrar com um perfil que tenha permissão financeira ou de administrador nessa conta.";
 
+  const balTone = runwayDays != null && runwayDays <= 1 ? "danger" : runwayDays != null && runwayDays <= 5 ? "warn" : "ok";
+
   return (
-    <section
-      style={{
-        margin: compact ? "12px 0 0" : "14px 0 2px",
-        padding: compact ? "10px 11px" : "11px 13px",
-        border: "1px solid #e8e8e5",
-        borderRadius: 11,
-        background: "#fff",
-        display: "flex",
-        alignItems: "center",
-        gap: 7,
-        flexWrap: "wrap",
-      }}
-    >
-      <span style={{ fontSize: 10, color: "#888", fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.35, marginRight: 3 }}>
+    <section className="ec-linkrow" style={{ margin: compact ? "12px 0 0" : "14px 0 2px" }}>
+      <span className="ec-linkrow__head">
         Acesso rápido{business?.name ? ` · ${business.name}` : ""}
       </span>
       {isMeta && finance?.is_prepaid && effectiveBalance != null && (
         <span
+          className={"ec-linkrow__bal ec-linkrow__bal--" + balTone}
+          data-tone={balTone}
           title={
             finance.average_daily_spend > 0
               ? `Média diária (7d): ${formatCurrency(finance.average_daily_spend)}`
               : "Sem gasto nos últimos 7 dias"
           }
-          style={{
-            padding: "6px 9px",
-            borderRadius: 8,
-            border: `1px solid ${runwayDays != null && runwayDays <= 1 ? "#efc0bb" : runwayDays != null && runwayDays <= 5 ? "#edd49f" : "#c9dfcf"}`,
-            background: runwayDays != null && runwayDays <= 1 ? "#fff1ef" : runwayDays != null && runwayDays <= 5 ? "#fff8e9" : "#f1f8f3",
-            color: runwayDays != null && runwayDays <= 1 ? "#ad3d36" : runwayDays != null && runwayDays <= 5 ? "#8a6117" : "#2b7143",
-            fontSize: 11,
-            fontWeight: 750,
-          }}
         >
           Saldo {formatCurrency(effectiveBalance)}
           {runwayText ? ` · dura ${runwayText}` : " · sem gasto 7d"}
@@ -1510,33 +1454,16 @@ function OperationalLinks({
           target="_blank"
           rel="noreferrer"
           title={link.title}
-          style={{
-            padding: "6px 9px",
-            borderRadius: 8,
-            border: `1px solid ${link.accent ? "#b9d5fb" : "#e2e2df"}`,
-            background: link.accent ? "#eef5ff" : "#fafaf9",
-            color: link.accent ? "#1768ca" : "#444",
-            fontSize: 11,
-            fontWeight: 650,
-            textDecoration: "none",
-          }}
+          className={"ec-linkrow__item" + (link.accent ? " ec-linkrow__item--accent" : "")}
+          data-accent={link.accent ? "true" : undefined}
         >
           {link.label} ↗
         </a>
       ))}
       <button
+        className="ec-linkrow__action"
         onClick={() => copy(billingUrl, "billing")}
         title="Copiar para enviar ao cliente; ele precisará entrar com um perfil autorizado"
-        style={{
-          padding: "6px 9px",
-          borderRadius: 8,
-          border: "1px dashed #b9d5fb",
-          background: "#fff",
-          color: "#1768ca",
-          fontSize: 11,
-          fontWeight: 650,
-          cursor: "pointer",
-        }}
       >
         {copied === "billing" ? "Link copiado ✓" : "Copiar link de saldo"}
       </button>
@@ -1549,7 +1476,7 @@ function OperationalLinks({
             title="Abrir o WhatsApp com o aviso de saldo pronto para enviar"
             style={{
               padding: "6px 9px",
-              borderRadius: 8,
+              borderRadius: "var(--r-sm)",
               border: "1px solid #bfe0c8",
               background: "#edf9f0",
               color: "#20713a",
@@ -1565,7 +1492,7 @@ function OperationalLinks({
             title="Copiar uma mensagem pronta com conta, saldo e link para enviar ao cliente"
             style={{
               padding: "6px 9px",
-              borderRadius: 8,
+              borderRadius: "var(--r-sm)",
               border: "1px dashed #bfe0c8",
               background: "#f6fbf7",
               color: "#267a45",
@@ -1583,10 +1510,10 @@ function OperationalLinks({
         title="Copiar o ID desta conta de anúncios"
         style={{
           padding: "6px 9px",
-          borderRadius: 8,
+          borderRadius: "var(--r-sm)",
           border: "1px solid transparent",
           background: "transparent",
-          color: "#888",
+          color: "var(--text-muted)",
           fontSize: 10.5,
           cursor: "pointer",
         }}
@@ -1601,21 +1528,11 @@ function Chip({ active, onClick, label, color }: { active: boolean; onClick: () 
   return (
     <button
       onClick={onClick}
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 6,
-        padding: "7px 14px",
-        borderRadius: 999,
-        border: active ? `1px solid ${color}` : "1px solid #e2e2e2",
-        background: active ? color + "12" : "#fff",
-        color: active ? color : "#555",
-        fontSize: 13,
-        fontWeight: 500,
-        cursor: "pointer",
-      }}
+      className={"ec-chip" + (active ? " ec-chip--active" : "")}
+      style={{ color, borderColor: active ? color : undefined }}
+      data-active={active ? "true" : undefined}
     >
-      <span style={{ width: 8, height: 8, borderRadius: "50%", background: color }} />
+      <span className="ec-chip__dot" style={{ background: color }} />
       {label}
     </button>
   );
@@ -1630,7 +1547,7 @@ function TabBtn({ active, onClick, children }: { active: boolean; onClick: () =>
 }
 
 function Empty({ children }: { children: React.ReactNode }) {
-  return <div style={{ fontSize: 13, color: "#bbb", padding: "8px 2px" }}>{children}</div>;
+  return <div style={{ fontSize: 13, color: "var(--text-faint)", padding: "8px 2px" }}>{children}</div>;
 }
 
 function Kpi({ label, value, cur, prev, invert, neutral }: { label: string; value: string; cur?: number; prev?: number; invert?: boolean; neutral?: boolean }) {
@@ -1657,7 +1574,7 @@ function Kpi({ label, value, cur, prev, invert, neutral }: { label: string; valu
 }
 
 // Mini-gráfico de tendência em SVG.
-function Sparkline({ points, color = "#3987e5", width = 84, height = 26 }: { points: number[]; color?: string; width?: number; height?: number }) {
+function Sparkline({ points, color = "var(--data-1)", width = 84, height = 26 }: { points: number[]; color?: string; width?: number; height?: number }) {
   if (!points || points.length < 2) return <div style={{ width, height }} />;
   const max = Math.max(...points, 1);
   const min = Math.min(...points, 0);

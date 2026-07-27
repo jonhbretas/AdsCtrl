@@ -28,6 +28,7 @@ type AlertItem = {
   type: string;
   title: string;
   detail: string;
+  group?: { name: string; color: string } | null;
   acknowledged: boolean;
   acknowledged_at: string | null;
   resolved: boolean;
@@ -48,6 +49,18 @@ const LEVEL: Record<AlertLevel, { label: string; tone: "danger" | "warn" | "bran
   critical: { label: "Crítico", tone: "danger" },
   warning: { label: "Atenção", tone: "warn" },
   info: { label: "Informativo", tone: "brand" },
+};
+
+// O tipo cru (snake_case que vem do banco) vira rótulo legível na tabela.
+const TYPE_LABEL: Record<string, string> = {
+  account_disabled: "status da conta",
+  payment_issue: "pagamento",
+  low_balance: "saldo baixo",
+  spend_drop: "queda de gasto",
+  spend_spike: "pico de gasto",
+  rejected_creative: "criativo reprovado",
+  creative_issue: "erro de veiculação",
+  no_spend: "sem gasto",
 };
 
 export default function AlertsPage() {
@@ -248,8 +261,15 @@ export default function AlertsPage() {
                     <Badge tone={appearance.tone}>{appearance.label}</Badge>
                   </div>
                   <div style={{ minWidth: 0 }}>
-                    <div className="ec-row__strong">{item.account_name}</div>
-                    <div className="ec-row__faint">{item.type || "monitoramento"}</div>
+                    <div className="ec-row__strong">
+                      {item.account_name}
+                      {item.group && (
+                        <span style={{ marginLeft: 6, fontSize: 10, padding: "0 6px", borderRadius: 8, background: item.group.color + "22", color: item.group.color, fontWeight: 600 }}>
+                          {item.group.name}
+                        </span>
+                      )}
+                    </div>
+                    <div className="ec-row__faint">{TYPE_LABEL[item.type] || item.type || "monitoramento"}</div>
                   </div>
                   <div style={{ minWidth: 0 }}>
                     <div className="ec-row__title">{item.title}</div>

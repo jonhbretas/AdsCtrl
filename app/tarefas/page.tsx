@@ -46,6 +46,14 @@ interface Task {
   context: { ad_ids?: string[]; ad_names?: string[] } | null;
   created_at: string;
   done_at: string | null;
+  // Contadores que o quadro traz para o selo do cartão (ver GET /api/tasks).
+  comments_count?: number;
+  check_done?: number;
+  check_total?: number;
+}
+interface GroupRef {
+  name: string;
+  color: string;
 }
 interface ClientRef {
   id: string;
@@ -53,10 +61,12 @@ interface ClientRef {
   // Conta de anúncios que representa o cliente: é por ela que a tela de
   // clientes abre (/?account=<id>), não pelo id do cliente.
   account_id: string | null;
+  group?: GroupRef | null;
 }
 interface AccountRef {
   account_id: string;
   name: string;
+  group?: GroupRef | null;
 }
 interface Project {
   id: string;
@@ -77,6 +87,26 @@ const COLUMNS: { key: Task["status"]; label: string; hint: string }[] = [
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
 const brDate = (iso: string) => iso.split("-").reverse().join("/");
+
+// Selo do grupo, igual ao da tela de clientes: a cor vem do grupo, o formato
+// é sempre este — a leitura "de quem é" tem de ser igual em toda tela.
+function GroupBadge({ group }: { group: GroupRef }) {
+  return (
+    <span
+      style={{
+        fontSize: 10,
+        padding: "0 6px",
+        borderRadius: 8,
+        background: group.color + "22",
+        color: group.color,
+        fontWeight: 600,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {group.name}
+    </span>
+  );
+}
 
 // "atrasada", "hoje", "em 3 dias" — a distância importa mais que a data.
 function dueLabel(due: string): { text: string; tone: "late" | "today" | "soon" | "far" } {
@@ -167,6 +197,12 @@ export default function TasksPage() {
   // Ver só um projeto. O quadro inteiro continua sendo o padrão: filtro que
   // sobrevive à visita esconde trabalho sem avisar.
   const [projectFilter, setProjectFilter] = useState<string>("");
+
+  // O cartão aberto (detalhe com listas e conversa). Guarda o id, não a
+  // tarefa: o quadro continua sendo a fonte da verdade e o modal lê a versão
+  // atual — mover de coluna com o cartão aberto não pode desenhar dois
+  // estados ao mesmo tempo.
+  const [openTaskId, setOpenTaskId] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -269,17 +305,19 @@ export default function TasksPage() {
     const clientByAccount = new Map(
       clients.filter((c) => c.account_id).map((c) => [c.account_id as string, c])
     );
-    const accountName = new Map(accounts.map((a) => [a.account_id, a.name]));
-    return (task: Task): { label: string; href: string | null } | null => {
+    const accountById = new Map(accounts.map((a) => [a.account_id, a]));
+    return (task: Task): { label: string; href: string | null; group: GroupRef | null } | null => {
       const client = task.client_id ? clientById.get(task.client_id) : null;
       const account = client?.account_id ?? task.account_id ?? null;
+      const viaAccount = task.account_id ? clientByAccount.get(task.account_id) : undefined;
       const label =
         client?.name ??
         (task.account_id
-          ? clientByAccount.get(task.account_id)?.name || accountName.get(task.account_id) || null
+          ? viaAccount?.name || accountById.get(task.account_id)?.name || null
           : null);
       if (!label) return null;
-      return { label, href: account ? `/?account=${encodeURIComponent(account)}` : null };
+      const group = client?.group ?? viaAccount?.group ?? (task.account_id ? accountById.get(task.account_id)?.group : null) ?? null;
+      return { label, href: account ? `/?account=${encodeURIComponent(account)}` : null, group };
     };
   }, [clients, accounts, clientById]);
 
@@ -288,6 +326,13 @@ export default function TasksPage() {
   const lateCount = tasks.filter((t) => t.status !== "done" && t.due_date && t.due_date < todayIso()).length;
   const openCount = tasks.filter((t) => t.status !== "done").length;
   const filteredProject = projectFilter ? projectById.get(projectFilter) : undefined;
+  const openTask = openTaskId ? tasks.find((t) => t.id === openTaskId) || null : null;
+
+  // Comentário ou passo mudou no cartão aberto: o selo do quadro acompanha
+  // sem recarregar a tela inteira.
+  function applyStats(id: string, stats: { comments_count: number; check_done: number; check_total: number }) {
+    setTasks((current) => current.map((t) => (t.id === id ? { ...t, ...stats } : t)));
+  }
 
   return (
     <main className="ec-page">
@@ -467,6 +512,7 @@ export default function TasksPage() {
                     busy={busy === task.id}
                     onMove={(status) => patch(task.id, { status })}
                     onProject={(id) => patch(task.id, { project_id: id || null })}
+                    onOpen={() => setOpenTaskId(task.id)}
                     onRemove={() => remove(task)}
                   />
                 ))}
@@ -475,6 +521,18 @@ export default function TasksPage() {
           );
         })}
       </div>
+
+      {openTask && (
+        <TaskDetail
+          task={openTask}
+          owner={owner(openTask)}
+          clients={clients}
+          projects={projects}
+          onPatch={(body) => patch(openTask.id, body)}
+          onStats={(stats) => applyStats(openTask.id, stats)}
+          onClose={() => setOpenTaskId(null)}
+        />
+      )}
     </main>
   );
 }
@@ -737,16 +795,18 @@ function TaskCard({
   busy,
   onMove,
   onProject,
+  onOpen,
   onRemove,
 }: {
   task: Task;
-  /** Cliente (ou conta, na tarefa automática) e o link para a tela dele. */
-  owner: { label: string; href: string | null } | null;
+  /** Cliente (ou conta, na tarefa automática), o link e o grupo dele. */
+  owner: { label: string; href: string | null; group: GroupRef | null } | null;
   project: Project | null;
   projects: Project[];
   busy: boolean;
   onMove: (status: Task["status"]) => void;
   onProject: (id: string) => void;
+  onOpen: () => void;
   onRemove: () => void;
 }) {
   const due = task.due_date ? dueLabel(task.due_date) : null;
@@ -775,21 +835,31 @@ function TaskCard({
             AUTO
           </Badge>
         )}
-        <h3 className="ec-task__title">{task.title}</h3>
+        {/* O título abre o cartão (listas, conversa, edição): como no Trello,
+            clicar no texto é o gesto de "entrar" na tarefa. */}
+        <h3 className="ec-task__title">
+          <button type="button" onClick={onOpen} className="ec-task__open" title="Abrir detalhes, listas e comentários">
+            {task.title}
+          </button>
+        </h3>
       </div>
 
       <div className="ec-task__meta">
         {/* Nome do cliente clicável: abre a tela dele já expandida. Sem conta
             conhecida ele continua texto — link que não leva a lugar nenhum é
             pior que texto puro. */}
-        {owner &&
-          (owner.href ? (
-            <a href={owner.href} className="ec-task__client" title={`Abrir ${owner.label} na tela de clientes`}>
-              {owner.label}
-            </a>
-          ) : (
-            <span>{owner.label}</span>
-          ))}
+        {owner && (
+          <>
+            {owner.href ? (
+              <a href={owner.href} className="ec-task__client" title={`Abrir ${owner.label} na tela de clientes`}>
+                {owner.label}
+              </a>
+            ) : (
+              <span>{owner.label}</span>
+            )}
+            {owner.group && <GroupBadge group={owner.group} />}
+          </>
+        )}
         {project && <span className="ec-task__project" title="Projeto">◆ {project.name}</span>}
         {due && (
           <span className="ec-task__due" data-tone={due.tone}>
@@ -802,6 +872,21 @@ function TaskCard({
           </a>
         )}
       </div>
+
+      {/* Progresso e conversa sem abrir o cartão — o mesmo gesto do Trello.
+          Só aparece o selo que tem o que contar. */}
+      {((task.check_total ?? 0) > 0 || (task.comments_count ?? 0) > 0) && (
+        <div className="ec-task__meta">
+          <span className="ec-task__counts">
+            {(task.check_total ?? 0) > 0 && (
+              <span data-complete={task.check_done === task.check_total ? "true" : undefined}>
+                ☑ {task.check_done}/{task.check_total}
+              </span>
+            )}
+            {(task.comments_count ?? 0) > 0 && <span>💬 {task.comments_count}</span>}
+          </span>
+        </div>
+      )}
 
       {task.notes && <p className="ec-task__notes">{task.notes}</p>}
 
@@ -829,6 +914,15 @@ function TaskCard({
           </Button>
         )}
         <span style={{ flex: 1 }} />
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onOpen}
+          disabled={busy}
+          title="Abrir detalhes, listas e comentários"
+        >
+          abrir
+        </Button>
         {projects.some((p) => p.status === "active") && (
           <Select
             value={task.project_id || ""}
@@ -858,5 +952,566 @@ function TaskCard({
         </Button>
       </div>
     </Card>
+  );
+}
+
+/* ------------------------------------------------------- Cartão aberto ----
+   O detalhe da tarefa, como o cartão aberto do Trello: campos editáveis,
+   listas de verificação com progresso e a conversa. As mutações de lista e
+   comentário vivem aqui; as de campo (título, prazo, cliente…) sobem para o
+   quadro pelo onPatch — a fonte da verdade continua sendo a lista tasks. */
+type TaskComment = {
+  id: string;
+  body: string;
+  created_at: string;
+  updated_at: string;
+};
+type ChecklistItem = {
+  id: string;
+  checklist_id: string;
+  text: string;
+  done: boolean;
+  position: number;
+  done_at: string | null;
+};
+type Checklist = {
+  id: string;
+  task_id: string;
+  title: string;
+  position: number;
+  items: ChecklistItem[];
+};
+
+const whenLabel = (iso: string) =>
+  new Date(iso).toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+function TaskDetail({
+  task,
+  owner,
+  clients,
+  projects,
+  onPatch,
+  onStats,
+  onClose,
+}: {
+  task: Task;
+  owner: { label: string; href: string | null; group: GroupRef | null } | null;
+  clients: ClientRef[];
+  projects: Project[];
+  onPatch: (body: Record<string, unknown>) => void;
+  onStats: (stats: { comments_count: number; check_done: number; check_total: number }) => void;
+  onClose: () => void;
+}) {
+  const [comments, setComments] = useState<TaskComment[] | null>(null);
+  const [checklists, setChecklists] = useState<Checklist[] | null>(null);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const [extrasMissing, setExtrasMissing] = useState(false);
+
+  const [draft, setDraft] = useState("");
+  const [editingComment, setEditingComment] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState("");
+  const [newItem, setNewItem] = useState<Record<string, string>>({});
+  const [newListTitle, setNewListTitle] = useState("");
+  const [savingComment, setSavingComment] = useState(false);
+
+  // Campos com digitação livre: o valor local manda enquanto digita, e o
+  // salvamento acontece no blur — cada tecla salva seria chamada atrás de
+  // chamada, e um modal que recarrega a cada tecla não se deixa escrever.
+  const [title, setTitle] = useState(task.title);
+  const [notes, setNotes] = useState(task.notes || "");
+  const [link, setLink] = useState(task.link || "");
+
+  useEffect(() => {
+    let alive = true;
+    fetch(`/api/tasks/details?task_id=${encodeURIComponent(task.id)}`, { cache: "no-store" })
+      .then(async (response) => {
+        const payload = await response.json();
+        if (!response.ok || payload.error) {
+          if (response.status === 503 && alive) setExtrasMissing(true);
+          throw new Error(payload.error || `Falha (HTTP ${response.status}).`);
+        }
+        return payload;
+      })
+      .then((payload) => {
+        if (!alive) return;
+        setComments(payload.comments || []);
+        setChecklists(payload.checklists || []);
+      })
+      .catch((cause) => {
+        if (alive) setDetailError(cause?.message || "Erro ao abrir a tarefa.");
+      });
+    return () => {
+      alive = false;
+    };
+  }, [task.id]);
+
+  // O selo do quadro (☑ 3/5 · 💬 2) reflete o que acontece aqui dentro.
+  useEffect(() => {
+    if (!comments || !checklists) return;
+    const total = checklists.reduce((sum, list) => sum + list.items.length, 0);
+    const done = checklists.reduce(
+      (sum, list) => sum + list.items.filter((item) => item.done).length,
+      0
+    );
+    onStats({ comments_count: comments.length, check_done: done, check_total: total });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [comments, checklists]);
+
+  // Esc fecha: o gesto universal de "sair do cartão".
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  async function call<T>(url: string, method: string, body?: Record<string, unknown>): Promise<T> {
+    const response = await fetch(url, {
+      method,
+      ...(method === "DELETE" ? {} : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) }),
+    });
+    const payload = await response.json();
+    if (!response.ok || payload.error) throw new Error(payload.error || `Falha (HTTP ${response.status}).`);
+    return payload;
+  }
+
+  async function run(action: () => Promise<void>, fallback: string) {
+    try {
+      setDetailError(null);
+      await action();
+    } catch (e: any) {
+      setDetailError(e?.message ?? fallback);
+    }
+  }
+
+  const saveTitle = () => {
+    const next = title.trim();
+    if (next && next !== task.title) onPatch({ title: next });
+    else setTitle(task.title);
+  };
+  const saveNotes = () => {
+    if (notes !== (task.notes || "")) onPatch({ notes: notes.trim() || null });
+  };
+  const saveLink = () => {
+    if (link !== (task.link || "")) onPatch({ link: link.trim() || null });
+  };
+
+  const addComment = () =>
+    run(async () => {
+      const body = draft.trim();
+      if (!body) return;
+      setSavingComment(true);
+      try {
+        const { comment } = await call<{ comment: TaskComment }>("/api/tasks/comments", "POST", {
+          task_id: task.id,
+          body,
+        });
+        setComments((current) => [...(current || []), comment]);
+        setDraft("");
+      } finally {
+        setSavingComment(false);
+      }
+    }, "Erro ao comentar.");
+
+  const saveComment = (id: string) =>
+    run(async () => {
+      const body = editingText.trim();
+      if (!body) return;
+      const { comment } = await call<{ comment: TaskComment }>("/api/tasks/comments", "PATCH", { id, body });
+      setComments((current) => (current || []).map((c) => (c.id === id ? comment : c)));
+      setEditingComment(null);
+    }, "Erro ao editar o comentário.");
+
+  const addList = () =>
+    run(async () => {
+      const titleValue = newListTitle.trim() || "Lista";
+      const { checklist } = await call<{ checklist: Checklist }>("/api/tasks/checklists", "POST", {
+        task_id: task.id,
+        title: titleValue,
+      });
+      setChecklists((current) => [...(current || []), checklist]);
+      setNewListTitle("");
+    }, "Erro ao criar a lista.");
+
+  const removeList = (list: Checklist) => {
+    if (!window.confirm(`Excluir a lista "${list.title}" e os ${list.items.length} passo(s) dela?`)) return;
+    run(async () => {
+      await fetch(`/api/tasks/checklists?id=${encodeURIComponent(list.id)}`, { method: "DELETE" })
+        .then(async (response) => {
+          const payload = await response.json();
+          if (!response.ok || payload.error) throw new Error(payload.error || "Falha ao excluir.");
+        });
+      setChecklists((current) => (current || []).filter((c) => c.id !== list.id));
+    }, "Erro ao excluir a lista.");
+  };
+
+  const addItem = (list: Checklist) =>
+    run(async () => {
+      const text = (newItem[list.id] || "").trim();
+      if (!text) return;
+      const { item } = await call<{ item: ChecklistItem }>("/api/tasks/checklist-items", "POST", {
+        checklist_id: list.id,
+        text,
+      });
+      setChecklists((current) =>
+        (current || []).map((c) => (c.id === list.id ? { ...c, items: [...c.items, item] } : c))
+      );
+      setNewItem((current) => ({ ...current, [list.id]: "" }));
+    }, "Erro ao adicionar o passo.");
+
+  const toggleItem = async (list: Checklist, item: ChecklistItem) => {
+    // Otimista como a mudança de coluna: marcar passo é gesto rápido. Se a
+    // API falhar, volta ao estado anterior — checkbox que mente é pior que
+    // checkbox que espera.
+    const previous = checklists;
+    setChecklists((current) =>
+      (current || []).map((c) =>
+        c.id === list.id
+          ? { ...c, items: c.items.map((i) => (i.id === item.id ? { ...i, done: !i.done } : i)) }
+          : c
+      )
+    );
+    try {
+      const { item: saved } = await call<{ item: ChecklistItem }>("/api/tasks/checklist-items", "PATCH", {
+        id: item.id,
+        done: !item.done,
+      });
+      setChecklists((current) =>
+        (current || []).map((c) =>
+          c.id === list.id ? { ...c, items: c.items.map((i) => (i.id === item.id ? saved : i)) } : c
+        )
+      );
+    } catch (e: any) {
+      setChecklists(previous);
+      setDetailError(e?.message ?? "Erro ao marcar o passo.");
+    }
+  };
+
+  const removeItem = (list: Checklist, item: ChecklistItem) =>
+    run(async () => {
+      await fetch(`/api/tasks/checklist-items?id=${encodeURIComponent(item.id)}`, { method: "DELETE" })
+        .then(async (response) => {
+          const payload = await response.json();
+          if (!response.ok || payload.error) throw new Error(payload.error || "Falha ao excluir.");
+        });
+      setChecklists((current) =>
+        (current || []).map((c) =>
+          c.id === list.id ? { ...c, items: c.items.filter((i) => i.id !== item.id) } : c
+        )
+      );
+    }, "Erro ao excluir o passo.");
+
+  return (
+    <div className="ec-tmodal" onClick={onClose} role="presentation">
+      <div
+        className="ec-tmodal__panel"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Detalhes de ${task.title}`}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div style={{ display: "flex", alignItems: "flex-start", gap: "var(--sp-2)" }}>
+          <input
+            className="ec-tmodal__title"
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            onBlur={saveTitle}
+            onKeyDown={(event) => event.key === "Enter" && (event.target as HTMLInputElement).blur()}
+            aria-label="Título da tarefa"
+          />
+          <button type="button" className="ec-tmodal__close" onClick={onClose} aria-label="Fechar" title="Fechar (Esc)">
+            ✕
+          </button>
+        </div>
+
+        <div className="ec-tmodal__fields">
+          <label style={{ minWidth: 0 }}>
+            <span className="ec-tmodal__label">Cliente</span>
+            <Select
+              value={task.client_id || ""}
+              onChange={(event) => onPatch({ client_id: event.target.value || null })}
+              aria-label="Cliente"
+            >
+              <option value="">sem cliente</option>
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </Select>
+          </label>
+          <label style={{ minWidth: 0 }}>
+            <span className="ec-tmodal__label">Projeto</span>
+            <Select
+              value={task.project_id || ""}
+              onChange={(event) => onPatch({ project_id: event.target.value || null })}
+              aria-label="Projeto"
+            >
+              <option value="">sem projeto</option>
+              {projects
+                .filter((p) => p.status === "active" || p.id === task.project_id)
+                .map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+            </Select>
+          </label>
+          <label style={{ minWidth: 0 }}>
+            <span className="ec-tmodal__label">Prazo</span>
+            <Input
+              type="date"
+              value={task.due_date || ""}
+              onChange={(event) => onPatch({ due_date: event.target.value || null })}
+              aria-label="Prazo"
+            />
+          </label>
+          <label style={{ minWidth: 0 }}>
+            <span className="ec-tmodal__label">Coluna</span>
+            <Select
+              value={task.status}
+              onChange={(event) => onPatch({ status: event.target.value })}
+              aria-label="Coluna"
+            >
+              {COLUMNS.map((column) => (
+                <option key={column.key} value={column.key}>{column.label}</option>
+              ))}
+            </Select>
+          </label>
+        </div>
+
+        <div className="ec-tmodal__fields">
+          <label style={{ flex: "2 1 240px", minWidth: 0 }}>
+            <span className="ec-tmodal__label">Link do arquivo</span>
+            <Input
+              value={link}
+              onChange={(event) => setLink(event.target.value)}
+              onBlur={saveLink}
+              placeholder="https://…"
+              aria-label="Link do arquivo"
+            />
+          </label>
+          <span style={{ flex: "0 0 auto", display: "grid", gap: 6 }}>
+            <span className="ec-tmodal__label">Urgência</span>
+            <Button
+              type="button"
+              variant={task.priority === "high" ? "danger" : "secondary"}
+              size="sm"
+              aria-pressed={task.priority === "high"}
+              onClick={() => onPatch({ priority: task.priority === "high" ? "normal" : "high" })}
+            >
+              {task.priority === "high" ? "● urgente" : "○ normal"}
+            </Button>
+          </span>
+          {owner && (
+            <span style={{ flex: "0 0 auto", display: "grid", gap: 6, alignContent: "start" }}>
+              <span className="ec-tmodal__label">Grupo</span>
+              <span style={{ display: "flex", alignItems: "center", gap: 6, height: 30 }}>
+                {owner.group ? <GroupBadge group={owner.group} /> : <span style={{ fontSize: 11.5, color: "var(--text-muted)" }}>sem grupo</span>}
+              </span>
+            </span>
+          )}
+        </div>
+
+        <label>
+          <span className="ec-tmodal__label">Anotações</span>
+          <textarea
+            className="ec-input"
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+            onBlur={saveNotes}
+            rows={3}
+            placeholder="O que não cabe no título: contexto, combinado, telefone…"
+            aria-label="Anotações"
+            style={{ width: "100%", resize: "vertical" }}
+          />
+        </label>
+
+        {detailError && (
+          <Notice tone="danger" onDismiss={() => setDetailError(null)}>
+            {detailError}
+          </Notice>
+        )}
+        {extrasMissing && (
+          <Notice tone="warn">
+            Comentários e listas ainda não existem no banco: rode{" "}
+            <code>supabase-migration-task-extras.sql</code> no SQL Editor do Supabase e abra o
+            cartão de novo.
+          </Notice>
+        )}
+
+        {/* Listas de verificação. O progresso aparece no cartão fechado como
+            "☑ 3/5" — aqui é onde os passos se marcam. */}
+        {!extrasMissing && (
+          <section aria-label="Listas de verificação" style={{ display: "grid", gap: "var(--sp-2)" }}>
+            <span className="ec-tmodal__label">Listas de verificação</span>
+            {checklists === null && <Skeleton h={64} radius={9} />}
+            {(checklists || []).map((list) => {
+              const done = list.items.filter((item) => item.done).length;
+              const total = list.items.length;
+              const complete = total > 0 && done === total;
+              return (
+                <div key={list.id} className="ec-check" data-complete={complete ? "true" : undefined}>
+                  <div className="ec-check__head">
+                    <span className="ec-check__name">{list.title}</span>
+                    {total > 0 && <span className="ec-check__count">{done}/{total}</span>}
+                    <span style={{ flex: 1 }} />
+                    <button type="button" className="ec-comment__edit" onClick={() => removeList(list)}>
+                      excluir lista
+                    </button>
+                  </div>
+                  {total > 0 && (
+                    <div className="ec-check__bar" role="progressbar" aria-valuenow={done} aria-valuemax={total}>
+                      <span style={{ width: `${(done / total) * 100}%` }} />
+                    </div>
+                  )}
+                  {list.items.map((item) => (
+                    <div key={item.id} className="ec-check__item" data-done={item.done ? "true" : undefined}>
+                      <input
+                        type="checkbox"
+                        checked={item.done}
+                        onChange={() => toggleItem(list, item)}
+                        aria-label={item.text}
+                      />
+                      <span data-text="true">{item.text}</span>
+                      <button
+                        type="button"
+                        className="ec-check__del"
+                        onClick={() => removeItem(list, item)}
+                        aria-label={`Excluir passo ${item.text}`}
+                        title="Excluir passo"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <Input
+                      value={newItem[list.id] || ""}
+                      onChange={(event) => setNewItem((current) => ({ ...current, [list.id]: event.target.value }))}
+                      onKeyDown={(event) => event.key === "Enter" && addItem(list)}
+                      placeholder="Adicionar um passo…"
+                      aria-label={`Novo passo em ${list.title}`}
+                      style={{ flex: 1, height: 30, fontSize: 12 }}
+                    />
+                    <Button variant="ghost" size="sm" onClick={() => addItem(list)} disabled={!(newItem[list.id] || "").trim()}>
+                      + passo
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+            <div style={{ display: "flex", gap: 6 }}>
+              <Input
+                value={newListTitle}
+                onChange={(event) => setNewListTitle(event.target.value)}
+                onKeyDown={(event) => event.key === "Enter" && addList()}
+                placeholder="Nome da nova lista (ex.: Subir criativos)"
+                aria-label="Nome da nova lista"
+                style={{ flex: 1, height: 30, fontSize: 12 }}
+              />
+              <Button variant="secondary" size="sm" onClick={addList}>
+                + lista
+              </Button>
+            </div>
+          </section>
+        )}
+
+        {/* A conversa: decisão que morria no chat fica no cartão. */}
+        {!extrasMissing && (
+          <section aria-label="Comentários" style={{ display: "grid", gap: "var(--sp-2)" }}>
+            <span className="ec-tmodal__label">Comentários</span>
+            {comments === null && <Skeleton h={44} radius={9} />}
+            {comments && comments.length === 0 && (
+              <p className="ec-project__hint">
+                Nada anotado ainda. Combinou algo com o cliente? Escreva aqui — o chat daqui a
+                uma semana ninguém acha.
+              </p>
+            )}
+            {(comments || []).map((comment) => (
+              <div key={comment.id} className="ec-comment">
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span className="ec-comment__when">
+                    {whenLabel(comment.created_at)}
+                    {comment.updated_at !== comment.created_at && " · editado"}
+                  </span>
+                  <span style={{ flex: 1 }} />
+                  {editingComment !== comment.id && (
+                    <>
+                      <button
+                        type="button"
+                        className="ec-comment__edit"
+                        onClick={() => {
+                          setEditingComment(comment.id);
+                          setEditingText(comment.body);
+                        }}
+                      >
+                        editar
+                      </button>
+                      <button
+                        type="button"
+                        className="ec-comment__edit"
+                        onClick={() =>
+                          run(async () => {
+                            await fetch(`/api/tasks/comments?id=${encodeURIComponent(comment.id)}`, { method: "DELETE" })
+                              .then(async (response) => {
+                                const payload = await response.json();
+                                if (!response.ok || payload.error) throw new Error(payload.error || "Falha ao excluir.");
+                              });
+                            setComments((current) => (current || []).filter((c) => c.id !== comment.id));
+                          }, "Erro ao excluir o comentário.")
+                        }
+                      >
+                        excluir
+                      </button>
+                    </>
+                  )}
+                </div>
+                {editingComment === comment.id ? (
+                  <div style={{ display: "grid", gap: 6, marginTop: 5 }}>
+                    <textarea
+                      className="ec-input"
+                      value={editingText}
+                      onChange={(event) => setEditingText(event.target.value)}
+                      rows={3}
+                      aria-label="Editar comentário"
+                      style={{ width: "100%", resize: "vertical" }}
+                    />
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <Button variant="primary" size="sm" onClick={() => saveComment(comment.id)} disabled={!editingText.trim()}>
+                        Salvar
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => setEditingComment(null)}>
+                        Cancelar
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="ec-comment__body">{comment.body}</p>
+                )}
+              </div>
+            ))}
+            <div style={{ display: "grid", gap: 6 }}>
+              <textarea
+                className="ec-input"
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                rows={2}
+                placeholder="Escreva um comentário…"
+                aria-label="Novo comentário"
+                style={{ width: "100%", resize: "vertical" }}
+              />
+              <div>
+                <Button variant="primary" size="sm" onClick={addComment} disabled={savingComment || !draft.trim()}>
+                  {savingComment ? "Enviando…" : "Comentar"}
+                </Button>
+              </div>
+            </div>
+          </section>
+        )}
+      </div>
+    </div>
   );
 }

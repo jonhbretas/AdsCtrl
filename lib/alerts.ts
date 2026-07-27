@@ -23,6 +23,7 @@ export interface Alert {
     | "spend_drop"
     | "spend_spike"
     | "rejected_creative"
+    | "creative_issue"
     | "no_spend";
   title: string;
   detail: string;
@@ -102,21 +103,57 @@ export function buildAlertsForAccount(input: BuildAlertsInput): Alert[] {
     });
   }
 
-  // 4. Criativos reprovados
-  if (rejected.length > 0) {
+  // 4. Criativos com problema — mas problema não é tudo igual.
+  //
+  // A Meta usa dois effective_status nesta lista, com consequências opostas:
+  //
+  //   DISAPPROVED  — reprovação por infração de política. Esta pesa na
+  //                  qualidade da conta e exige correção ou contestação.
+  //   WITH_ISSUES  — erro de veiculação (pagamento, agendamento, peça
+  //                  faltando…). NÃO é infração: não penaliza a conta e
+  //                  costuma se resolver sem revisão manual.
+  //
+  // Misturar os dois num alerta de "reprovado" enchia o quadro de falsas
+  // urgências — a maioria era só erro. Por isso reprovação vira tarefa e
+  // erro vira ciência: aparece aqui, mas não abre tarefa (ver
+  // ACTIONABLE_ALERTS na coleta).
+  const policyRejected = rejected.filter((r) => r.effective_status === "DISAPPROVED");
+  const deliveryIssues = rejected.filter((r) => r.effective_status !== "DISAPPROVED");
+
+  if (policyRejected.length > 0) {
     alerts.push({
       account_id: id,
       account_name: name,
       level: "warning",
       type: "rejected_creative",
-      title: `${rejected.length} criativo(s) reprovado(s)`,
-      detail: rejected
+      title: `${policyRejected.length} criativo(s) reprovado(s)`,
+      detail: policyRejected
         .slice(0, 3)
         .map((r) => `${r.ad_name}: ${r.reasons[0]}`)
         .join(" · "),
       entities: {
-        adIds: rejected.map((r) => r.ad_id).filter(Boolean),
-        adNames: rejected.map((r) => r.ad_name).filter(Boolean),
+        adIds: policyRejected.map((r) => r.ad_id).filter(Boolean),
+        adNames: policyRejected.map((r) => r.ad_name).filter(Boolean),
+      },
+    });
+  }
+
+  if (deliveryIssues.length > 0) {
+    alerts.push({
+      account_id: id,
+      account_name: name,
+      level: "info",
+      type: "creative_issue",
+      title: `${deliveryIssues.length} criativo(s) com erro de veiculação`,
+      detail:
+        deliveryIssues
+          .slice(0, 3)
+          .map((r) => `${r.ad_name}: ${r.reasons[0]}`)
+          .join(" · ") +
+        " — erro de veiculação não é infração de política e não penaliza a conta.",
+      entities: {
+        adIds: deliveryIssues.map((r) => r.ad_id).filter(Boolean),
+        adNames: deliveryIssues.map((r) => r.ad_name).filter(Boolean),
       },
     });
   }

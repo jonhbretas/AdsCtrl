@@ -817,70 +817,102 @@ function RejectedPanel({
       </div>
     );
   }
+  // Reprovação de política (DISAPPROVED) pesa na conta e exige correção.
+  // Erro de veiculação (WITH_ISSUES) não é infração: não penaliza a conta e
+  // costuma se resolver sem contestação. Os dois juntos no mesmo balaio foi
+  // o que gerou "reprovados" demais por tanto tempo — agora cada um tem sua
+  // seção e seu peso visual.
+  const policy = ads.filter((ad) => ad.effective_status === "DISAPPROVED");
+  const issues = ads.filter((ad) => ad.effective_status !== "DISAPPROVED");
   return (
     <section
       style={{ ...panelStyle, marginBottom: "var(--sp-4)", borderColor: "#efd2ce", background: "#fffaf9" }}
-      aria-label="Anúncios reprovados"
+      aria-label="Anúncios reprovados ou com erro"
     >
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 11, flexWrap: "wrap" }}>
         <PanelTitle
-          title={`${ads.length} anúncio${ads.length > 1 ? "s" : ""} reprovado${ads.length > 1 ? "s" : ""}`}
+          title={
+            policy.length
+              ? `${policy.length} reprovado${policy.length > 1 ? "s" : ""}${issues.length ? ` · ${issues.length} com erro` : ""}`
+              : `${issues.length} anúncio${issues.length > 1 ? "s" : ""} com erro de veiculação`
+          }
           subtitle="Status atual na Meta · o motivo é o texto que a própria plataforma devolve"
         />
         <span style={{ flex: 1 }} />
         <Button variant="ghost" size="sm" onClick={onDismiss}>ocultar</Button>
       </div>
-      <div style={{ display: "grid", gap: 7 }}>
-        {ads.map((ad) => (
-          <div
-            key={ad.ad_id}
-            style={{
-              display: "flex",
-              gap: 10,
-              alignItems: "flex-start",
-              border: "1px solid var(--border)",
-              borderRadius: "var(--r-sm)",
-              background: "var(--surface)",
-              padding: "8px 10px",
-            }}
-          >
-            {ad.thumbnail ? (
-              <img
-                src={ad.thumbnail}
-                alt=""
-                width={44}
-                height={44}
-                style={{ width: 44, height: 44, borderRadius: 7, objectFit: "cover", background: "#eee", flexShrink: 0 }}
-              />
-            ) : (
-              <div style={{ width: 44, height: 44, borderRadius: 7, background: "#eee", display: "grid", placeItems: "center", color: "#aaa", flexShrink: 0 }}>◫</div>
-            )}
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
-                <strong style={{ fontSize: 12.5, color: "var(--text-strong)" }}>{ad.ad_name}</strong>
-                <Badge tone={ad.effective_status === "DISAPPROVED" ? "danger" : "warn"}>
-                  {ad.effective_status === "DISAPPROVED" ? "reprovado" : "com pendência"}
-                </Badge>
-              </div>
-              {ad.campaign_name && (
-                <div style={{ fontSize: 10.5, color: "var(--text-muted)", marginTop: 2 }}>{ad.campaign_name}</div>
-              )}
-              <div style={{ fontSize: 11, color: "#a2453e", marginTop: 4, lineHeight: 1.45 }}>
-                {ad.reasons.join(" · ")}
-              </div>
-            </div>
-            <a
-              href={`https://adsmanager.facebook.com/ads/manager/ads?act=${encodeURIComponent(accountId)}&selected_ad_ids=${encodeURIComponent(ad.ad_id)}`}
-              target="_blank"
-              rel="noreferrer"
-              style={{ fontSize: 11, fontWeight: 700, color: "#2b6fc4", textDecoration: "none", whiteSpace: "nowrap" }}
-            >
-              corrigir na Meta ↗
-            </a>
+      {policy.length > 0 && (
+        <div style={{ marginBottom: issues.length ? 14 : 0 }}>
+          <div style={{ fontSize: 11, fontWeight: 800, color: "#a2453e", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 7 }}>
+            Reprovados por política — penalizam a conta, corrija ou conteste
           </div>
-        ))}
-      </div>
+          <div style={{ display: "grid", gap: 7 }}>
+            {policy.map((ad) => <RejectedRow key={ad.ad_id} ad={ad} accountId={accountId} />)}
+          </div>
+        </div>
+      )}
+      {issues.length > 0 && (
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 800, color: "#8a6117", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 7 }}>
+            Erros de veiculação — não são infração e não pesam na conta
+          </div>
+          <div style={{ display: "grid", gap: 7 }}>
+            {issues.map((ad) => <RejectedRow key={ad.ad_id} ad={ad} accountId={accountId} />)}
+          </div>
+        </div>
+      )}
     </section>
+  );
+}
+
+function RejectedRow({ ad, accountId }: { ad: RejectedAd; accountId: string }) {
+  const isPolicy = ad.effective_status === "DISAPPROVED";
+  return (
+    <div
+      style={{
+        display: "flex",
+        gap: 10,
+        alignItems: "flex-start",
+        border: "1px solid var(--border)",
+        borderRadius: "var(--r-sm)",
+        background: "var(--surface)",
+        padding: "8px 10px",
+      }}
+    >
+      {ad.thumbnail ? (
+        <img
+          src={ad.thumbnail}
+          alt=""
+          width={44}
+          height={44}
+          style={{ width: 44, height: 44, borderRadius: 7, objectFit: "cover", background: "#eee", flexShrink: 0 }}
+        />
+      ) : (
+        <div style={{ width: 44, height: 44, borderRadius: 7, background: "#eee", display: "grid", placeItems: "center", color: "#aaa", flexShrink: 0 }}>◫</div>
+      )}
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div style={{ display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
+          <strong style={{ fontSize: 12.5, color: "var(--text-strong)" }}>{ad.ad_name}</strong>
+          <Badge tone={isPolicy ? "danger" : "warn"}>
+            {isPolicy ? "reprovado" : "erro de veiculação"}
+          </Badge>
+        </div>
+        {ad.campaign_name && (
+          <div style={{ fontSize: 10.5, color: "var(--text-muted)", marginTop: 2 }}>{ad.campaign_name}</div>
+        )}
+        <div style={{ fontSize: 11, color: isPolicy ? "#a2453e" : "#8a6117", marginTop: 4, lineHeight: 1.45 }}>
+          {ad.reasons.join(" · ")}
+        </div>
+      </div>
+      <a
+        href={`https://adsmanager.facebook.com/ads/manager/ads?act=${encodeURIComponent(accountId)}&selected_ad_ids=${encodeURIComponent(ad.ad_id)}`}
+        target="_blank"
+        rel="noreferrer"
+        style={{ fontSize: 11, fontWeight: 700, color: "#2b6fc4", textDecoration: "none", whiteSpace: "nowrap" }}
+      >
+        corrigir na Meta ↗
+      </a>
+    </div>
   );
 }
 

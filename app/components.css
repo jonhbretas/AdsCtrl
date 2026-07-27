@@ -499,6 +499,27 @@
   }
 }
 
+@media (prefers-color-scheme: dark) {
+  .ec-tabbar {
+    background: rgba(28, 28, 30, 0.92);
+  }
+  .ec-sheet__panel {
+    background: rgba(28, 28, 30, 0.92);
+  }
+  .ec-modal {
+    background: rgba(0, 0, 0, 0.55);
+  }
+  .ec-tmodal {
+    background: rgba(0, 0, 0, 0.55);
+  }
+  .ec-sheet {
+    background: rgba(0, 0, 0, 0.55);
+  }
+  .ec-login__card {
+    background: rgba(28, 28, 30, 0.86);
+  }
+}
+
 /* ------------------------------------------------------------------ menu --- */
 .ec-menu {
   position: relative;
@@ -2142,4 +2163,401 @@
 .ec-switch__frozen {
   font-size: 10px;
   color: var(--text-faint);
+}
+
+/* ==========================================================================
+   Alertas (sidebar) — desacoplado de inline styles
+   ========================================================================== */
+
+.ec-alert {
+  border-radius: var(--r-md);
+  padding: 10px 12px;
+}
+.ec-alert[data-tone="critical"] { background: var(--danger-50); }
+.ec-alert[data-tone="warning"]  { background: var(--warn-50); }
+.ec-alert[data-tone="info"]     { background: var(--brand-50); }
+
+.ec-alert__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 3px;
+}
+.ec-alert__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+.ec-alert__dot[data-tone="critical"] { background: var(--danger-600); }
+.ec-alert__dot[data-tone="warning"]  { background: var(--warn-700); }
+.ec-alert__dot[data-tone="info"]     { background: var(--brand-500); }
+
+.ec-alert__level {
+  font-size: 11px;
+  font-weight: 700;
+}
+.ec-alert__level[data-tone="critical"] { color: var(--danger-600); }
+.ec-alert__level[data-tone="warning"]  { color: var(--warn-700); }
+.ec-alert__level[data-tone="info"]     { color: var(--brand-500); }
+
+.ec-alert__client {
+  font-size: 13px;
+  font-weight: 600;
+}
+.ec-alert__client[data-tone="critical"] { color: var(--danger-600); }
+.ec-alert__client[data-tone="warning"]  { color: var(--warn-700); }
+.ec-alert__client[data-tone="info"]     { color: var(--brand-500); }
+
+.ec-alert__title {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+.ec-alert__detail {
+  font-size: 12px;
+  color: var(--text-faint);
+  margin-top: 1px;
+}
+.ec-alert__ack {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+.ec-alert__ack[data-tone="critical"] { color: var(--danger-600); }
+.ec-alert__ack[data-tone="warning"]  { color: var(--warn-700); }
+.ec-alert__ack[data-tone="info"]     { color: var(--brand-500); }
+.ec-alert__ack input {
+  accent-color: currentColor;
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+}
+
+/* Histórico de alertas */
+.ec-history {
+  border-radius: var(--r-md);
+  padding: 10px 12px;
+  opacity: 0.92;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+}
+.ec-history__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 3px;
+}
+.ec-history__badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 8px;
+}
+.ec-history__last {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 6px;
+}
+.ec-history__when {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.ec-history__reopen {
+  font-size: 11px;
+  color: var(--brand-500);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+/* ==========================================================================
+   Chip de grupo
+   ========================================================================== */
+.ec-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: var(--r-full);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease),
+    border-color var(--t-fast) var(--ease),
+    color var(--t-fast) var(--ease);
+}
+.ec-chip[data-active] {
+  border-color: currentColor;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  color: currentColor;
+}
+.ec-chip__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+/* ==========================================================================
+   Links operacionais (acesso rápido + saldo)
+   ========================================================================== */
+.ec-linkrow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  padding: 11px 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+.ec-linkrow__head {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.35px;
+  margin-right: 3px;
+}
+.ec-linkrow__item {
+  padding: 6px 9px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 650;
+  text-decoration: none;
+  transition: background var(--t-fast) var(--ease),
+    border-color var(--t-fast) var(--ease),
+    color var(--t-fast) var(--ease);
+}
+.ec-linkrow__item:hover {
+  border-color: var(--brand-200);
+  background: var(--brand-50);
+  color: var(--brand-500);
+}
+.ec-linkrow__item[data-accent] {
+  border-color: var(--brand-200);
+  background: var(--brand-50);
+  color: var(--brand-500);
+}
+.ec-linkrow__bal {
+  padding: 6px 9px;
+  border-radius: var(--r-sm);
+  font-size: 11px;
+  font-weight: 750;
+}
+.ec-linkrow__bal[data-tone="ok"] {
+  border: 1px solid var(--bal-ok-border);
+  background: var(--bal-ok-bg);
+  color: var(--bal-ok);
+}
+.ec-linkrow__bal[data-tone="warn"] {
+  border: 1px solid var(--bal-warn-border);
+  background: var(--bal-warn-bg);
+  color: var(--bal-warn);
+}
+.ec-linkrow__bal[data-tone="danger"] {
+  border: 1px solid var(--bal-danger-border);
+  background: var(--bal-danger-bg);
+  color: var(--bal-danger);
+}
+.ec-linkrow__action {
+  padding: 6px 9px;
+  border-radius: var(--r-sm);
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+  border: 1px dashed var(--brand-200);
+  background: var(--surface);
+  color: var(--brand-500);
+}
+
+/* ==========================================================================
+   Utilitários para tabela de contas (inline → CSS)
+   ========================================================================== */
+.ec-accname {
+  font-size: 14px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-strong);
+}
+.ec-accbadge {
+  font-size: 10px;
+  padding: 0 6px;
+  border-radius: 8px;
+}
+.ec-accbadge[data-platform="google"] {
+  background: var(--platform-google-bg);
+  color: var(--platform-google);
+}
+.ec-accbadge[data-platform="meta"] {
+  background: var(--platform-meta-bg);
+  color: var(--platform-meta);
+}
+.ec-accstatus {
+  font-size: 10px;
+  color: var(--danger-600);
+}
+
+.ec-accrow {
+  border-bottom: 1px solid var(--border);
+  opacity: 1;
+  transition: background var(--t-fast) var(--ease);
+}
+.ec-accrow[data-hidden] {
+  opacity: 0.55;
+}
+.ec-accrow:hover:not([data-hidden]) {
+  background: var(--surface-sunken);
+}
+.ec-accrow[data-open] {
+  background: var(--surface-sunken);
+}
+.ec-accrow__grid {
+  cursor: default;
+}
+.ec-accrow__grid[data-clickable] {
+  cursor: pointer;
+}
+.ec-accrow__grid[data-clickable]:hover {
+  background: var(--surface-sunken);
+}
+
+.ec-accavatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.ec-roas {
+  font-size: 10.5px;
+  color: var(--ok-600);
+}
+
+.ec-trend {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+}
+.ec-trend__pct {
+  font-size: 9.5px;
+  font-weight: 650;
+}
+.ec-trend__pct[data-tone="good"] { color: var(--ok-600); }
+.ec-trend__pct[data-tone="bad"]  { color: var(--danger-600); }
+.ec-trend__pct[data-tone="flat"] { color: var(--text-faint); }
+
+.ec-cellspend {
+  text-align: right;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.ec-cellspend[data-error] {
+  color: var(--warn-700);
+}
+
+.ec-cellresult {
+  text-align: right;
+}
+.ec-cellresult__num {
+  font-size: 14px;
+  font-weight: 600;
+}
+.ec-cellresult__num[data-empty] { color: var(--text-faint); }
+.ec-cellresult__num[data-full]  { color: var(--text-strong); }
+
+.ec-cellbal {
+  text-align: right;
+  line-height: 1.2;
+}
+.ec-cellbal__val {
+  font-size: 14px;
+}
+.ec-cellbal__val[data-tone="danger"] { color: var(--danger-600); font-weight: 700; }
+.ec-cellbal__val[data-tone="muted"]  { color: var(--text); font-weight: 400; font-size: 13px; }
+.ec-cellbal__val[data-tone="void"]   { color: var(--text-faint); }
+.ec-cellbal__label {
+  font-size: 9.5px;
+}
+.ec-cellbal__label[data-tone="danger"] { color: var(--danger-600); }
+.ec-cellbal__label[data-tone="muted"]  { color: var(--text-faint); }
+.ec-cellbal__label[data-tone="void"]   { color: var(--text-faint); }
+
+.ec-gsection {
+  border-top: 1px solid var(--border);
+  padding: 22px 0 28px;
+}
+.ec-gsection__title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--brand-500);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+.ec-gsection__empty {
+  padding: 14px 16px;
+  border-radius: var(--r-md);
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.ec-tabgroup {
+  display: flex;
+  gap: 4px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 3px;
+}
+.ec-tabgroup--mb {
+  margin-bottom: var(--sp-3);
+}
+
+.ec-ackwrap {
+  display: grid;
+  gap: 8px;
+  max-height: 74vh;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.ec-history__client {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.ec-history__title {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.ec-googlehead {
+  color: var(--brand-500);
+}
+
+.ec-glinked[data-platform="google"] {
+  background: var(--platform-google-bg);
+  color: var(--platform-google);
 }

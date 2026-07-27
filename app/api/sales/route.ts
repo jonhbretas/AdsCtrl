@@ -120,6 +120,24 @@ export async function GET(req: Request) {
     }
     const todasContas = [...new Set((vinculos || []).map((v: any) => v.account_id))];
 
+    // O grupo mora na conta; o do cliente é o da primeira conta vinculada que
+    // tiver um. Vem junto para o nome do cliente nunca aparecer sem ele.
+    const [{ data: contasComGrupo }, { data: grupos }] = todasContas.length
+      ? await Promise.all([
+          sb.from("ad_accounts").select("account_id, group_id").in("account_id", todasContas),
+          sb.from("client_groups").select("id, name, color"),
+        ])
+      : [{ data: [] as any[] }, { data: [] as any[] }];
+    const grupoPorConta = new Map((contasComGrupo || []).map((a: any) => [a.account_id, a.group_id]));
+    const grupoPorId = new Map((grupos || []).map((g: any) => [g.id, { name: g.name, color: g.color }]));
+    const grupoDoCliente = (contas: string[]) => {
+      for (const conta of contas) {
+        const groupId = grupoPorConta.get(conta);
+        if (groupId && grupoPorId.has(groupId)) return grupoPorId.get(groupId);
+      }
+      return null;
+    };
+
     // Um SELECT para todas as contas e todo o intervalo; o agrupamento por mês
     // é feito aqui. Puxar por cliente x mês seriam dezenas de idas ao banco.
     const { data: diarios } = todasContas.length
@@ -184,6 +202,7 @@ export async function GET(req: Request) {
         name: cliente.name,
         currency: cliente.currency || "BRL",
         accounts: contas.length,
+        group: grupoDoCliente(contas),
         months: meses,
       };
     });
