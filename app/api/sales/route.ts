@@ -160,15 +160,20 @@ export async function GET(req: Request) {
         }
         const forma = monthShape(mes);
         const venda = vendaPorChave.get(`${cliente.id}::${mes}`);
+        // Dias com dado x dias que já passaram. Menos que isso significa
+        // histórico furado, e o ROAS do mês não é comparável.
+        //
+        // O mês em curso ganha um dia de folga: o de hoje só entra depois da
+        // coleta, então cobrar 27 de 27 marcaria "parcial" no mês vigente todo
+        // santo dia — alarme que não quer dizer nada.
+        const exigidos = forma.emCurso ? Math.max(1, forma.decorridos - 1) : forma.decorridos;
         return {
           month: mes,
           spend,
-          // Dias com dado x dias que já passaram. Menos que isso significa
-          // histórico furado, e o ROAS do mês não é comparável.
           daysWithData: dias.size,
           daysElapsed: forma.decorridos,
           inProgress: forma.emCurso,
-          partial: dias.size > 0 && dias.size < forma.decorridos,
+          partial: dias.size > 0 && dias.size < exigidos,
           revenue: venda?.revenue != null ? Number(venda.revenue) : null,
           orders: venda?.orders != null ? Number(venda.orders) : null,
           note: venda?.note ?? null,
@@ -201,7 +206,18 @@ export async function PUT(req: Request) {
     // entre "não vendi nada" e "não informei ainda".
     const parseNumber = (raw: unknown, nome: string, inteiro = false): number | null => {
       if (raw === null || raw === undefined || String(raw).trim() === "") return null;
-      const limpo = String(raw).trim().replace(/\s/g, "").replace(/\./g, "").replace(",", ".");
+      // Número já é número. Passar 4100.9 pelo tratamento de texto pt-BR
+      // apagaria o ponto e gravaria 41009 — a tela manda número, não texto.
+      if (typeof raw === "number") {
+        if (!Number.isFinite(raw)) throw new InputError(`${nome} não é um número.`);
+        if (raw < 0) throw new InputError(`${nome} não pode ser negativo.`);
+        return inteiro ? Math.round(raw) : Math.round(raw * 100) / 100;
+      }
+      const texto = String(raw).trim().replace(/\s/g, "");
+      // Só é separador de milhar quando o ponto separa grupos de três
+      // ("128.400,50", "1.200"). Em "4100.9" o ponto é decimal.
+      const ehMilhar = texto.includes(",") || /^\d{1,3}(\.\d{3})+$/.test(texto);
+      const limpo = ehMilhar ? texto.replace(/\./g, "").replace(",", ".") : texto;
       const valor = Number(limpo);
       if (!Number.isFinite(valor)) throw new InputError(`${nome} não é um número.`);
       if (valor < 0) throw new InputError(`${nome} não pode ser negativo.`);
