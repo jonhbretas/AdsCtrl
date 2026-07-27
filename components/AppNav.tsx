@@ -77,7 +77,7 @@ export default function AppNav() {
 
   return (
     <>
-    <nav className="ec-nav ec-glass" aria-label="Navegação principal">
+    <nav className="ec-nav" aria-label="Navegação principal">
       <a href="/today" className="ec-nav__brand" aria-label="Assertivus Dash — início">
         <BrandMark size={28} />
         <span>Assertivus Dash</span>

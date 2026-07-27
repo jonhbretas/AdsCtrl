@@ -1,12 +1,15 @@
 /* ==========================================================================
-   Componentes do painel (identidade Ectolab).
-
-   Fica em CSS, e não em objeto inline, exatamente pelo que faltava antes:
-   :hover, :active, :disabled, :focus-visible e media query. Cor sempre por
-   token — nenhum literal hexadecimal neste arquivo.
+   Componentes do painel — Apple Design System.
+   Segue as especificações do DESIGN.md: botões pill com Action Blue,
+   navegação black puro, superfícies brancas com hairline, tipografia SF Pro
+   (Inter como substituto), e nenhum ornamento decorativo.
    ========================================================================== */
 
-/* ------------------------------------------------------------------ botão --- */
+/* ------------------------------------------------------------------ botão ---
+   Apple usa dois grammars: pill azul (CTAs) e rect compacto (utilitário).
+   Primary = capsule azul preenchida. Secondary = ghost com borda azul.
+   Ghost = sem borda. Danger = vermelho minimalista.
+   Active state = transform: scale(0.95) — micro-interação Apple. */
 .ec-btn {
   display: inline-flex;
   align-items: center;
@@ -33,59 +36,61 @@
   font-size: 12px;
 }
 .ec-btn:active:not(:disabled) {
-  transform: translateY(1px);
+  transform: scale(0.95);
 }
 .ec-btn:disabled {
   cursor: default;
   opacity: 0.55;
 }
 
-/* Primário: azul escuro da marca. Branco sobre ele dá 6,72:1 — o azul claro
-   daria 3,46:1 e reprovaria WCAG AA, por isso ele não preenche botão. */
+/* Primary: Action Blue pill — a assinatura Apple. */
 .ec-btn[data-variant="primary"] {
-  background: var(--brand-700);
+  background: var(--brand-500);
   color: #fff;
+  border-radius: var(--r-full);
 }
 .ec-btn[data-variant="primary"]:hover:not(:disabled) {
   background: var(--brand-800);
 }
 
+/* Secondary: ghost pill com borda Action Blue. */
 .ec-btn[data-variant="secondary"] {
-  background: var(--surface);
-  border-color: var(--border-strong);
-  color: var(--text);
+  background: transparent;
+  border-color: var(--brand-500);
+  color: var(--brand-500);
+  border-radius: var(--r-full);
 }
 .ec-btn[data-variant="secondary"]:hover:not(:disabled) {
-  border-color: var(--brand-500);
-  color: var(--brand-700);
   background: var(--brand-50);
 }
 
+/* Ghost: sem borda, texto muted. */
 .ec-btn[data-variant="ghost"] {
   background: transparent;
   color: var(--text-muted);
 }
 .ec-btn[data-variant="ghost"]:hover:not(:disabled) {
   background: var(--brand-50);
-  color: var(--brand-700);
+  color: var(--brand-500);
 }
 
+/* Danger: ghost pill vermelho. */
 .ec-btn[data-variant="danger"] {
-  background: var(--surface);
-  border-color: var(--danger-50);
+  background: transparent;
+  border-color: var(--danger-600);
   color: var(--danger-600);
+  border-radius: var(--r-full);
 }
 .ec-btn[data-variant="danger"]:hover:not(:disabled) {
   background: var(--danger-50);
-  border-color: var(--danger-600);
 }
 
-/* ------------------------------------------------------------------- card --- */
+/* ------------------------------------------------------------------- card ---
+   Apple não usa sombra em cards. Apenas hairline sutil. */
 .ec-card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  box-shadow: var(--shadow-sm);
+  border-radius: var(--r-lg);
 }
 .ec-card--padded {
   padding: var(--sp-4);
@@ -94,19 +99,20 @@
   border-left: 3px solid var(--brand-500);
 }
 .ec-card[data-tone="accent"] {
-  border-left: 3px solid var(--accent-500);
+  border-left: 3px solid var(--brand-500);
 }
 .ec-card[data-tone="ok"] {
   border-left: 3px solid var(--ok-600);
 }
 .ec-card[data-tone="warn"] {
-  border-left: 3px solid var(--accent-500);
+  border-left: 3px solid var(--warn-700);
 }
 .ec-card[data-tone="danger"] {
   border-left: 3px solid var(--danger-600);
 }
 
-/* ------------------------------------------------------------------ badge --- */
+/* ------------------------------------------------------------------ badge ---
+   Apple badge: pill sutil com cor de fundo brand. */
 .ec-badge {
   display: inline-flex;
   align-items: center;
@@ -125,14 +131,12 @@
 .ec-badge[data-tone="brand"] {
   background: var(--brand-50);
   border-color: var(--brand-200);
-  color: var(--brand-700);
+  color: var(--brand-500);
 }
-/* Laranja como preenchimento com texto escuro: 10,55:1. Ao contrário do texto
-   laranja sobre branco, que não passaria de 1,72:1. */
 .ec-badge[data-tone="accent"] {
-  background: var(--accent-300);
-  border-color: var(--accent-600);
-  color: var(--brand-900);
+  background: var(--brand-50);
+  border-color: var(--brand-200);
+  color: var(--brand-500);
 }
 .ec-badge[data-tone="ok"] {
   background: var(--ok-50);
@@ -141,7 +145,7 @@
 }
 .ec-badge[data-tone="warn"] {
   background: var(--warn-50);
-  border-color: var(--accent-600);
+  border-color: var(--warn-700);
   color: var(--warn-700);
 }
 .ec-badge[data-tone="danger"] {
@@ -163,14 +167,16 @@
   flex: 1 1 320px;
 }
 .ec-pagehead h1 {
-  font-size: 26px;
-  font-weight: 800;
-  line-height: 1.15;
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.14;
+  letter-spacing: -0.01em;
 }
 .ec-pagehead p {
   margin: 4px 0 0;
-  font-size: 13.5px;
+  font-size: 14px;
   color: var(--text-muted);
+  line-height: 1.43;
 }
 .ec-pagehead__meta {
   display: flex;
@@ -231,7 +237,7 @@
 }
 .ec-notice[data-tone="warn"] {
   background: var(--warn-50);
-  border-color: var(--accent-600);
+  border-color: var(--warn-700);
   color: var(--warn-700);
 }
 .ec-notice[data-tone="danger"] {
@@ -242,7 +248,7 @@
 .ec-notice[data-tone="brand"] {
   background: var(--brand-50);
   border-color: var(--brand-200);
-  color: var(--brand-700);
+  color: var(--brand-500);
 }
 .ec-notice__x {
   margin-left: auto;
@@ -266,7 +272,7 @@
 .ec-field__label {
   font-family: var(--font-display);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.02em;
   text-transform: uppercase;
   color: var(--text-muted);
@@ -283,7 +289,7 @@
   background: var(--surface);
   color: var(--text-strong);
   font-family: var(--font-text);
-  font-size: 13px;
+  font-size: 14px;
   transition: border-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
 }
 .ec-input::placeholder {
@@ -298,7 +304,8 @@
   box-shadow: 0 0 0 3px var(--brand-100);
 }
 
-/* ------------------------------------------------------ controle segmentado --- */
+/* ------------------------------------------------------ controle segmentado ---
+   Apple segmented control: parchment background, active = white raised. */
 .ec-seg {
   display: inline-flex;
   padding: 3px;
@@ -320,15 +327,16 @@
   transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
 }
 .ec-seg > button:hover {
-  color: var(--brand-700);
+  color: var(--text-strong);
 }
 .ec-seg > button[data-active] {
   background: var(--surface);
-  color: var(--brand-700);
-  box-shadow: var(--shadow-sm);
+  color: var(--text-strong);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
-/* ------------------------------------------------------- navegação do app --- */
+/* ------------------------------------------------------- navegação do app ---
+   Apple global nav: pure black, ultra-fino (44px), SF Pro Text 12px. */
 .ec-nav {
   position: sticky;
   top: 0;
@@ -337,17 +345,21 @@
   align-items: center;
   gap: var(--sp-4);
   padding: 0 var(--sp-5);
-  height: 58px;
+  height: 44px;
+  background: #000;
+  border-bottom: none;
+  backdrop-filter: none;
 }
 .ec-nav__brand {
   display: flex;
   align-items: center;
   gap: 9px;
-  color: var(--text-strong);
+  color: rgba(255, 255, 255, 0.92);
   text-decoration: none;
   font-family: var(--font-display);
-  font-weight: 800;
-  letter-spacing: -0.02em;
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: -0.01em;
   flex-shrink: 0;
 }
 .ec-nav__links {
@@ -365,43 +377,39 @@
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 7px 11px;
+  padding: 5px 10px;
   border-radius: var(--r-sm);
   text-decoration: none;
-  font-family: var(--font-display);
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-muted);
+  font-family: var(--font-text);
+  font-size: 12px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.6);
   white-space: nowrap;
-  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+  transition: color var(--t-fast) var(--ease);
 }
 .ec-nav__link:hover {
-  background: var(--brand-50);
-  color: var(--brand-700);
+  color: rgba(255, 255, 255, 0.92);
 }
 .ec-nav__link[data-active] {
-  background: var(--brand-50);
-  color: var(--brand-700);
+  color: #fff;
 }
-/* A faixa embaixo do item ativo é o único indicador que não depende de cor —
-   quem não distingue azul de cinza ainda vê onde está. */
+/* Indicador de ativo: dot sutil abaixo do label. */
 .ec-nav__link[data-active]::after {
   content: "";
   position: absolute;
   bottom: -1px;
-  left: 11px;
-  right: 11px;
-  height: 2px;
-  border-radius: 2px 2px 0 0;
-  background: var(--brand-500);
+  left: 10px;
+  right: 10px;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.7);
 }
 .ec-nav__link {
   position: relative;
 }
 .ec-nav__group {
   width: 1px;
-  height: 20px;
-  background: var(--border);
+  height: 16px;
+  background: rgba(255, 255, 255, 0.2);
   flex-shrink: 0;
   margin: 0 4px;
 }
@@ -412,30 +420,31 @@
   gap: var(--sp-3);
   flex-shrink: 0;
 }
+/* Ghost button na nav preta fica branco. */
+.ec-nav__tail .ec-btn[data-variant="ghost"] {
+  color: rgba(255, 255, 255, 0.6);
+}
+.ec-nav__tail .ec-btn[data-variant="ghost"]:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+}
 
-/* No celular os sete itens do topo saíam como ícones de 29x32px sem rótulo:
-   ninguém adivinha o que "⌁" faz, e 29px erra o toque. Eles saem daqui e
-   voltam na barra inferior, com nome e 56px de altura. */
 @media (max-width: 720px) {
   .ec-nav {
     padding: 0 var(--sp-3);
     gap: var(--sp-2);
-  }
-  .ec-nav {
-    height: 50px;
+    height: 44px;
   }
   .ec-nav__links {
     display: none;
   }
-  /* "Sair" reaparece na folha de "Mais", ao alcance do polegar. */
   .ec-nav__tail {
     display: none;
   }
 }
 
-/* --------------------------------------------- barra inferior (celular) --- */
-/* Quatro destinos alcançáveis com o polegar. O quinto item é "Mais", que
-   abre a folha com o resto — nada foi removido do app. */
+/* --------------------------------------------- barra inferior (celular) ---
+   Apple-style tab bar: fundo branco com blur, ícone + label. */
 .ec-tabbar {
   display: none;
 }
@@ -445,21 +454,21 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
+  gap: 2px;
   min-height: 56px;
   border: none;
   background: transparent;
   text-decoration: none;
-  font-family: var(--font-display);
-  font-size: 11px;
-  font-weight: 600;
+  font-family: var(--font-text);
+  font-size: 10px;
+  font-weight: 400;
   color: var(--text-muted);
   cursor: pointer;
+  letter-spacing: -0.01em;
 }
 .ec-tabbar__item[data-active] {
-  color: var(--brand-700);
+  color: var(--brand-500);
 }
-/* Faixa no topo do item ativo: indicador que não depende de cor. */
 .ec-tabbar__item[data-active]::before {
   content: "";
   position: absolute;
@@ -483,8 +492,9 @@
     inset: auto 0 0 0;
     z-index: 60;
     border-top: 1px solid var(--border);
-    background: var(--surface);
-    box-shadow: 0 -2px 12px rgb(15 42 54 / 8%);
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 }
@@ -506,9 +516,8 @@
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--r-md);
-  box-shadow: var(--shadow-md);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
-/* Última linha de tabela: abre para cima em vez de ser recortado. */
 .ec-menu__list[data-drop="up"] {
   top: auto;
   bottom: calc(100% + 6px);
@@ -530,7 +539,7 @@
 }
 .ec-menu__item:hover {
   background: var(--brand-50);
-  color: var(--brand-700);
+  color: var(--brand-500);
 }
 .ec-menu__item small {
   font-family: var(--font-text);
@@ -538,7 +547,6 @@
   font-weight: 400;
   color: var(--text-muted);
 }
-/* Encostado na direita, o menu de um botão à esquerda da tela sairia dela. */
 @media (max-width: 720px) {
   .ec-menu {
     display: flex;
@@ -572,9 +580,6 @@
 }
 
 /* ------------------------------------------------------------- vendas --- */
-/* Lançamento do mês: nome, dois campos e o retorno. Em telas estreitas o
-   nome ocupa a linha inteira e os campos vão abaixo, em vez de encolherem
-   até o número não caber. */
 .ec-salesrow {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) 150px 110px auto auto;
@@ -601,7 +606,6 @@
   width: 100%;
   border-collapse: collapse;
   font-size: 12.5px;
-  /* Uma coluna por mês, e cada uma precisa caber "R$ 12.345,67" sem quebrar. */
   min-width: 760px;
 }
 .ec-salestable th,
@@ -615,7 +619,7 @@
   border-top: none;
   font-family: var(--font-display);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.03em;
   text-transform: uppercase;
   color: var(--text-muted);
@@ -663,8 +667,6 @@
   font-weight: 650;
   font-variant-numeric: tabular-nums;
 }
-/* Sem borda até o toque: uma grade de 24 caixas desenhadas é ilegível. A
-   borda aparece no hover e no foco, que é quando ela informa. */
 .ec-salescell__input:hover {
   border-color: var(--border-strong);
 }
@@ -678,8 +680,6 @@
   color: var(--text-faint);
   font-weight: 400;
 }
-/* Quantidade fica menor que o valor e sem negrito: as duas moram na mesma
-   célula, e sem hierarquia a coluna vira uma pilha de números iguais. */
 .ec-salescell__input[data-kind="qty"] {
   min-width: 56px;
   max-width: 72px;
@@ -697,7 +697,6 @@
   color: var(--text-faint);
   min-height: 14px;
 }
-/* Leituras por unidade vendida (ticket, custo por venda, quantidade). */
 .ec-salescell__unit {
   font-size: 10.5px;
   color: var(--text-faint);
@@ -715,7 +714,8 @@
   color: var(--danger-600);
 }
 
-/* ----------------------------------------------------------------- modal --- */
+/* ----------------------------------------------------------------- modal ---
+   Apple-style: overlay escuro sutil, painel branco com border-radius 18px. */
 .ec-modal {
   position: fixed;
   inset: 0;
@@ -724,7 +724,7 @@
   align-items: center;
   justify-content: center;
   padding: var(--sp-4);
-  background: rgb(15 42 54 / 45%);
+  background: rgba(0, 0, 0, 0.32);
 }
 .ec-modal__panel {
   width: min(620px, 100%);
@@ -733,7 +733,7 @@
   flex-direction: column;
   background: var(--surface);
   border-radius: var(--r-lg);
-  box-shadow: var(--shadow-md);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
   overflow: hidden;
 }
 .ec-modal__head {
@@ -748,6 +748,7 @@
   font-family: var(--font-display);
   font-size: 14.5px;
   color: var(--text-strong);
+  font-weight: 600;
 }
 .ec-modal__head small {
   display: block;
@@ -773,7 +774,6 @@
   border-top: 1px solid var(--border);
   background: var(--surface-sunken);
 }
-/* Empilhado, os três botões do rodapé não cabem lado a lado. */
 @media (max-width: 560px) {
   .ec-modal {
     padding: 0;
@@ -798,20 +798,21 @@
   z-index: 70;
   display: flex;
   align-items: flex-end;
-  background: rgb(15 42 54 / 42%);
+  background: rgba(0, 0, 0, 0.32);
   border: none;
   padding: 0;
   width: 100%;
 }
 .ec-sheet__panel {
   width: 100%;
-  background: var(--surface);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
   border-radius: var(--r-lg) var(--r-lg) 0 0;
   padding: var(--sp-3) var(--sp-3) calc(var(--sp-4) + env(safe-area-inset-bottom, 0px));
-  box-shadow: var(--shadow-md);
 }
 .ec-sheet__grip {
-  width: 40px;
+  width: 36px;
   height: 4px;
   border-radius: var(--r-full);
   background: var(--border-strong);
@@ -837,7 +838,7 @@
 }
 .ec-sheet__item[data-active] {
   background: var(--brand-50);
-  color: var(--brand-700);
+  color: var(--brand-500);
 }
 .ec-sheet__item small {
   display: block;
@@ -853,8 +854,6 @@
 }
 
 /* ------------------------------------------------- alvo de toque no celular --- */
-/* WCAG 2.5.5 e o guia da Apple pedem 44px. Vale só no celular: com mouse o
-   alvo menor é preciso e devolve altura de tela, que ali é escassa. */
 @media (max-width: 720px) {
   .ec-btn[data-size="sm"],
   .ec-btn[data-size="md"] {
@@ -870,38 +869,27 @@
   .ec-tab {
     min-height: 44px;
   }
-  /* Quatro ações do cabeçalho em coluna consumiam ~200px antes do primeiro
-     número. Duas por linha, e o primário fica sozinho na última. */
   .ec-pagehead__actions > * {
     flex: 1 1 calc(50% - var(--sp-2));
   }
-  /* O alvo é o rótulo inteiro, não a caixa de 15px dentro dele. */
   .ec-ack {
     min-height: 44px;
   }
-  /* Botão só de ícone ("✕") ficava com 40px de largura. */
   .ec-btn[data-size="sm"],
   .ec-btn[data-size="md"] {
     min-width: 44px;
   }
-  /* Ordenar coluna era uma linha de texto de 15px de altura. Só a altura:
-     alargar o cabeçalho alargaria a tabela, que já rola de lado. */
   .ec-sortbtn {
     min-height: 44px;
   }
   .ec-nav__brand {
     min-height: 44px;
   }
-  /* Telas ainda em estilo inline (Criativos, Raio-X) entram na regra por
-     esta classe, sem precisar reescrever o componente inteiro agora. */
   .ec-seg-item,
   .ec-touch {
     min-height: 44px;
     min-width: 44px;
   }
-  /* Configurações é um formulário de 330 controles em estilo inline: um por
-     um seria reescrever a tela. A zona aplica a regra a todos de uma vez —
-     `min-height` não é declarado inline em nenhum deles, então pega. */
   .ec-touchzone input:not([type="checkbox"]):not([type="radio"]),
   .ec-touchzone select,
   .ec-touchzone textarea,
@@ -909,7 +897,6 @@
     min-height: 44px;
     min-width: 44px;
   }
-  /* Caixa de marcar: o alvo é o rótulo em volta dela. */
   .ec-touchzone label {
     min-height: 44px;
   }
@@ -923,13 +910,10 @@
 }
 @media (max-width: 720px) {
   .ec-page {
-    /* A barra inferior é fixa: sem esta folga ela cobre a última linha da
-       tabela, e quem rola até o fim não vê que chegou ao fim. */
     padding: var(--sp-4) var(--sp-3) calc(56px + var(--sp-6) + env(safe-area-inset-bottom, 0px));
   }
 }
 
-/* Grade de colunas que colapsa sozinha, usada pelo quadro e pelos resumos. */
 .ec-cols {
   display: grid;
   gap: var(--sp-3);
@@ -938,7 +922,7 @@
 }
 
 /* ==========================================================================
-   Quadro de tarefas — primeira tela convertida ao design system.
+   Quadro de tarefas
    ========================================================================== */
 
 .ec-taskform {
@@ -962,7 +946,7 @@
   flex-shrink: 0;
 }
 .ec-colhead__dot[data-col="todo"] {
-  background: var(--accent-500);
+  background: var(--brand-500);
 }
 .ec-colhead__dot[data-col="doing"] {
   background: var(--brand-500);
@@ -973,7 +957,7 @@
 .ec-colhead__label {
   font-family: var(--font-display);
   font-size: 12.5px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-strong);
 }
 .ec-colhead__hint {
@@ -984,7 +968,7 @@
   margin-left: auto;
   font-family: var(--font-display);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-muted);
   min-width: 18px;
   text-align: right;
@@ -993,11 +977,10 @@
 .ec-task {
   padding: 10px 11px;
   box-shadow: none;
-  transition: border-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
+  transition: border-color var(--t-fast) var(--ease);
 }
 .ec-task:hover {
   border-color: var(--border-strong);
-  box-shadow: var(--shadow-sm);
 }
 .ec-task[data-done] {
   background: var(--surface-sunken);
@@ -1006,7 +989,21 @@
   text-decoration: line-through;
   color: var(--text-muted);
 }
-/* Só a opacidade muda enquanto salva: sem "pular" e sem trocar o layout. */
+.ec-task__open {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ec-task__open:hover {
+  color: var(--brand-500);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
 .ec-task[data-busy] {
   opacity: 0.55;
 }
@@ -1033,7 +1030,6 @@
   font-size: 11.5px;
   color: var(--text-muted);
 }
-/* Prazo: a cor reforça, mas o texto ("atrasada", "hoje") já diz sozinho. */
 .ec-task__due[data-tone="late"] {
   color: var(--danger-600);
   font-weight: 700;
@@ -1043,10 +1039,10 @@
   font-weight: 700;
 }
 .ec-task__due[data-tone="soon"] {
-  color: var(--brand-600);
+  color: var(--brand-500);
 }
 .ec-task__link {
-  color: var(--brand-600);
+  color: var(--brand-500);
   text-decoration: none;
   font-weight: 600;
 }
@@ -1066,8 +1062,6 @@
   margin-top: var(--sp-2);
   align-items: center;
 }
-/* Nome do cliente como link. Sublinhado só no hover: dentro da linha de meta,
-   três itens sublinhados de partida virariam ruído. */
 .ec-task__client {
   color: var(--text-strong);
   text-decoration: none;
@@ -1075,16 +1069,13 @@
   border-bottom: 1px dotted var(--border-strong);
 }
 .ec-task__client:hover {
-  color: var(--brand-600);
+  color: var(--brand-500);
   border-bottom-color: currentColor;
 }
 .ec-task__project {
-  color: var(--brand-600);
+  color: var(--brand-500);
   font-weight: 600;
 }
-/* O caminho até o problema. Tem cara de botão porque é a ação que a tarefa
-   automática existe para provocar — mas continua sendo um link, para abrir em
-   nova aba quem quiser. */
 .ec-task__resolve {
   display: inline-flex;
   align-items: center;
@@ -1092,19 +1083,17 @@
   margin-top: var(--sp-2);
   padding: 5px 10px;
   border: 1px solid var(--brand-200);
-  border-radius: var(--r-sm);
+  border-radius: var(--r-full);
   background: var(--brand-50);
-  color: var(--brand-700);
+  color: var(--brand-500);
   font-size: 11.5px;
-  font-weight: 700;
+  font-weight: 600;
   text-decoration: none;
 }
 .ec-task__resolve:hover {
   border-color: var(--brand-500);
   background: var(--surface);
 }
-/* Seletor de projeto dentro do cartão: pequeno de propósito, é ajuste e não
-   ação principal. */
 .ec-task__pick {
   height: 26px;
   max-width: 118px;
@@ -1112,8 +1101,6 @@
   font-size: 11px;
 }
 
-/* Faixa de projetos, acima do quadro. Uma linha por compromisso: nome, quem é,
-   quanto falta e o prazo — editável no próprio lugar em que é lido. */
 .ec-project {
   display: flex;
   gap: var(--sp-2);
@@ -1126,7 +1113,6 @@
 }
 .ec-project[data-selected] {
   border-color: var(--brand-500);
-  box-shadow: var(--shadow-sm);
 }
 .ec-project[data-done] {
   background: var(--surface-sunken);
@@ -1146,7 +1132,7 @@
   cursor: pointer;
 }
 .ec-project__name:hover {
-  color: var(--brand-600);
+  color: var(--brand-500);
 }
 .ec-project[data-done] .ec-project__name {
   text-decoration: line-through;
@@ -1168,12 +1154,208 @@
   color: var(--text-muted);
 }
 
+.ec-task__counts {
+  display: inline-flex;
+  gap: var(--sp-2);
+  font-size: 10.5px;
+  font-weight: 650;
+  color: var(--text-muted);
+}
+.ec-task__counts [data-complete] {
+  color: var(--ok-600);
+}
+
+/* Cartão aberto (detalhe da tarefa). */
+.ec-tmodal {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: var(--sp-3);
+  background: rgba(0, 0, 0, 0.32);
+}
+.ec-tmodal__panel {
+  width: min(640px, 100%);
+  max-height: 92vh;
+  overflow-y: auto;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+  padding: var(--sp-4);
+  display: grid;
+  gap: var(--sp-3);
+}
+.ec-tmodal__close {
+  border: 0;
+  background: none;
+  font-size: 15px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: var(--r-sm);
+}
+.ec-tmodal__close:hover {
+  background: var(--surface-sunken);
+  color: var(--text-strong);
+}
+.ec-tmodal__title {
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: none;
+  padding: 4px 6px;
+  margin-left: -6px;
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.ec-tmodal__title:hover {
+  border-color: var(--border);
+}
+.ec-tmodal__title:focus {
+  border-color: var(--brand-500);
+  outline: none;
+  background: var(--surface);
+}
+.ec-tmodal__label {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+.ec-tmodal__fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+}
+.ec-tmodal__fields > * {
+  flex: 1 1 150px;
+}
+
+/* Lista de verificação */
+.ec-check {
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  padding: 10px 12px;
+  display: grid;
+  gap: 8px;
+}
+.ec-check__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.ec-check__name {
+  border: 0;
+  background: none;
+  padding: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.ec-check__count {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.ec-check__bar {
+  height: 5px;
+  border-radius: 4px;
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+.ec-check__bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--brand-500);
+  transition: width 0.2s ease;
+}
+.ec-check[data-complete] .ec-check__bar > span {
+  background: var(--ok-600);
+}
+.ec-check__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text-strong);
+}
+.ec-check__item input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--brand-500);
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.ec-check__item [data-text] {
+  flex: 1;
+  min-width: 0;
+}
+.ec-check__item[data-done] [data-text] {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+.ec-check__del {
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 5px;
+  opacity: 0;
+}
+.ec-check__item:hover .ec-check__del,
+.ec-check__del:focus-visible {
+  opacity: 1;
+}
+.ec-check__del:hover {
+  color: var(--danger-600);
+  background: var(--surface-sunken);
+}
+
+/* Conversa */
+.ec-comment {
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  padding: 8px 11px;
+}
+.ec-comment__when {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.ec-comment__body {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-strong);
+  white-space: pre-wrap;
+}
+.ec-comment__edit {
+  border: 0;
+  background: none;
+  padding: 0;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--brand-500);
+  cursor: pointer;
+}
+
 /* ==========================================================================
    Visão geral (Clientes)
    ========================================================================== */
 
-/* Barra de filtros: um plano só, alinhado, com respiro entre grupos. Antes
-   eram oito controles soltos com o mesmo peso visual. */
 .ec-toolbar {
   display: flex;
   gap: var(--sp-2);
@@ -1181,10 +1363,6 @@
   flex-wrap: wrap;
   margin-bottom: var(--sp-3);
 }
-/* No celular a régua de filtros empilhava treze controles antes do primeiro
-   número — uma tela inteira de rolagem para chegar ao dado. Ela passa a
-   abrir por toque; o botão diz o período em vigor e quantos filtros estão
-   fora do padrão, para não esconder decisão. No computador nada muda. */
 .ec-filters__toggle {
   display: none;
 }
@@ -1199,7 +1377,6 @@
   .ec-filters[data-open] {
     display: block;
   }
-  /* Empilhado, controle pela metade não se lê: cada um ocupa a linha. */
   .ec-filters .ec-toolbar > * {
     flex: 1 1 100%;
     min-width: 0;
@@ -1250,14 +1427,11 @@
   margin-bottom: var(--sp-5);
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
 }
-/* Um indicador por linha empurrava os cinco para 600px de rolagem. Dois por
-   linha ainda cabem legíveis em 390px e cortam isso pela metade. */
 @media (max-width: 720px) {
   .ec-kpis {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--sp-2);
   }
-  /* Em meia largura, 25px quebra "R$ 15.048,23" em duas linhas. */
   .ec-kpis .ec-kpi {
     padding: 12px;
   }
@@ -1266,8 +1440,6 @@
   }
 }
 
-/* Alertas + tabela. A coluna lateral só existe quando há largura para ela;
-   abaixo de 1080px os alertas vão para cima, inteiros. */
 .ec-split {
   display: grid;
   gap: var(--sp-5);
@@ -1276,8 +1448,8 @@
 }
 .ec-split__side {
   position: sticky;
-  top: 76px;
-  scroll-margin-top: 76px;
+  top: 62px;
+  scroll-margin-top: 62px;
   min-width: 0;
 }
 @media (max-width: 1080px) {
@@ -1290,25 +1462,25 @@
   }
 }
 
-/* Cartão de indicador. Superfície rebaixada em vez de card com sombra: são
-   quatro ou cinco na mesma faixa, e sombra repetida vira ruído. */
+/* Apple-style KPI card: superfície parchment, sem sombra, typography SF Pro. */
 .ec-kpi {
   background: var(--surface-sunken);
   border: 1px solid var(--border);
-  border-radius: var(--r-md);
+  border-radius: var(--r-lg);
   padding: 14px 16px;
   min-width: 0;
 }
 .ec-kpi__label {
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--text-muted);
   line-height: 1.3;
+  font-weight: 400;
 }
 .ec-kpi__value {
   font-family: var(--font-display);
   font-size: 25px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
+  font-weight: 600;
+  letter-spacing: -0.01em;
   margin-top: 3px;
   color: var(--text-strong);
   font-variant-numeric: tabular-nums;
@@ -1321,10 +1493,10 @@
 .ec-kpi__delta {
   font-family: var(--font-display);
   font-size: 11.5px;
-  font-weight: 700;
+  font-weight: 600;
 }
 .ec-kpi__delta > span {
-  font-weight: 500;
+  font-weight: 400;
   color: var(--text-faint);
 }
 .ec-kpi__delta[data-tone="good"] {
@@ -1351,16 +1523,16 @@
   transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
 }
 .ec-tab:hover {
-  color: var(--brand-700);
+  color: var(--text-strong);
 }
 .ec-tab[data-active] {
   background: var(--surface);
-  color: var(--brand-700);
-  box-shadow: var(--shadow-sm);
+  color: var(--text-strong);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 /* ==========================================================================
-   Tabelas em grade (alertas, listas densas)
+   Tabelas em grade
    ========================================================================== */
 
 .ec-tablebar {
@@ -1389,7 +1561,7 @@
   color: var(--text-muted);
   font-family: var(--font-display);
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -1405,15 +1577,13 @@
 .ec-row:hover {
   background: var(--brand-50);
 }
-/* Crítico ganha uma faixa à esquerda, não um fundo colorido: fundo tingido em
-   linha de tabela atrapalha a leitura do texto. */
 .ec-row[data-urgent] {
   box-shadow: inset 3px 0 0 var(--danger-600);
 }
 .ec-row__strong {
   font-family: var(--font-display);
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-strong);
   white-space: nowrap;
   overflow: hidden;
@@ -1436,7 +1606,6 @@
   color: var(--text-muted);
 }
 
-/* Valor de indicador com tom semântico (contadores de severidade). */
 .ec-kpi__value[data-tone="danger"] {
   color: var(--danger-600);
 }
@@ -1444,7 +1613,7 @@
   color: var(--warn-700);
 }
 .ec-kpi__value[data-tone="brand"] {
-  color: var(--brand-700);
+  color: var(--brand-500);
 }
 
 /* ==========================================================================
@@ -1481,7 +1650,7 @@
 }
 .ec-panelhead__title {
   font-family: var(--font-display);
-  font-weight: 700;
+  font-weight: 600;
   font-size: 14px;
   color: var(--text-strong);
 }
@@ -1493,7 +1662,7 @@
 .ec-panelhead__count {
   font-family: var(--font-display);
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-muted);
 }
 
@@ -1505,7 +1674,7 @@
   box-shadow: inset 3px 0 0 var(--danger-600);
 }
 .ec-prio[data-level="warning"] {
-  box-shadow: inset 3px 0 0 var(--accent-500);
+  box-shadow: inset 3px 0 0 var(--warn-700);
 }
 .ec-prio__head {
   display: flex;
@@ -1521,7 +1690,7 @@
 .ec-prio__client {
   font-family: var(--font-display);
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   margin-top: 6px;
   color: var(--text-strong);
 }
@@ -1549,8 +1718,6 @@
   background: var(--danger-50);
 }
 
-/* Ponto de estado. Sempre acompanhado de title/aria-label: cor sozinha não
-   informa quem não distingue verde de vermelho. */
 .ec-dot {
   width: 10px;
   height: 10px;
@@ -1560,7 +1727,7 @@
 }
 .ec-dot[data-status="fresh"] {
   background: var(--ok-600);
-  box-shadow: 0 0 0 3px rgba(31, 122, 77, 0.15);
+  box-shadow: 0 0 0 3px rgba(29, 122, 77, 0.15);
 }
 .ec-dot[data-status="stale"] {
   background: var(--danger-600);
@@ -1581,16 +1748,15 @@
 
 .ec-metric {
   border: 1px solid var(--border);
-  border-radius: var(--r-md);
+  border-radius: var(--r-lg);
   background: var(--surface);
   padding: 12px 14px;
-  box-shadow: var(--shadow-sm);
   min-width: 0;
 }
 .ec-metric__label {
   font-family: var(--font-display);
   font-size: 9.5px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--text-muted);
@@ -1598,17 +1764,16 @@
 .ec-metric__value {
   font-family: var(--font-display);
   font-size: 18px;
-  font-weight: 700;
+  font-weight: 600;
   margin-top: 5px;
   color: var(--text-strong);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 .ec-metric__value[data-accent] {
-  color: var(--brand-700);
+  color: var(--brand-500);
 }
 
-/* Item de grupo segmentado usado em loop (formato, período do laboratório). */
 .ec-seg-item {
   border: 0;
   border-radius: 6px;
@@ -1622,12 +1787,12 @@
   transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
 }
 .ec-seg-item:hover {
-  color: var(--brand-700);
+  color: var(--text-strong);
 }
 .ec-seg-item[data-active] {
   background: var(--surface);
-  color: var(--brand-700);
-  box-shadow: var(--shadow-sm);
+  color: var(--text-strong);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .ec-td {
@@ -1663,7 +1828,7 @@
 .ec-diag__title {
   font-family: var(--font-display);
   font-size: 11.5px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-strong);
 }
 .ec-diag__detail {
@@ -1676,13 +1841,13 @@
 /* ---------------------------------------------------------- Raio-X Meta --- */
 .ec-quicklink {
   padding: 5px 8px;
-  border-radius: 6px;
+  border-radius: var(--r-full);
   border: 1px solid var(--border);
   background: var(--surface-sunken);
   color: var(--text-muted);
   font-family: var(--font-display);
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 600;
   text-decoration: none;
   white-space: nowrap;
   transition: border-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease),
@@ -1690,16 +1855,16 @@
 }
 .ec-quicklink:hover {
   border-color: var(--brand-500);
-  color: var(--brand-700);
+  color: var(--brand-500);
   background: var(--brand-50);
 }
 .ec-quicklink[data-accent] {
   border-color: var(--brand-200);
   background: var(--brand-50);
-  color: var(--brand-700);
+  color: var(--brand-500);
 }
 .ec-td[data-strong] {
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-strong);
 }
 .ec-metric__value[data-state="good"] {
@@ -1709,7 +1874,6 @@
   color: var(--danger-600);
 }
 
-/* Duas colunas que realmente encolhem, e empilham em tela estreita. */
 .ec-two-cols {
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
@@ -1723,8 +1887,6 @@
   }
 }
 
-/* Faixa de métricas que se reflui. Em tela estreita o valor pode quebrar:
-   melhor duas linhas do que a página inteira rolando de lado. */
 .ec-metrics {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
@@ -1749,7 +1911,7 @@
 .ec-section__title {
   font-family: var(--font-display);
   font-size: 16px;
-  font-weight: 700;
+  font-weight: 600;
   margin: 0 0 5px;
   color: var(--text-strong);
 }
@@ -1762,7 +1924,7 @@
 }
 
 /* ==========================================================================
-   Login — única tela onde o mesh gradient é protagonista
+   Login — glass card minimalista sobre mesh
    ========================================================================== */
 .ec-login {
   min-height: 100vh;
@@ -1779,15 +1941,14 @@
 .ec-login__name {
   font-family: var(--font-display);
   font-size: 19px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
+  font-weight: 600;
+  letter-spacing: -0.01em;
   color: var(--text-strong);
 }
 .ec-login__tagline {
   color: var(--text-muted);
   font-size: 12.5px;
 }
-/* Vidro aqui faz sentido: o cartão flutua sobre o gradiente. */
 .ec-login__card {
   padding: 28px 28px 26px;
   border: 1px solid var(--border);
@@ -1795,7 +1956,7 @@
   background: rgba(255, 255, 255, 0.86);
   backdrop-filter: saturate(130%) blur(10px);
   -webkit-backdrop-filter: saturate(130%) blur(10px);
-  box-shadow: var(--shadow-md);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
 }
 @supports not (backdrop-filter: blur(4px)) {
   .ec-login__card {
@@ -1806,6 +1967,7 @@
   margin: 0;
   font-size: 25px;
   line-height: 1.2;
+  font-weight: 600;
 }
 .ec-login__sub {
   margin: 8px 0 22px;
@@ -1844,11 +2006,11 @@
 }
 
 /* ==========================================================================
-   Painel colapsável (detalhe de plataforma dentro do cliente)
+   Painel colapsável
    ========================================================================== */
 .ec-collapse {
   border: 1px solid var(--border);
-  border-radius: var(--r-md);
+  border-radius: var(--r-lg);
   background: var(--surface);
   overflow: hidden;
 }
@@ -1887,24 +2049,24 @@
   height: 24px;
   border-radius: 6px;
   background: var(--brand-50);
-  color: var(--brand-700);
+  color: var(--brand-500);
   display: grid;
   place-items: center;
   font-family: var(--font-display);
-  font-weight: 800;
+  font-weight: 600;
   font-size: 12px;
   flex-shrink: 0;
 }
 .ec-collapse__title {
   font-family: var(--font-display);
   font-size: 13.5px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-strong);
 }
 .ec-collapse__meta {
   font-family: var(--font-display);
   font-size: 13.5px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text);
   font-variant-numeric: tabular-nums;
 }
@@ -1920,8 +2082,6 @@
 .ec-collapse__body {
   padding: 0 var(--sp-4);
 }
-/* Seção de configuração: o conteúdo precisa de respiro em cima e embaixo,
-   coisa que o uso original (lista dentro de uma linha de conta) não pedia. */
 .ec-stack {
   display: grid;
   gap: var(--sp-3);
@@ -1956,7 +2116,6 @@
   height: 15px;
   border-radius: 50%;
   background: var(--text-faint);
-  box-shadow: var(--shadow-sm);
   transition: transform var(--t) var(--ease), background var(--t) var(--ease);
 }
 .ec-switch[data-on] {

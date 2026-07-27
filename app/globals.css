@@ -1,89 +1,81 @@
 /* ==========================================================================
-   Fundação de estilo do Assertivus Dash.
-
-   Existe porque o sistema não tinha camada de estilo nenhuma: 274 cores
-   hexadecimais distintas espalhadas em objetos inline, cinco declarações
-   diferentes de fontFamily e — por consequência de estilo inline — nenhum
-   :hover, nenhum :focus-visible, nenhuma media query e nenhum respeito a
-   "reduzir movimento".
-
-   Identidade Ectolab por DENTRO (este painel). As páginas /r e /c, que o
-   cliente abre, seguem a marca Assertivus e não leem estes tokens de cor.
+   Fundação de estilo — Apple Design System (via DESIGN.md).
+   Identidade visual inspirada na Apple: fotografia em primeiro plano, UI
+   rebaixada, azul único (#0066cc) como tom de ação, texto near-black (#1d1d1f)
+   e superfícies branca/parchment alternadas.
    ========================================================================== */
 
 :root {
-  /* ---------- cor: azuis Ectolab ----------
-     O azul claro da marca (#2195B9) tem 3,46:1 sobre branco: serve para
-     borda, ícone, foco e gráfico, NUNCA para texto pequeno nem como fundo de
-     botão com texto branco (falharia WCAG AA). Quem carrega texto é o azul
-     escuro, e o link usa um tom derivado que passa AA. */
-  --brand-500: #2195b9; /* azul claro da marca — traço, ícone, foco, série */
-  --brand-600: #1c809f; /* derivado: 4,53:1 — texto e link */
-  --brand-700: #28627b; /* azul escuro da marca — botão primário, título */
-  --brand-800: #1e4d61;
-  --brand-900: #0f2a36;
-  --brand-50: #f4f8fa; /* fundo levemente azulado */
-  --brand-100: #e4eef3;
-  --brand-200: #dce5ea; /* borda */
+  /* ---------- cor: Apple ----------
+     Action Blue é o ÚNICO tom de interação. Não existe segunda cor de marca.
+     Ink é near-black (#1d1d1f) — nunca pure black — para manter o caráter
+     fotográfico em vez de impresso. */
+  --brand-500: #0066cc;    /* Action Blue — interação, link, foco */
+  --brand-600: #0071e3;    /* Focus Blue — focus ring */
+  --brand-700: #0066cc;    /* Action Blue (consistência com botão primary) */
+  --brand-800: #004999;    /* Pressed state */
+  --brand-900: #003366;    /* Mais escuro para hover em superfícies claras */
+  --brand-50: #e8f0fe;     /* Azul muito claro — fundo de badge/link hover */
+  --brand-100: #d0e3ff;    /* Azul claro — seleção */
+  --brand-200: #a8c9ff;    /* Borda sutil */
 
-  /* ---------- cor: laranjas Ectolab ----------
-     Nenhum laranja da marca serve para texto sobre branco (1,42 e 1,72:1).
-     Eles funcionam como preenchimento com texto ESCURO (#12161f sobre
-     #FDBA2F dá 10,55:1) e como faixa de destaque. Para texto de aviso existe
-     o derivado --accent-700. */
-  --accent-300: #fcd381;
-  --accent-500: #fdba2f;
-  --accent-600: #d99a1c;
-  --accent-700: #956e1c; /* derivado: 4,64:1 — texto de aviso */
-  --accent-50: #fff8e9;
+  /* ---------- cor: superfície ----------
+     Apple usa white, parchment (#f5f5f7) e três near-blacks para tiles. */
+  --surface: #ffffff;
+  --surface-sunken: #f5f5f7;    /* Parchment — canvas alternativo */
+  --surface-raised: rgba(255, 255, 255, 0.76); /* vidro */
+  --border: #e0e0e0;           /* Hairline */
+  --border-strong: #c0c0c0;
 
   /* ---------- cor: texto ----------
-     Escala verificada sobre branco. Nada abaixo de 4,5:1 é usado em texto
-     corrido; --text-faint fica reservado a rótulo grande e ícone decorativo. */
-  --text-strong: #0f2a36; /* 14,95:1 */
-  --text: #234f62; /*  7,86:1 */
-  --text-muted: #546a78; /*  5,66:1 */
-  --text-faint: #6b7f8b; /*  4,17:1 — só rótulo grande */
+     Ink (#1d1d1f) para headlines e body. Muted (#cccccc) para secundário
+     em dark tile (não aplicado no painel interno — só em /c e /r). */
+  --text-strong: #1d1d1f;  /* Near-black — headlines, body */
+  --text: #1d1d1f;          /* Body */
+  --text-muted: #6e6e73;    /* Secondary info */
+  --text-faint: #86868b;    /* Rótulo grande, ícone decorativo */
 
-  /* ---------- cor: superfície ---------- */
-  --surface: #ffffff;
-  --surface-sunken: #f4f8fa;
-  --surface-raised: rgba(255, 255, 255, 0.72); /* vidro: só cabeçalho e modal */
-  --border: #dce5ea;
-  --border-strong: #c3d4dd;
-
-  /* ---------- cor: semântica ---------- */
-  --ok-600: #1f7a4d;
+  /* ---------- cor: semântica ----------
+     Apple usa vermelho e verde minimalistas. */
+  --ok-600: #1d7a4d;
   --ok-50: #eef7f1;
   --warn-700: #956e1c;
   --warn-50: #fff8e9;
   --danger-600: #b5372c;
   --danger-50: #fdf0ef;
 
-  /* ---------- espaço: múltiplos de 4 ---------- */
+  /* ---------- espaço: tokens Apple ----------
+     Base 8px. Estrutura em 8/12/16/20/24/32/48/80. */
   --sp-1: 4px;
   --sp-2: 8px;
   --sp-3: 12px;
-  --sp-4: 16px;
+  --sp-4: 17px;
   --sp-5: 24px;
   --sp-6: 32px;
   --sp-7: 48px;
 
-  /* ---------- raio ---------- */
+  /* ---------- raio ----------
+     Apple usa 0 (full-bleed), 5px (inline), 8px (utility),
+     11px (pearl capsule), 18px (utility cards), pill (9999px). */
   --r-sm: 8px;
-  --r-md: 12px;
-  --r-lg: 16px;
-  --r-full: 999px;
+  --r-md: 11px;
+  --r-lg: 18px;
+  --r-full: 9999px;
 
-  /* ---------- sombra: duas, e só ---------- */
-  --shadow-sm: 0 1px 2px rgba(15, 42, 54, 0.06), 0 1px 3px rgba(15, 42, 54, 0.04);
-  --shadow-md: 0 4px 12px rgba(15, 42, 54, 0.08), 0 1px 3px rgba(15, 42, 54, 0.04);
+  /* ---------- sombra: UMA, e só ----------
+     Apple usa exatamente UMA sombra — para produto sobre superfície.
+     Cards não têm sombra; o sistema usa borda sutil (hairline). */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06);
 
-  /* ---------- tipo ---------- */
-  --font-display: var(--font-manrope), system-ui, sans-serif;
-  --font-text: var(--font-inter), system-ui, sans-serif;
+  /* ---------- tipo: Inter substituto do SF Pro ----------
+     SF Pro Display (headlines) / SF Pro Text (body). Inter é o substituto
+     recomendado pelo DESIGN.md. Ajustamos letter-spacing para -0.01em em
+     display e line-height ligeiramente mais justo (1.44 vs 1.47). */
+  --font-display: var(--font-inter), system-ui, -apple-system, sans-serif;
+  --font-text: var(--font-inter), system-ui, -apple-system, sans-serif;
 
-  /* ---------- movimento: curto, e desligável ---------- */
+  /* ---------- movimento ---------- */
   --t-fast: 120ms;
   --t: 180ms;
   --ease: cubic-bezier(0.2, 0, 0.2, 1);
@@ -104,8 +96,8 @@ body {
   background: var(--surface);
   color: var(--text-strong);
   font-family: var(--font-text);
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: 17px;
+  line-height: 1.47;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -116,15 +108,13 @@ h3,
 h4 {
   font-family: var(--font-display);
   color: var(--text-strong);
-  letter-spacing: -0.02em;
+  font-weight: 600;
+  letter-spacing: -0.01em;
   margin: 0;
 }
 
-/* Foco visível de verdade. Estilo inline não suporta pseudo-classe, então o
-   sistema simplesmente não tinha indicação de foco — reprovava WCAG por si só.
-   :focus-visible não incomoda quem usa mouse. */
 :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
-  outline: 2px solid var(--brand-500);
+  outline: 2px solid var(--brand-600);
   outline-offset: 2px;
   border-radius: var(--r-sm);
 }
@@ -134,7 +124,6 @@ h4 {
   color: var(--text-strong);
 }
 
-/* Respeita a preferência do sistema: quem pediu menos movimento recebe menos. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -146,24 +135,22 @@ h4 {
   }
 }
 
-/* ---------- utilidades mínimas ---------- */
+/* ---------- utilidades ---------- */
 
-/* Mesh gradient como camada estática: dois radiais e nada de animação nem
-   imagem. É o único ornamento da interface. */
+/* Mesh gradient sutil — Apple não usa gradientes decorativos, mas mantemos
+   um mesh muito leve para o login e estados vazios. */
 .ec-mesh {
   position: relative;
   background:
-    radial-gradient(60% 80% at 12% 0%, rgba(33, 149, 185, 0.1), transparent 70%),
-    radial-gradient(50% 70% at 92% 8%, rgba(253, 186, 47, 0.09), transparent 72%),
+    radial-gradient(60% 80% at 12% 0%, rgba(0, 102, 204, 0.06), transparent 70%),
+    radial-gradient(50% 70% at 92% 8%, rgba(0, 102, 204, 0.04), transparent 72%),
     var(--surface-sunken);
 }
 
-/* Vidro só onde faz sentido: barra fixa e camadas flutuantes. backdrop-filter
-   é o efeito mais caro daqui, por isso não vai em card de conteúdo. */
 .ec-glass {
   background: var(--surface-raised);
-  backdrop-filter: saturate(140%) blur(12px);
-  -webkit-backdrop-filter: saturate(140%) blur(12px);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
   border-bottom: 1px solid var(--border);
 }
 @supports not (backdrop-filter: blur(4px)) {
@@ -187,9 +174,6 @@ h4 {
   }
 }
 
-/* Rolagem horizontal contida. max-width e min-width são o que faz o overflow
-   funcionar: sem eles o wrapper cresce junto com a tabela larga (item de
-   flex/grid tem min-width:auto por padrão) e quem rola é a PÁGINA. */
 .ec-scroll-x {
   overflow-x: auto;
   overscroll-behavior-x: contain;

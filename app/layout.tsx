@@ -1,20 +1,14 @@
 import "./globals.css";
 import "./components.css";
-import { Inter, Manrope } from "next/font/google";
+import { Inter } from "next/font/google";
 import AppNav from "@/components/AppNav";
 
-// Duas famílias, subset latino, display swap. next/font serve as fontes do
-// próprio domínio: nenhuma requisição a terceiros em tempo de execução, e
-// nenhum texto invisível enquanto carrega.
-const manrope = Manrope({
-  subsets: ["latin"],
-  weight: ["500", "600", "700", "800"],
-  variable: "--font-manrope",
-  display: "swap",
-});
+// Apple design system usa SF Pro como tipografia principal. Inter é o
+// substituto open-source mais próximo (conforme DESIGN.md). A escada de pesos
+// Apple é 300 / 400 / 600 / 700 — weight 500 é deliberadamente ausente.
 const inter = Inter({
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+  weight: ["300", "400", "600", "700"],
   variable: "--font-inter",
   display: "swap",
 });
@@ -34,7 +28,7 @@ export const viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="pt-BR" className={`${manrope.variable} ${inter.variable}`}>
+    <html lang="pt-BR" className={`${inter.variable}`}>
       <body>
         <AppNav />
         {children}
