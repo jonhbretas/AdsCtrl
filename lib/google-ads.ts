@@ -481,6 +481,7 @@ export type SearchTermState = "novo" | "palavra-chave" | "negativado" | "ambos";
 export interface GoogleSearchTerm {
   term: string;
   campaign: string | null;
+  campaignId: string | null;
   state: SearchTermState;
   impressions: number;
   clicks: number;
@@ -488,6 +489,100 @@ export interface GoogleSearchTerm {
   conversions: number;
   ctr: number;
   costPerConversion: number | null;
+}
+
+/* ------------------------------------------------- palavras negativas ---
+   As ÚNICAS operações de escrita deste arquivo. Tudo mais aqui é consulta.
+
+   Escopo deliberado: negativa de CAMPANHA, correspondência exata ou frase.
+   Não há grupo de anúncios nem correspondência ampla — ampla negativa é a
+   que mais corta por engano, e sem poder revisar a conta inteira pelo painel
+   não é uma decisão para tomar num clique. */
+
+export type NegativeMatchType = "EXACT" | "PHRASE";
+
+export interface CampaignNegative {
+  resourceName: string;
+  text: string;
+  matchType: string;
+  campaignId: string | null;
+  campaignName: string | null;
+}
+
+// Escrita não pode herdar o recuo silencioso do search(): lá, repetir uma
+// consulta é inofensivo. Aqui, repetir pode gravar duas vezes. Por isso o
+// recuo só acontece em 403 (conta fora do MCC), que é resposta a UM pedido
+// que comprovadamente não escreveu.
+async function mutate(customerId: string, resource: string, body: any): Promise<any> {
+  const path = `/customers/${googleCustomerId(customerId)}/${resource}:mutate`;
+  try {
+    return await googleRequest(path, { method: "POST", body: JSON.stringify(body) }, true);
+  } catch (error: any) {
+    if (!/Google Ads API 403/.test(error?.message || "")) throw error;
+    return googleRequest(path, { method: "POST", body: JSON.stringify(body) }, false);
+  }
+}
+
+export async function listCampaignNegatives(customerId: string): Promise<CampaignNegative[]> {
+  const rows = await search(
+    googleCustomerId(customerId),
+    `
+      SELECT
+        campaign_criterion.resource_name,
+        campaign_criterion.keyword.text,
+        campaign_criterion.keyword.match_type,
+        campaign.id,
+        campaign.name
+      FROM campaign_criterion
+      WHERE campaign_criterion.type = 'KEYWORD'
+        AND campaign_criterion.negative = TRUE
+        AND campaign.status != 'REMOVED'
+    `
+  );
+  return rows.map((row: any) => ({
+    resourceName: row.campaignCriterion?.resourceName || "",
+    text: row.campaignCriterion?.keyword?.text || "",
+    matchType: row.campaignCriterion?.keyword?.matchType || "",
+    campaignId: row.campaign?.id ? String(row.campaign.id) : null,
+    campaignName: row.campaign?.name ?? null,
+  }));
+}
+
+export async function addCampaignNegative(
+  customerId: string,
+  campaignId: string,
+  text: string,
+  matchType: NegativeMatchType
+): Promise<CampaignNegative> {
+  const id = googleCustomerId(customerId);
+  const term = text.trim();
+  if (!term) throw new Error("Termo vazio.");
+  if (!/^\d+$/.test(campaignId)) throw new Error("Campanha inválida.");
+  if (matchType !== "EXACT" && matchType !== "PHRASE") throw new Error("Correspondência inválida.");
+
+  const result = await mutate(id, "campaignCriteria", {
+    operations: [
+      {
+        create: {
+          campaign: `customers/${id}/campaigns/${campaignId}`,
+          negative: true,
+          keyword: { text: term, matchType },
+        },
+      },
+    ],
+  });
+  const resourceName = result?.results?.[0]?.resourceName || "";
+  return { resourceName, text: term, matchType, campaignId, campaignName: null };
+}
+
+export async function removeCampaignNegative(customerId: string, resourceName: string): Promise<void> {
+  const id = googleCustomerId(customerId);
+  // O recurso tem de pertencer À conta que o pedido diz — sem isto, um
+  // resourceName forjado apagaria critério de outro cliente.
+  if (!resourceName.startsWith(`customers/${id}/campaignCriteria/`)) {
+    throw new Error("Critério não pertence a esta conta.");
+  }
+  await mutate(id, "campaignCriteria", { operations: [{ remove: resourceName }] });
 }
 
 function searchTermState(status: string | undefined): SearchTermState {
@@ -519,6 +614,7 @@ export async function getGoogleSearchTerms(
       SELECT
         search_term_view.search_term,
         search_term_view.status,
+        campaign.id,
         campaign.name,
         metrics.impressions,
         metrics.clicks,
@@ -541,6 +637,9 @@ export async function getGoogleSearchTerms(
     return {
       term: view.searchTerm || "(sem termo)",
       campaign: row.campaign?.name ?? null,
+      // Sem o id não há como negativar: o nome da campanha não endereça nada
+      // na API, e dois clientes podem ter campanhas de nome igual.
+      campaignId: row.campaign?.id ? String(row.campaign.id) : null,
       state: searchTermState(view.status),
       impressions,
       clicks,

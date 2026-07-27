@@ -330,7 +330,38 @@ export function Menu({
   title?: string;
 }) {
   const [open, setOpen] = React.useState(false);
+  const [dropUp, setDropUp] = React.useState(false);
   const ref = React.useRef<HTMLDivElement>(null);
+  const listRef = React.useRef<HTMLDivElement>(null);
+
+  // Numa tabela dentro de .ec-scroll-x, o menu da última linha era recortado
+  // pelo contêiner: medido, sobravam 81px do lado de fora e a segunda opção
+  // sumia. Quando não cabe embaixo e cabe em cima, ele inverte.
+  // useLayoutEffect e não useEffect: medir e corrigir antes de pintar, senão
+  // o menu aparece no lugar errado por um quadro.
+  React.useLayoutEffect(() => {
+    if (!open) {
+      setDropUp(false);
+      return;
+    }
+    const list = listRef.current;
+    const anchor = ref.current;
+    if (!list || !anchor) return;
+
+    let limit = window.innerHeight;
+    for (let el = anchor.parentElement; el; el = el.parentElement) {
+      const style = window.getComputedStyle(el);
+      if (/auto|scroll|hidden/.test(style.overflowX + style.overflowY)) {
+        limit = Math.min(limit, el.getBoundingClientRect().bottom);
+        break;
+      }
+    }
+    const listBox = list.getBoundingClientRect();
+    const anchorBox = anchor.getBoundingClientRect();
+    const naoCabeEmbaixo = listBox.bottom > limit;
+    const cabeEmCima = anchorBox.top - listBox.height > 0;
+    setDropUp(naoCabeEmbaixo && cabeEmCima);
+  }, [open]);
 
   // Sem isto o menu fica aberto atrás do próximo clique — e o usuário não
   // tem para onde clicar para desistir.
@@ -362,7 +393,7 @@ export function Menu({
         {label} <span aria-hidden="true" style={{ fontSize: "0.8em" }}>▾</span>
       </Button>
       {open && (
-        <div className="ec-menu__list" role="menu">
+        <div className="ec-menu__list" role="menu" ref={listRef} data-drop={dropUp ? "up" : undefined}>
           {items.map((item, index) => (
             <button
               key={index}

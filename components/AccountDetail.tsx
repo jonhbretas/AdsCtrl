@@ -28,6 +28,7 @@ import {
   SortState,
   usePersistentSort,
 } from "@/components/SortableHeader";
+import { Menu } from "@/components/ui";
 
 interface Vals { results: Record<string, number>; values: Record<string, number> }
 interface Row extends Vals {
@@ -68,6 +69,7 @@ interface Detail {
 interface SearchTerm {
   term: string;
   campaign: string | null;
+  campaignId: string | null;
   state: "novo" | "palavra-chave" | "negativado" | "ambos";
   impressions: number;
   clicks: number;
@@ -595,7 +597,7 @@ export default function AccountDetail({
       </div>
 
       {/* TERMOS DE BUSCA (Google, campanhas de Pesquisa) */}
-      {platform === "google" && <SearchTerms terms={data.searchTerms} currency={currency} />}
+      {platform === "google" && <SearchTerms terms={data.searchTerms} currency={currency} accountId={accountId} />}
 
       {/* OBJETIVOS */}
       <SectionTitle>Detalhamento dos objetivos</SectionTitle>
@@ -815,11 +817,91 @@ const SUSPECT_HELP =
 
 type TermSortKey = "state" | "term" | "campaign" | "cost" | "impressions" | "clicks" | "ctr" | "conversions" | "costPerConversion";
 
-function SearchTerms({ terms, currency }: { terms?: SearchTerm[]; currency: string }) {
+function SearchTerms({ terms, currency, accountId }: { terms?: SearchTerm[]; currency: string; accountId: string }) {
   const [showAll, setShowAll] = useState(false);
   const [campaign, setCampaign] = useState("all");
   const [sort, setSort] = useState<SortState<TermSortKey>>({ key: "cost", direction: "desc" });
+  // Negativação feita nesta sessão: termo -> o que foi criado, para poder
+  // desfazer. Não substitui o dado da API; ela só reflete na próxima coleta.
+  const [negated, setNegated] = useState<Record<string, { resourceName: string; matchType: string }>>({});
+  const [busyTerm, setBusyTerm] = useState<string | null>(null);
+  const [note, setNote] = useState<{ text: string; bad?: boolean } | null>(null);
   const all = terms || [];
+
+  const keyOf = (term: SearchTerm) => `${term.campaignId || ""}::${term.term}`;
+
+  async function negate(term: SearchTerm, matchType: "EXACT" | "PHRASE") {
+    if (!term.campaignId) {
+      setNote({ text: "Sem a campanha do termo não dá para negativar.", bad: true });
+      return;
+    }
+    const alvo = matchType === "EXACT" ? "exata" : "frase";
+    // Escrita na conta que está gastando: confirma antes, dizendo onde vai.
+    const ok = window.confirm(
+      `Negativar "${term.term}" em correspondência ${alvo}?\n\n`
+      + `Campanha: ${term.campaign || "(sem nome)"}\n\n`
+      + (matchType === "PHRASE"
+        ? "Frase bloqueia qualquer busca que contenha este termo."
+        : "Exata bloqueia só esta busca, escrita deste jeito.")
+      + "\n\nDá para desfazer aqui mesmo depois."
+    );
+    if (!ok) return;
+
+    setBusyTerm(keyOf(term));
+    setNote(null);
+    try {
+      const response = await fetch("/api/google/negatives", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          account_id: accountId,
+          campaign_id: term.campaignId,
+          text: term.term,
+          match_type: matchType,
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok || payload.error) throw new Error(payload.error || `Falha (HTTP ${response.status}).`);
+      setNegated((prev) => ({
+        ...prev,
+        [keyOf(term)]: { resourceName: payload.negative?.resourceName || "", matchType },
+      }));
+      setNote({
+        text: payload.unchanged
+          ? `"${term.term}" já estava negativado em ${alvo}.`
+          : `"${term.term}" negativado em ${alvo} na campanha ${term.campaign || ""}.`,
+      });
+    } catch (error: any) {
+      setNote({ text: error?.message ?? "Falha ao negativar.", bad: true });
+    } finally {
+      setBusyTerm(null);
+    }
+  }
+
+  async function undo(term: SearchTerm) {
+    const entry = negated[keyOf(term)];
+    if (!entry?.resourceName) return;
+    setBusyTerm(keyOf(term));
+    try {
+      const response = await fetch("/api/google/negatives", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ account_id: accountId, resource_name: entry.resourceName }),
+      });
+      const payload = await response.json();
+      if (!response.ok || payload.error) throw new Error(payload.error || `Falha (HTTP ${response.status}).`);
+      setNegated((prev) => {
+        const next = { ...prev };
+        delete next[keyOf(term)];
+        return next;
+      });
+      setNote({ text: `Negativa de "${term.term}" removida.` });
+    } catch (error: any) {
+      setNote({ text: error?.message ?? "Falha ao desfazer.", bad: true });
+    } finally {
+      setBusyTerm(null);
+    }
+  }
 
   // Uma conta de Pesquisa mistura campanhas com intenção diferente (marca,
   // genérico, concorrente). Somados, o "sem tratar" de uma esconde o da outra.
@@ -903,6 +985,21 @@ function SearchTerms({ terms, currency }: { terms?: SearchTerm[]; currency: stri
         )}
       </div>
 
+      {note && (
+        <div style={{ marginBottom: 10 }}>
+          <div className="ec-notice" data-tone={note.bad ? "danger" : "ok"}>
+            {note.text}
+            <button
+              onClick={() => setNote(null)}
+              aria-label="Fechar aviso"
+              style={{ marginLeft: "auto", border: 0, background: "none", cursor: "pointer", color: "inherit" }}
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
       {list.length === 0 ? (
         <div className="ec-card ec-card--padded" style={{ marginBottom: 24 }}>
           <div className="ec-inline-empty" style={{ minHeight: 0 }}>
@@ -923,13 +1020,20 @@ function SearchTerms({ terms, currency }: { terms?: SearchTerm[]; currency: stri
                 <Th column="ctr">CTR</Th>
                 <Th column="conversions">Conv.</Th>
                 <Th column="costPerConversion">Custo/conv.</Th>
+                <th style={{ padding: "10px 14px", textAlign: "right", fontWeight: 500, width: 132 }}>Ação</th>
               </tr>
             </thead>
             <tbody>
               {visible.map((term, index) => {
-                const state = TERM_STATE[term.state];
+                const feito = negated[keyOf(term)];
+                // Negativado agora: a coluna Situação passa a dizer isso na
+                // hora. A API só vai refletir na próxima coleta do Google.
+                const state = feito
+                  ? { ...TERM_STATE.negativado, label: feito.matchType === "EXACT" ? "negativado (exata)" : "negativado (frase)" }
+                  : TERM_STATE[term.state];
+                const ocupado = busyTerm === keyOf(term);
                 // Gastou e não converteu, sem tratamento: é o candidato a negativar.
-                const suspect = term.state === "novo" && term.conversions === 0 && term.cost > 0;
+                const suspect = !feito && term.state === "novo" && term.conversions === 0 && term.cost > 0;
                 return (
                   <tr key={`${term.term}-${index}`} style={{ borderTop: "1px solid var(--border)" }}>
                     <td style={{ padding: "10px 14px" }}>
@@ -957,6 +1061,44 @@ function SearchTerms({ terms, currency }: { terms?: SearchTerm[]; currency: stri
                         atribuição), então uma casa decimal em vez de num(). */}
                     <Td>{term.conversions > 0 ? term.conversions.toFixed(1).replace(".", ",") : "—"}</Td>
                     <Td>{term.costPerConversion != null ? money(term.costPerConversion, currency) : "—"}</Td>
+                    <td style={{ padding: "10px 14px", textAlign: "right" }}>
+                      {feito ? (
+                        <button
+                          className="ec-btn"
+                          data-variant="ghost"
+                          data-size="sm"
+                          disabled={ocupado}
+                          onClick={() => undo(term)}
+                          title="Remover a negativa que acabou de ser criada"
+                        >
+                          {ocupado ? "…" : "desfazer"}
+                        </button>
+                      ) : term.state === "negativado" ? (
+                        <span style={{ fontSize: 11, color: "var(--text-faint)" }}>já negativado</span>
+                      ) : !term.campaignId ? (
+                        <span style={{ fontSize: 11, color: "var(--text-faint)" }} title="A campanha do termo não veio na consulta">—</span>
+                      ) : (
+                        <Menu
+                          size="sm"
+                          variant={suspect ? "secondary" : "ghost"}
+                          disabled={ocupado}
+                          label={ocupado ? "…" : "⊘ Negativar"}
+                          title={`Criar palavra negativa na campanha ${term.campaign || ""}`}
+                          items={[
+                            {
+                              label: "Correspondência exata",
+                              hint: "bloqueia só esta busca, escrita deste jeito",
+                              onSelect: () => negate(term, "EXACT"),
+                            },
+                            {
+                              label: "Correspondência de frase",
+                              hint: "bloqueia qualquer busca que contenha o termo",
+                              onSelect: () => negate(term, "PHRASE"),
+                            },
+                          ]}
+                        />
+                      )}
+                    </td>
                   </tr>
                 );
               })}
