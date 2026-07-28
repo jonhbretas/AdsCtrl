@@ -32,17 +32,35 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useTheme } from "@/components/ThemeProvider";
 
-const NAV_ITEMS = [
-  { href: "/", label: "Visão Geral", icon: LayoutDashboard },
-  { href: "/today", label: "Cockpit Hoje", icon: Target },
-  { href: "/tarefas", label: "Tarefas", icon: CheckSquare2 },
-  { href: "/vendas", label: "Vendas", icon: DollarSign },
-  { href: "/creatives", label: "Criativos", icon: Palette },
-  { href: "/meta-assets", label: "Raio-X", icon: Search },
-  { href: "/alerts", label: "Alertas", icon: Bell },
-  { href: "/admin", label: "Config", icon: Settings },
-  { href: "/utilidades", label: "Utilidades", icon: BarChart3 },
+const NAV_GROUPS = [
+  {
+    label: "Análise",
+    items: [
+      { href: "/", label: "Visão Geral", icon: LayoutDashboard },
+      { href: "/today", label: "Cockpit Hoje", icon: Target },
+      { href: "/creatives", label: "Criativos", icon: Palette },
+      { href: "/meta-assets", label: "Raio-X", icon: Search },
+      { href: "/alerts", label: "Alertas", icon: Bell },
+    ],
+  },
+  {
+    label: "Operacional",
+    items: [
+      { href: "/tarefas", label: "Tarefas", icon: CheckSquare2 },
+      { href: "/vendas", label: "ROI por Cliente", icon: DollarSign },
+    ],
+  },
+  {
+    label: "Sistema",
+    items: [
+      { href: "/admin", label: "Config", icon: Settings },
+      { href: "/utilidades", label: "Utilidades", icon: BarChart3 },
+    ],
+  },
 ];
+
+// Flat array for mobile tab bar (first 3 + More)
+const ALL_ITEMS = NAV_GROUPS.flatMap((g) => g.items);
 
 const CHROMELESS_PREFIXES = ["/login", "/report/", "/r/", "/c/"];
 
@@ -62,7 +80,7 @@ export default function AppNav() {
     router.refresh();
   }
 
-  const NavItem = ({ item, mobile }: { item: typeof NAV_ITEMS[0]; mobile?: boolean }) => {
+  const NavItem = ({ item, mobile }: { item: (typeof ALL_ITEMS)[0]; mobile?: boolean }) => {
     const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
     const Icon = item.icon;
 
@@ -116,8 +134,13 @@ export default function AppNav() {
 
         {/* Nav */}
         <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
-          {NAV_ITEMS.map((item) => (
-            <NavItem key={item.href} item={item} />
+          {NAV_GROUPS.map((group, gi) => (
+            <div key={group.label}>
+              {gi > 0 && <div className="h-px bg-border/40 mx-2 my-1.5" />}
+              {group.items.map((item) => (
+                <NavItem key={item.href} item={item} />
+              ))}
+            </div>
           ))}
         </nav>
 
@@ -195,11 +218,16 @@ export default function AppNav() {
               </button>
             </div>
             <nav className="p-2 space-y-0.5">
-              {NAV_ITEMS.map((item) => (
-                <NavItem key={item.href} item={item} />
+              {NAV_GROUPS.map((group, gi) => (
+                <div key={group.label}>
+                  {gi > 0 && <div className="h-px bg-border/50 mx-2 my-1.5" />}
+                  {group.items.map((item) => (
+                    <NavItem key={item.href} item={item} />
+                  ))}
+                </div>
               ))}
               <div className="h-px bg-border/50 my-2" />
-              <button onClick={logout} className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors">
+              <button onClick={logout} className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors border-none cursor-pointer bg-transparent">
                 <LogOut className="h-4 w-4" /> Sair
               </button>
             </nav>
@@ -210,14 +238,14 @@ export default function AppNav() {
       {/* Mobile Bottom Tab Bar */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 h-14 border-t border-border/50 bg-background/80 backdrop-blur-lg safe-area-bottom">
         <div className="grid grid-cols-4 h-full">
-          {NAV_ITEMS.slice(0, 3).map((item) => (
+          {ALL_ITEMS.slice(0, 3).map((item) => (
             <NavItem key={item.href} item={item} mobile />
           ))}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button className={cn(
                 "flex flex-col items-center gap-0.5 text-[10px] font-medium transition-colors py-1",
-                NAV_ITEMS.slice(3).some((i) => i.href === "/" ? pathname === "/" : pathname.startsWith(i.href))
+                ALL_ITEMS.slice(3).some((i) => i.href === "/" ? pathname === "/" : pathname.startsWith(i.href))
                   ? "text-primary" : "text-muted-foreground hover:text-foreground"
               )}>
                 <Menu className="h-5 w-5" />
@@ -225,7 +253,7 @@ export default function AppNav() {
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent side="top" align="end" className="w-56 mb-2">
-              {NAV_ITEMS.slice(3).map((item) => (
+              {ALL_ITEMS.slice(3).map((item) => (
                 <DropdownMenuItem key={item.href} asChild>
                   <Link href={item.href} className="flex items-center gap-3">
                     <item.icon className="h-4 w-4" />
