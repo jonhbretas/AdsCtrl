@@ -642,20 +642,9 @@ export default function AccountDetail({
       {/* TERMOS DE BUSCA (Google, campanhas de Pesquisa) */}
       {platform === "google" && <SearchTerms terms={data.searchTerms} currency={currency} accountId={accountId} />}
 
-      {/* VISÃO GERAL — funil + gasto diário + resultado x CPM */}
+      {/* VISÃO GERAL — gasto diário + alcance + cliques */}
       <SectionTitle>Funil de performance</SectionTitle>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 24 }}>
-        <ChartCard height={220} title="Distribuição por objetivo">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={byObjective} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-              <XAxis type="number" tickFormatter={(v) => formatMoneyShort(v)} tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
-              <YAxis type="category" dataKey="objective" width={130} tick={{ fontSize: 10, fill: "#64748b" }} axisLine={false} tickLine={false} />
-              <Tooltip formatter={(v: any) => formatMoney(Number(v))} contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0" }} />
-              <Bar dataKey="spend" fill="#06b6d4" radius={[0, 4, 4, 0]} maxBarSize={28} />
-            </BarChart>
-          </ResponsiveContainer>
-        </ChartCard>
         <ChartCard height={220} title="Investimento diário">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={data.daily.map((d) => ({ label: dayLabel(d.date), spend: d.spend }))} margin={{ top: 4, right: 8, left: 8, bottom: 0 }}>
@@ -728,7 +717,10 @@ export default function AccountDetail({
                     <h4 style={{ fontSize: 11, fontWeight: 700, color: "#64748b", letterSpacing: 0.4, textTransform: "uppercase", marginBottom: 8 }}>{segment.title.replace("_", " ")}</h4>
                     <ResponsiveContainer width="100%" height={180}>
                       <PieChart>
-                        <Pie data={data} dataKey="primary" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={75} paddingAngle={2}>
+                        <Pie data={data} dataKey="primary" nameKey="name" cx="50%" cy="50%" innerRadius={45} outerRadius={78} paddingAngle={2}
+                          label={({ name, percent }) => `${(percent * 100).toFixed(0)}%`}
+                          labelLine={false}
+                        >
                           {data.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                         </Pie>
                         <Tooltip formatter={(v: any) => fmtMetric(Number(v), demoMetric)} contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0" }} />

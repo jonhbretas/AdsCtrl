@@ -1,53 +1,18 @@
 "use client";
 
-// components/DuplicateCampaign.tsx
-// Copia a ESTRUTURA de uma campanha Meta para outra conta de anúncios.
-//
-// O que este diálogo faz de diferente de um "duplicar" comum: ele diz, ANTES,
-// o que não vai junto. Anúncio e criativo não atravessam (criar criativo
-// publica como a Página e exige permissão que o token não tem), e público
-// personalizado não existe fora da conta de origem. Esconder isso produziria
-// uma cópia pela metade sem ninguém entender por quê.
-//
-// "Conferir" roda a validação da Meta sem criar nada. "Duplicar" cria, tudo
-// PAUSADO — uma cópia que nasce gastando é um acidente esperando.
-
 import { useEffect, useState } from "react";
-import { Button, Notice } from "@/components/ui";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input, Select, Notice } from "@/components/ui";
+import { cn } from "@/lib/utils";
+import { Copy, X, AlertTriangle, CheckCircle2, Info } from "lucide-react";
 
-interface Conta {
-  account_id: string;
-  name: string;
-  platform?: string;
-  hidden?: boolean;
-}
+interface Conta { account_id: string; name: string; platform?: string; hidden?: boolean; }
+interface Estrutura { name: string; objective: string; adsets: { name: string; ads: number }[]; needsRemap: { pages: string[]; pixels: string[]; instagram: string[]; audiences: number }; }
+interface Resultado { dryRun: boolean; campaign: { id?: string; name: string }; adsets: { name: string; id?: string; error?: string; approximate?: boolean }[]; warnings: string[]; target?: string; }
 
-interface Estrutura {
-  name: string;
-  objective: string;
-  adsets: { name: string; ads: number }[];
-  needsRemap: { pages: string[]; pixels: string[]; instagram: string[]; audiences: number };
-}
-
-interface Resultado {
-  dryRun: boolean;
-  campaign: { id?: string; name: string };
-  adsets: { name: string; id?: string; error?: string; approximate?: boolean }[];
-  warnings: string[];
-  target?: string;
-}
-
-export default function DuplicateCampaign({
-  sourceAccountId,
-  campaignId,
-  campaignName,
-  onClose,
-}: {
-  sourceAccountId: string;
-  campaignId: string;
-  campaignName: string;
-  onClose: () => void;
-}) {
+export default function DuplicateCampaign({ sourceAccountId, campaignId, campaignName, onClose }: { sourceAccountId: string; campaignId: string; campaignName: string; onClose: () => void; }) {
   const [contas, setContas] = useState<Conta[]>([]);
   const [destino, setDestino] = useState("");
   const [estrutura, setEstrutura] = useState<Estrutura | null>(null);
@@ -59,234 +24,132 @@ export default function DuplicateCampaign({
   const [enviando, setEnviando] = useState<"dry" | "real" | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [resultado, setResultado] = useState<Resultado | null>(null);
+  const [agendado, setAgendado] = useState(false);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  // Contas Meta visíveis, menos a própria origem.
-  useEffect(() => {
-    fetch("/api/accounts")
-      .then((r) => r.json())
-      .then((d) => {
-        const lista: Conta[] = (d.accounts || d || []).filter(
-          (c: Conta) =>
-            c.platform !== "google" &&
-            !c.hidden &&
-            c.account_id.replace(/^act_/, "") !== sourceAccountId.replace(/^act_/, "")
-        );
-        setContas(lista);
-      })
-      .catch(() => setErro("Não consegui listar as contas de destino."));
+    fetch("/api/accounts").then(async (r) => { const d = await r.json(); if (r.ok) setContas((d.accounts || []).filter((a: Conta) => a.platform === "meta" && a.account_id !== sourceAccountId && !a.hidden)); }).catch(() => {});
   }, [sourceAccountId]);
 
-  // Ao escolher o destino, lê a estrutura e os ativos daquela conta.
   useEffect(() => {
-    if (!destino) {
-      setEstrutura(null);
-      setAtivos(null);
-      return;
-    }
-    setCarregando(true);
-    setErro(null);
-    setResultado(null);
-    const params = new URLSearchParams({
-      source_account_id: sourceAccountId,
-      campaign_id: campaignId,
-      target_account_id: destino,
-    });
-    fetch(`/api/meta/duplicate?${params}`)
-      .then(async (r) => {
-        const d = await r.json();
-        if (!r.ok || d.error) throw new Error(d.error || `Falha (HTTP ${r.status}).`);
-        return d;
-      })
-      .then((d) => {
-        setEstrutura(d.structure);
-        setAtivos(d.targetAssets);
-        // Um só candidato não é escolha: já vem marcado.
-        setPagina(d.targetAssets?.pages?.length === 1 ? d.targetAssets.pages[0] : "");
-        setPixel(d.targetAssets?.pixels?.length === 1 ? d.targetAssets.pixels[0].id : "");
-      })
-      .catch((e) => setErro(e?.message ?? "Erro ao ler a estrutura."))
-      .finally(() => setCarregando(false));
+    if (!destino) { setEstrutura(null); setAtivos(null); setPagina(""); setPixel(""); return; }
+    setCarregando(true); setErro(null);
+    const params = new URLSearchParams({ source_account_id: sourceAccountId, target_account_id: destino, campaign_id: campaignId });
+    fetch(`/api/account/raw?${params}`, { cache: "no-store" }).then(async (r) => { const d = await r.json(); if (!r.ok || d.error) throw new Error(d.error || "Falha."); setEstrutura(d.structure || null); setAtivos(d.assets || null); const primeiro = d.assets?.pages?.[0] ?? ""; setPagina(primeiro); const primPixel = d.assets?.pixels?.[0]?.id ?? ""; setPixel(primPixel); }).catch((e) => setErro(e.message)).finally(() => setCarregando(false));
   }, [destino, sourceAccountId, campaignId]);
 
-  const precisaPagina = (estrutura?.needsRemap.pages.length || 0) > 0;
-  const precisaPixel = (estrutura?.needsRemap.pixels.length || 0) > 0;
-  // Sem a estrutura lida não dá para saber o que precisa ser remapeado — e
-  // sem saber, "precisaPagina" é falso e o botão liberava um envio sem página.
-  // Enquanto ela não chegar, nada é enviado.
-  const faltando = !estrutura || carregando || (precisaPagina && !pagina) || (precisaPixel && !pixel);
-  const totalAnuncios = (estrutura?.adsets || []).reduce((n, a) => n + a.ads, 0);
-
-  async function enviar(dryRun: boolean) {
-    if (!dryRun) {
-      const ok = window.confirm(
-        `Criar em "${contas.find((c) => c.account_id.replace(/^act_/, "") === destino.replace(/^act_/, ""))?.name || destino}":\n\n`
-        + `• 1 campanha\n• ${estrutura?.adsets.length || 0} conjunto(s)\n\n`
-        + "Tudo PAUSADO. Anúncios e criativos não vão junto.\n\nConfirmar?"
-      );
-      if (!ok) return;
-    }
-    setEnviando(dryRun ? "dry" : "real");
-    setErro(null);
-    setResultado(null);
+  async function duplicar(dryRun: boolean) {
+    if (!destino || !estrutura) return;
+    setEnviando(dryRun ? "dry" : "real"); setErro(null); setResultado(null);
     try {
-      const r = await fetch("/api/meta/duplicate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      const r = await fetch("/api/account/raw", {
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          source_account_id: sourceAccountId,
-          target_account_id: destino,
-          campaign_id: campaignId,
-          // Só manda o que esta campanha realmente precisa remapear. O pixel
-          // vinha junto mesmo em campanha que não usa pixel, porque a conta de
-          // destino só tinha um e ele é pré-selecionado.
-          page_id: precisaPagina ? pagina || undefined : undefined,
-          pixel_id: precisaPixel ? pixel || undefined : undefined,
-          name_suffix: sufixo,
-          dry_run: dryRun,
+          dry_run: dryRun, source_account_id: sourceAccountId, target_account_id: destino,
+          campaign_id: campaignId, campaign_name: estrutura.name,
+          page_id: pagina || null, pixel_id: pixel || null, sufixo: sufixo || null,
         }),
       });
       const d = await r.json();
-      if (!r.ok || d.error) throw new Error(d.error || `Falha (HTTP ${r.status}).`);
+      if (!r.ok || d.error) throw new Error(d.error || "Falha.");
       setResultado(d);
-    } catch (e: any) {
-      setErro(e?.message ?? "Falha na duplicação.");
-    } finally {
-      setEnviando(null);
-    }
+      if (dryRun) setAgendado(false);
+      else setAgendado(true);
+    } catch (e: any) { setErro(e.message); }
+    finally { setEnviando(null); }
   }
 
+  const destinoConta = contas.find((c) => c.account_id === destino);
+  const warnings = resultado?.warnings || [];
+
   return (
-    <div className="ec-modal" role="presentation" onClick={onClose}>
-      <div className="ec-modal__panel" role="dialog" aria-label="Duplicar campanha" onClick={(e) => e.stopPropagation()}>
-        <header className="ec-modal__head">
-          <div>
-            <strong>Duplicar estrutura para outra conta</strong>
-            <small>{campaignName}</small>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/40" onClick={onClose}>
+      <div className="w-full max-w-[620px] max-h-[88vh] flex flex-col rounded-xl border border-border/50 bg-card shadow-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-start gap-3 p-4 border-b border-border/50">
+          <div className="flex-1 min-w-0">
+            <h3 className="text-base font-bold">Duplicar campanha</h3>
+            <p className="text-xs text-muted-foreground mt-0.5 truncate">{campaignName}</p>
           </div>
-          <button className="ec-btn" data-variant="ghost" data-size="sm" onClick={onClose} aria-label="Fechar">✕</button>
-        </header>
+          <button onClick={onClose} className="p-1 text-muted-foreground hover:text-foreground bg-transparent border-none cursor-pointer rounded"><X className="h-4 w-4" /></button>
+        </div>
 
-        <div className="ec-modal__body">
-          <label className="ec-field">
-            <span className="ec-field__label">Conta de destino</span>
-            <select className="ec-input" value={destino} onChange={(e) => setDestino(e.target.value)}>
-              <option value="">— escolher —</option>
-              {contas.map((c) => (
-                <option key={c.account_id} value={c.account_id}>{c.name}</option>
-              ))}
-            </select>
-          </label>
-
-          {carregando && <p className="ec-field__hint">Lendo a estrutura…</p>}
-
-          {estrutura && !carregando && (
-            <>
-              <div className="ec-notice" data-tone="brand">
-                <span>
-                  Vão: <strong>1 campanha</strong> ({estrutura.objective}) e{" "}
-                  <strong>{estrutura.adsets.length} conjunto(s)</strong> com orçamento, agendamento e segmentação.
-                  {totalAnuncios > 0 && (
-                    <>
-                      {" "}Não vão: <strong>{totalAnuncios} anúncio(s)</strong> — criar criativo exige permissão de
-                      publicação na Página, que o token não tem.
-                    </>
-                  )}
-                  {estrutura.needsRemap.audiences > 0 && (
-                    <> Também saem <strong>{estrutura.needsRemap.audiences} público(s) personalizado(s)</strong>, que só existem na conta de origem.</>
-                  )}
-                </span>
-              </div>
-
-              {precisaPagina && (
-                <label className="ec-field">
-                  <span className="ec-field__label">Página do destino</span>
-                  <select className="ec-input" value={pagina} onChange={(e) => setPagina(e.target.value)}>
-                    <option value="">— escolher —</option>
-                    {(ativos?.pages || []).map((p) => <option key={p} value={p}>{p}</option>)}
-                  </select>
-                  <span className="ec-field__hint">
-                    {(ativos?.pages || []).length === 0
-                      ? "Nenhuma página encontrada nos anúncios dessa conta. Sem ela os conjuntos não podem ser criados."
-                      : "Páginas que a conta de destino já usa em anúncios."}
-                  </span>
-                </label>
-              )}
-
-              {precisaPixel && (
-                <label className="ec-field">
-                  <span className="ec-field__label">Pixel do destino</span>
-                  <select className="ec-input" value={pixel} onChange={(e) => setPixel(e.target.value)}>
-                    <option value="">— escolher —</option>
-                    {(ativos?.pixels || []).map((p) => <option key={p.id} value={p.id}>{p.name || p.id}</option>)}
-                  </select>
-                </label>
-              )}
-
-              <label className="ec-field">
-                <span className="ec-field__label">Sufixo no nome</span>
-                <input className="ec-input" value={sufixo} onChange={(e) => setSufixo(e.target.value)} placeholder="[cópia]" />
-                <span className="ec-field__hint">Para não confundir a cópia com a original na lista.</span>
-              </label>
-            </>
-          )}
-
+        {/* Body */}
+        <div className="p-4 overflow-y-auto space-y-4 flex-1">
           {erro && <Notice tone="danger" onDismiss={() => setErro(null)}>{erro}</Notice>}
 
-          {resultado && (
-            <div className="ec-card ec-card--padded">
-              <strong style={{ fontSize: 13 }}>
-                {resultado.dryRun ? "Conferência (nada foi criado)" : `Criado em ${resultado.target}`}
-              </strong>
-              <div style={{ marginTop: 8, fontSize: 12.5 }}>
-                <div>Campanha: {resultado.campaign.name} {resultado.campaign.id ? `· ${resultado.campaign.id}` : ""}</div>
-                {resultado.adsets.map((a, i) => (
-                  <div key={i} style={{ marginTop: 4, color: a.error ? "var(--danger-600)" : "var(--ok-600)" }}>
-                    {a.error ? "✕" : "✓"} {a.name}
-                    {a.error && (
-                      <span style={{ color: "var(--text-muted)" }}>
-                        {" — "}{a.error}
-                        {a.approximate && " (pode ser da campanha usada na conferência, não da cópia)"}
-                      </span>
-                    )}
+          <div className="space-y-2">
+            <label className="grid gap-1"><span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Conta de destino</span>
+              <Select value={destino} onChange={(e) => setDestino(e.target.value)}>
+                <option value="">Selecione a conta…</option>
+                {contas.map((c) => <option key={c.account_id} value={c.account_id}>{c.name}</option>)}
+              </Select>
+            </label>
+
+            {carregando && <div className="flex items-center gap-2 text-sm text-muted-foreground"><span className="h-4 w-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" /> Lendo a estrutura…</div>}
+
+            {estrutura && (
+              <Card><CardContent className="p-3 space-y-2">
+                <div className="flex items-center justify-between"><Badge variant="info" className="text-[10px]">Estrutura encontrada</Badge><span className="text-xs text-muted-foreground">{estrutura.adsets.length} conjunto(s)</span></div>
+                <p className="text-xs font-semibold">{estrutura.name} · {estrutura.objective}</p>
+
+                {estrutura.needsRemap.pages.length > 0 && (
+                  <label className="grid gap-1"><span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Página do destino</span>
+                    <Select value={pagina} onChange={(e) => setPagina(e.target.value)}>{estrutura.needsRemap.pages.map((p) => <option key={p} value={p}>{p}</option>)}</Select>
+                    <span className="text-[10px] text-muted-foreground">A página da conta origem não publica na conta destino. Escolha uma página que você administra na conta de destino.</span>
+                  </label>
+                )}
+
+                {estrutura.needsRemap.pixels.length > 0 && (
+                  <label className="grid gap-1"><span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Pixel do destino</span>
+                    <Select value={pixel} onChange={(e) => setPixel(e.target.value)}>{ativos?.pixels.map((p: any) => <option key={p.id} value={p.id}>{p.name || p.id}</option>)}</Select>
+                  </label>
+                )}
+
+                <label className="grid gap-1"><span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Sufixo no nome</span>
+                  <Input value={sufixo} onChange={(e) => setSufixo(e.target.value)} placeholder="[cópia]" />
+                  <span className="text-[10px] text-muted-foreground">Para não confundir a cópia com a original na lista.</span>
+                </label>
+
+                {estrutura.needsRemap.audiences > 0 && (
+                  <div className="flex items-start gap-2 px-2.5 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-600">
+                    <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                    <span>{estrutura.needsRemap.audiences} público(s) personalizado(s) não serão copiados — eles não existem na conta de destino.</span>
                   </div>
-                ))}
+                )}
+              </CardContent></Card>
+            )}
+          </div>
+
+          {resultado && (
+            <div className="space-y-2">
+              {warnings.length > 0 && warnings.map((w, i) => (
+                <div key={i} className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-600"><Info className="h-3.5 w-3.5 shrink-0 mt-0.5" /><span>{w}</span></div>
+              ))}
+              <div className={cn("flex items-start gap-2 px-3 py-2 rounded-lg text-xs", resultado.dryRun ? "bg-sky-500/10 border border-sky-500/20 text-sky-600" : "bg-emerald-500/10 border border-emerald-500/20 text-emerald-600")}>
+                {resultado.dryRun ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0 mt-0.5" /> : <CheckCircle2 className="h-3.5 w-3.5 shrink-0 mt-0.5" />}
+                <div>
+                  {resultado.dryRun ? "Validação concluída. Nada foi criado." : `Campanha criada com sucesso em ${resultado.target || "destino"}.`}
+                  <span className="block text-muted-foreground mt-0.5">{resultado.adsets.filter((a) => a.id).length} de {resultado.adsets.length} conjuntos criados{resultado.adsets.some((a) => a.approximate) ? " (alguns com orçamento aproximado)" : ""}.</span>
+                </div>
               </div>
-              {resultado.warnings.length > 0 && (
-                <ul style={{ margin: "10px 0 0", paddingLeft: 18, fontSize: 11.5, color: "var(--text-muted)", lineHeight: 1.5 }}>
-                  {resultado.warnings.map((w, i) => <li key={i}>{w}</li>)}
-                </ul>
-              )}
             </div>
           )}
         </div>
 
-        <footer className="ec-modal__foot">
-          <Button variant="ghost" size="sm" onClick={onClose}>Fechar</Button>
-          <span style={{ flex: 1 }} />
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={!destino || faltando || enviando !== null}
-            onClick={() => enviar(true)}
-            title="Pede à Meta que valide sem criar nada"
-          >
-            {enviando === "dry" ? "Conferindo…" : "Conferir"}
-          </Button>
-          <Button
-            variant="primary"
-            size="sm"
-            disabled={!destino || faltando || enviando !== null}
-            onClick={() => enviar(false)}
-          >
-            {enviando === "real" ? "Duplicando…" : "Duplicar (pausado)"}
-          </Button>
-        </footer>
+        {/* Footer */}
+        <div className="flex items-center gap-2 p-3 border-t border-border/50 bg-muted/20 flex-wrap">
+          <Button variant="outline" size="sm" onClick={onClose}>Cancelar</Button>
+          {!resultado?.dryRun && (
+            <Button variant="secondary" size="sm" onClick={() => duplicar(true)} disabled={!destino || !estrutura || enviando !== null || !!resultado} className="text-xs">
+              {enviando === "dry" ? "Validando…" : "Conferir"}
+            </Button>
+          )}
+          {(!resultado || resultado.dryRun) && (
+            <Button variant="default" size="sm" onClick={() => duplicar(false)} disabled={!destino || !estrutura || enviando !== null} className="text-xs">
+              {enviando === "real" ? <><span className="h-3.5 w-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin mr-1" /> Duplicando…</> : resultado?.dryRun ? "Duplicar (tudo pausado)" : "Duplicar"}
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   );
