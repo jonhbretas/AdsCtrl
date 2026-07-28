@@ -155,55 +155,120 @@ function CpaReal() {
   );
 }
 
-/* ======================== BENCHMARK META ADS ======================== */
-const BENCHMARKS = {
-  cpm: { ruim: 20, medio: 12, bom: 6, label: "CPM (R$)", hint: "Custo por mil impressões. Quanto menor, melhor." },
-  ctr: { ruim: 0.5, medio: 1.2, bom: 2.5, label: "CTR (%)", hint: "% de pessoas que clicaram. Quanto maior, melhor." },
-  cpc: { ruim: 3, medio: 1.5, bom: 0.8, label: "CPC (R$)", hint: "Custo por clique. Quanto menor, melhor." },
-  cpa: { ruim: 80, medio: 40, bom: 20, label: "CPA (R$)", hint: "Custo por aquisição. Varia muito por nicho." },
-  roas: { ruim: 1, medio: 3, bom: 6, label: "ROAS (x)", hint: "Retorno sobre investimento. Quanto maior, melhor." },
-  freq: { ruim: 4, medio: 2.5, bom: 1.5, label: "Frequência", hint: "Vezes que a mesma pessoa viu o anúncio. Quanto menor, melhor." },
-};
+/* ======================== BENCHMARK META ADS (Heatmap) ======================== */
+const BENCHMARK_DATA = [
+  { metric: "CPM (R$)", ecommerce: 12.5, leads: 18.0, traffic: 8.5, awareness: 7.0, apps: 20.0, lower: true },
+  { metric: "CTR (%)", ecommerce: 1.8, leads: 2.5, traffic: 3.2, awareness: 0.8, apps: 1.2, lower: false },
+  { metric: "CPC (R$)", ecommerce: 1.2, leads: 1.8, traffic: 0.6, awareness: 0.9, apps: 2.5, lower: true },
+  { metric: "CPA (R$)", ecommerce: 25.0, leads: 35.0, traffic: null, awareness: null, apps: 40.0, lower: true },
+  { metric: "ROAS (x)", ecommerce: 4.0, leads: null, traffic: null, awareness: null, apps: null, lower: false },
+  { metric: "Frequência", ecommerce: 2.0, leads: 2.5, traffic: 1.8, awareness: 3.5, apps: 2.2, lower: true },
+  { metric: "CTR Link (%)", ecommerce: 1.2, leads: 1.5, traffic: 2.8, awareness: 0.5, apps: 0.8, lower: false },
+  { metric: "LPV (%)", ecommerce: 65, leads: 55, traffic: 70, awareness: null, apps: null, lower: false },
+  { metric: "Conversão (%)", ecommerce: 3.0, leads: 8.0, traffic: null, awareness: null, apps: 5.0, lower: false },
+  { metric: "Hook Rate (%)", ecommerce: 25, leads: 30, traffic: 20, awareness: 15, apps: 22, lower: false },
+  { metric: "Hold Rate (%)", ecommerce: 12, leads: 15, traffic: 10, awareness: 8, apps: 11, lower: false },
+];
 
-function BenchmarkCard() {
+function Heat({ value, benchmark, invert }: { value: number | null; benchmark: number | null | undefined; invert?: boolean }) {
+  if (value == null || benchmark == null) return <span className="text-muted-foreground">—</span>;
+  const better = invert ? value < benchmark : value > benchmark;
+  const worse = invert ? value > benchmark * 1.15 : value < benchmark * 0.85;
+  const bg = better ? "bg-emerald-100" : worse ? "bg-red-100" : "bg-amber-50";
+  const txt = better ? "text-emerald-700" : worse ? "text-red-700" : "text-amber-700";
+  return <span className={cn("tabular-nums font-semibold px-1.5 py-0.5 rounded", bg, txt)}>{value.toFixed(1)}</span>;
+}
+
+function BenchmarkTable() {
   const [vals, setVals] = useState<Record<string, string>>({});
+  const [niche, setNiche] = useState("ecommerce");
 
-  function setVal(key: string, v: string) { setVals((p) => ({ ...p, [key]: v })); }
+  const niches = [
+    { key: "ecommerce", label: "E-commerce" },
+    { key: "leads", label: "Geração de Leads" },
+    { key: "traffic", label: "Tráfego" },
+    { key: "awareness", label: "Reconhecimento" },
+    { key: "apps", label: "Aplicativos" },
+  ];
 
   return (
     <Card>
       <CardContent className="p-4 space-y-4">
-        <h4 className="text-sm font-semibold flex items-center gap-2">
-          <BarChart3 className="h-4 w-4 text-primary" /> Benchmark Meta Ads
-        </h4>
-        <p className="text-xs text-muted-foreground">Insira suas métricas para comparar com a média do mercado.</p>
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <h4 className="text-sm font-semibold flex items-center gap-2">
+            <BarChart3 className="h-4 w-4 text-primary" /> Benchmark Meta Ads por Nicho
+          </h4>
+          <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-muted/50 border border-border/50">
+            {niches.map((n) => (
+              <button key={n.key} onClick={() => setNiche(n.key)}
+                className={cn("px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors border-none cursor-pointer",
+                  niche === n.key ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground bg-transparent"
+                )}>{n.label}</button>
+            ))}
+          </div>
+        </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {Object.entries(BENCHMARKS).map(([key, b]) => {
-            const val = parseFloat(vals[key] || "");
-            const isNumber = !isNaN(val) && val > 0;
-            let status = "—";
-            let color = "text-muted-foreground";
-            if (isNumber) {
-              const invertido = key === "cpm" || key === "cpc" || key === "cpa" || key === "freq";
-              if (invertido ? val <= b.bom : val >= b.bom) { status = "✅ Bom"; color = "text-emerald-500"; }
-              else if (invertido ? val <= b.medio : val >= b.medio) { status = "⚡ Mediano"; color = "text-amber-500"; }
-              else { status = "⚠️ Ruim"; color = "text-red-500"; }
-            }
-            return (
-              <div key={key} className="space-y-1 p-3 rounded-lg border border-border/50">
-                <label className="grid gap-1">
-                  <span className="text-xs font-semibold">{b.label}</span>
-                  <input type="number" step="any" value={vals[key] || ""} onChange={(e) => setVal(key, e.target.value)} placeholder="0" className="w-full h-8 rounded-lg border border-input bg-transparent px-3 text-sm" />
-                </label>
-                <div className={cn("flex items-center justify-between text-[11px]", color)}>
-                  <span className="font-semibold">{status}</span>
-                  {isNumber && <span className="text-muted-foreground font-normal">ref: {b.bom} {b.label.split(" ")[0]}</span>}
-                </div>
-                <p className="text-[10px] text-muted-foreground leading-tight">{b.hint}</p>
-              </div>
-            );
-          })}
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-border">
+                <th className="text-left p-2 font-semibold text-muted-foreground uppercase tracking-wider">Métrica</th>
+                <th className="text-center p-2 font-semibold text-primary uppercase tracking-wider">Seu valor</th>
+                <th className="text-center p-2 font-semibold text-muted-foreground uppercase tracking-wider">Benchmark</th>
+                <th className="text-center p-2 font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {BENCHMARK_DATA.map((row) => {
+                const nicheKey = niche as keyof typeof row;
+                const benchVal = row[nicheKey] as number | null;
+                const rawVal = parseFloat(vals[row.metric] || "");
+                const val = isNaN(rawVal) ? null : rawVal;
+                const isRelevant = benchVal != null;
+                let status: "better" | "worse" | "neutral" | null = null;
+                if (val != null && benchVal != null) {
+                  const better = row.lower ? val < benchVal : val > benchVal;
+                  const worse = row.lower ? val > benchVal * 1.15 : val < benchVal * 0.85;
+                  status = better ? "better" : worse ? "worse" : "neutral";
+                }
+                const barW = val != null && benchVal != null
+                  ? Math.min((val / benchVal) * 100, 200)
+                  : 0;
+                return (
+                  <tr key={row.metric} className={cn("border-b border-border/30", !isRelevant && "opacity-40")}>
+                    <td className="p-2 font-semibold whitespace-nowrap">{row.metric}</td>
+                    <td className="p-2">
+                      <input type="number" step="any" value={vals[row.metric] || ""}
+                        onChange={(e) => setVals((p) => ({ ...p, [row.metric]: e.target.value }))}
+                        placeholder="—" className="w-20 h-7 text-center text-xs rounded-md border border-input bg-transparent" />
+                    </td>
+                    <td className="p-2 text-center tabular-nums font-semibold">{isRelevant ? benchVal.toFixed(1) : "—"}</td>
+                    <td className="p-2 text-center">
+                      {isRelevant && status ? (
+                        <span className={cn("inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full",
+                          status === "better" ? "bg-emerald-100 text-emerald-700" :
+                          status === "worse" ? "bg-red-100 text-red-700" : "bg-amber-50 text-amber-700"
+                        )}>
+                          {status === "better" ? "▲ Melhor" : status === "worse" ? "▼ Pior" : "◆ Mediano"}
+                        </span>
+                      ) : val != null && !isRelevant ? (
+                        <span className="text-muted-foreground text-[11px]">—</span>
+                      ) : (
+                        <span className="text-muted-foreground text-[11px]">—</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3 text-[10px] text-muted-foreground pt-2 border-t border-border/50">
+          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-emerald-100 border border-emerald-300" /> Melhor que o benchmark</span>
+          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-amber-50 border border-amber-300" /> Próximo do benchmark</span>
+          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-red-100 border border-red-300" /> Pior que o benchmark</span>
+          <span className="ml-auto text-[10px]">Referências: média do mercado brasileiro (2025-2026).</span>
         </div>
       </CardContent>
     </Card>
@@ -296,9 +361,9 @@ export default function UtilidadesPage() {
         </div>
       </section>
 
-      {/* Benchmarks + Glossário lado a lado */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <BenchmarkCard />
+      {/* Benchmark + Glossário */}
+      <div className="space-y-4">
+        <BenchmarkTable />
         <Glossario />
       </div>
     </div>
