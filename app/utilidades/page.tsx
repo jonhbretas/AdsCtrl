@@ -155,32 +155,56 @@ function CpaReal() {
   );
 }
 
-/* ======================== CHECKLIST ======================== */
-function QuickChecklist() {
-  const items = [
-    "Pixel / Tag de conversão ativo e testado",
-    "Público-alvo definido (lookalike, custom, amplo)",
-    "UTMs padronizadas em todos os links",
-    "Orçamento diário configurado com pacing",
-    "Criativos aprovados e revisados (política)",
-    "Regra de automação ativa (se houver)",
-    "Link de checkout / LP funcional e rápido",
-    "Configuração de conversão (evento padrão)",
-  ];
-  const [checked, setChecked] = useState<Set<number>>(new Set());
+/* ======================== BENCHMARK META ADS ======================== */
+const BENCHMARKS = {
+  cpm: { ruim: 20, medio: 12, bom: 6, label: "CPM (R$)", hint: "Custo por mil impressões. Quanto menor, melhor." },
+  ctr: { ruim: 0.5, medio: 1.2, bom: 2.5, label: "CTR (%)", hint: "% de pessoas que clicaram. Quanto maior, melhor." },
+  cpc: { ruim: 3, medio: 1.5, bom: 0.8, label: "CPC (R$)", hint: "Custo por clique. Quanto menor, melhor." },
+  cpa: { ruim: 80, medio: 40, bom: 20, label: "CPA (R$)", hint: "Custo por aquisição. Varia muito por nicho." },
+  roas: { ruim: 1, medio: 3, bom: 6, label: "ROAS (x)", hint: "Retorno sobre investimento. Quanto maior, melhor." },
+  freq: { ruim: 4, medio: 2.5, bom: 1.5, label: "Frequência", hint: "Vezes que a mesma pessoa viu o anúncio. Quanto menor, melhor." },
+};
+
+function BenchmarkCard() {
+  const [vals, setVals] = useState<Record<string, string>>({});
+
+  function setVal(key: string, v: string) { setVals((p) => ({ ...p, [key]: v })); }
 
   return (
     <Card>
-      <CardContent className="p-4 space-y-1">
-        <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
-          <ClipboardCheck className="h-4 w-4 text-primary" /> Checklist pré-lançamento
+      <CardContent className="p-4 space-y-4">
+        <h4 className="text-sm font-semibold flex items-center gap-2">
+          <BarChart3 className="h-4 w-4 text-primary" /> Benchmark Meta Ads
         </h4>
-        {items.map((item, i) => (
-          <label key={i} className={cn("flex items-center gap-2.5 py-1 text-sm cursor-pointer", checked.has(i) && "line-through text-muted-foreground")}>
-            <input type="checkbox" checked={checked.has(i)} onChange={() => setChecked((s) => { const n = new Set(s); n.has(i) ? n.delete(i) : n.add(i); return n; })} className="accent-primary" />
-            {item}
-          </label>
-        ))}
+        <p className="text-xs text-muted-foreground">Insira suas métricas para comparar com a média do mercado.</p>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {Object.entries(BENCHMARKS).map(([key, b]) => {
+            const val = parseFloat(vals[key] || "");
+            const isNumber = !isNaN(val) && val > 0;
+            let status = "—";
+            let color = "text-muted-foreground";
+            if (isNumber) {
+              const invertido = key === "cpm" || key === "cpc" || key === "cpa" || key === "freq";
+              if (invertido ? val <= b.bom : val >= b.bom) { status = "✅ Bom"; color = "text-emerald-500"; }
+              else if (invertido ? val <= b.medio : val >= b.medio) { status = "⚡ Mediano"; color = "text-amber-500"; }
+              else { status = "⚠️ Ruim"; color = "text-red-500"; }
+            }
+            return (
+              <div key={key} className="space-y-1 p-3 rounded-lg border border-border/50">
+                <label className="grid gap-1">
+                  <span className="text-xs font-semibold">{b.label}</span>
+                  <input type="number" step="any" value={vals[key] || ""} onChange={(e) => setVal(key, e.target.value)} placeholder="0" className="w-full h-8 rounded-lg border border-input bg-transparent px-3 text-sm" />
+                </label>
+                <div className={cn("flex items-center justify-between text-[11px]", color)}>
+                  <span className="font-semibold">{status}</span>
+                  {isNumber && <span className="text-muted-foreground font-normal">ref: {b.bom} {b.label.split(" ")[0]}</span>}
+                </div>
+                <p className="text-[10px] text-muted-foreground leading-tight">{b.hint}</p>
+              </div>
+            );
+          })}
+        </div>
       </CardContent>
     </Card>
   );
@@ -272,9 +296,9 @@ export default function UtilidadesPage() {
         </div>
       </section>
 
-      {/* Checklist + Glossário lado a lado */}
+      {/* Benchmarks + Glossário lado a lado */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <QuickChecklist />
+        <BenchmarkCard />
         <Glossario />
       </div>
     </div>

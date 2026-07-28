@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   CartesianGrid, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis,
 } from "recharts";
@@ -374,6 +374,21 @@ function CreativeTable({ creatives, benchmark, account, sort, onSort, focusAds, 
   onSelect?: (c: Creative) => void;
 }) {
   const m = (v: number) => money(v, account.currency);
+  const [preview, setPreview] = useState<{ src: string; x: number; y: number } | null>(null);
+  const previewTimer = useRef<ReturnType<typeof setTimeout>>();
+
+  function showPreview(src: string, e: React.MouseEvent) {
+    if (previewTimer.current) clearTimeout(previewTimer.current);
+    const rect = (e.target as HTMLElement).getBoundingClientRect();
+    const x = rect.right + 12;
+    const y = Math.min(rect.top, window.innerHeight - 300);
+    setPreview({ src, x, y });
+  }
+
+  function hidePreview(delay = 200) {
+    if (previewTimer.current) clearTimeout(previewTimer.current);
+    previewTimer.current = setTimeout(() => setPreview(null), delay);
+  }
   return (
     <div className="overflow-x-auto">
       <div className="min-w-[1200px]">
@@ -397,7 +412,11 @@ function CreativeTable({ creatives, benchmark, account, sort, onSort, focusAds, 
           const BM = benchmark ? (picker: (cr: Creative) => number | null) => benchmark(c.goal, picker) : null;
           return (
             <div key={c.adId || i} onClick={() => onSelect?.(c)} className={cn("grid gap-2 px-4 py-2.5 border-b border-border/30 items-center text-xs hover:bg-accent/20 transition-colors cursor-pointer", focusAds.has(c.adId) && "bg-amber-500/5")} style={{ gridTemplateColumns: "28px 2fr 80px 80px 100px 80px 70px 70px 80px 70px 80px 80px 80px 80px 1fr" }}>
-              <div>{c.asset.thumbnail ? <img src={c.asset.thumbnail} alt="" className="w-7 h-7 rounded object-cover" /> : <div className="w-7 h-7 rounded bg-muted" />}</div>
+              <div>{c.asset.thumbnail ? <img src={c.asset.thumbnail} alt=""
+                className="w-7 h-7 rounded object-cover cursor-pointer"
+                onMouseEnter={(e) => showPreview(c.asset.thumbnail!, e)}
+                onMouseLeave={() => hidePreview()}
+              /> : <div className="w-7 h-7 rounded bg-muted" />}</div>
               <div className="min-w-0"><div className="text-sm font-semibold truncate" title={c.adName}>{c.adName}</div><div className="text-[10px] text-muted-foreground truncate">{c.campaignName} · {c.adsetName}</div></div>
               <div className="text-right tabular-nums font-medium">{m(c.metrics.spend)}</div>
               <div className="text-right tabular-nums">{num(c.metrics.impressions)}</div>
@@ -416,6 +435,17 @@ function CreativeTable({ creatives, benchmark, account, sort, onSort, focusAds, 
           );
         })}
       </div>
+      {/* Hover preview popup */}
+      {preview && (
+        <div
+          className="fixed z-50 rounded-xl border border-border/50 bg-card shadow-2xl overflow-hidden"
+          style={{ left: preview.x, top: preview.y, width: 280, height: 280 }}
+          onMouseEnter={() => { if (previewTimer.current) clearTimeout(previewTimer.current); }}
+          onMouseLeave={() => hidePreview(0)}
+        >
+          <img src={preview.src} alt="" className="w-full h-full object-contain" />
+        </div>
+      )}
     </div>
   );
 }
