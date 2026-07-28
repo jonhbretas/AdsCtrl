@@ -919,16 +919,9 @@ export default function Dashboard() {
                             status={a.status} balance={a.balance} currency={a.currency} />
                         </CollapsibleSection>
 
-                        {a.platform === "meta" && (
+                        {a.platform === "meta" && linkedGoogle.length > 0 && (
                           <div className="space-y-3">
-                            <h4 className="text-xs font-bold text-sky-600 dark:text-sky-400 uppercase tracking-wider">
-                              Google Ads vinculado ao cliente
-                            </h4>
-                            {linkedGoogle.length === 0 ? (
-                              <div className="px-4 py-3 rounded-lg bg-muted/30 text-sm text-muted-foreground">
-                                Nenhuma conta Google ativa vinculada. Faça o vínculo em Configurações → Contas.
-                              </div>
-                            ) : linkedGoogle.map((google) => {
+                            {linkedGoogle.map((google) => {
                               const gm = accMetrics(google);
                               return (
                                 <div key={google.account_id}>
