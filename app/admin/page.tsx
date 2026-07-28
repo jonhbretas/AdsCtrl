@@ -148,7 +148,7 @@ export default function Admin() {
           </div>
           <div className="overflow-x-auto">
             <div className="min-w-[800px] space-y-1">
-              <div className="grid gap-2 px-3 py-2 rounded-lg border border-border/50 bg-muted/30 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider items-center" style={{ gridTemplateColumns: "70px 1.5fr 90px 1fr 1fr 90px 80px" }}>
+              <div className="grid gap-2 px-3 py-2 rounded-lg border border-border/50 bg-muted/30 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider items-center" style={{ gridTemplateColumns: "60px 1.5fr 80px 1fr 1.2fr 110px 130px" }}>
                 <SortButton column="platform" sort={accountSort} onSort={setAccountSort} align="left">Plat.</SortButton>
                 <SortButton column="name" sort={accountSort} onSort={setAccountSort} align="left">Nome</SortButton>
                 <SortButton column="status" sort={accountSort} onSort={setAccountSort} align="left">Status</SortButton>
@@ -158,7 +158,7 @@ export default function Admin() {
                 <span>Vincular Google</span>
               </div>
               {sortedAccounts.map((a) => (
-                <div key={a.account_id} className="grid gap-2 px-3 py-2 rounded-lg border border-border/30 bg-card text-xs items-center" style={{ gridTemplateColumns: "70px 1.5fr 90px 1fr 1fr 90px 80px" }}>
+                <div key={a.account_id} className="grid gap-2 px-3 py-2 rounded-lg border border-border/30 bg-card text-xs items-center" style={{ gridTemplateColumns: "60px 1.5fr 80px 1fr 1.2fr 110px 130px" }}>
                   <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded text-center", a.platform === "google" ? "bg-sky-500/10 text-sky-600" : "bg-blue-500/10 text-blue-600")}>{a.platform}</span>
                   <span className="font-medium truncate" title={a.name}>{a.name}</span>
                   <span className={cn("text-[10px] font-semibold", a.status === "ACTIVE" ? "text-emerald-500" : "text-muted-foreground")}>{a.status}</span>
@@ -171,10 +171,10 @@ export default function Admin() {
                   </div>
                   <div className="flex justify-end">
                     {a.platform === "google" ? (
-                      <select value={a.linked_meta_account_id || ""} onChange={(e) => linkGoogle(a.account_id, e.target.value)} className="text-[10px] rounded border border-input bg-transparent px-1 py-1 max-w-[120px]" title="Vincular a uma conta Meta">
+                      <select value={a.linked_meta_account_id || ""} onChange={(e) => linkGoogle(a.account_id, e.target.value)} className="text-[10px] rounded border border-input bg-transparent px-1 py-1 w-full max-w-[120px]" title="Vincular a uma conta Meta">
                         <option value="">—</option>{metaAccounts.map((m) => <option key={m.account_id} value={m.account_id}>{m.name}</option>)}
                       </select>
-                    ) : <span className="text-[10px] text-muted-foreground">{a.platform}</span>}
+                    ) : <span className="text-[10px] text-muted-foreground">—</span>}
                   </div>
                 </div>
               ))}
