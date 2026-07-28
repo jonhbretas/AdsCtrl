@@ -3,7 +3,7 @@
 import { createContext, useContext } from "react";
 import { Bar, BarChart, CartesianGrid, ComposedChart, Line, Tooltip, XAxis, YAxis } from "recharts";
 import BrandMark from "@/components/BrandMark";
-import { money, moneyShort, num, pct, dayLabel, resultLabel, pickVal, delta, PURCHASE_KEYS, LINKCLICK_KEYS, RESULT_FAMILY_BY_SLUG } from "@/lib/format";
+import { money, moneyShort, num, pct, dayLabel, resultLabel, pickVal, delta, PURCHASE_KEYS, ATC_KEYS, CHECKOUT_KEYS, LINKCLICK_KEYS, RESULT_FAMILY_BY_SLUG } from "@/lib/format";
 
 const PAGE_W = 700;
 const HALF = (PAGE_W - 14) / 2;
@@ -225,14 +225,19 @@ function MetaSection({ detail, currency, accountName, focus }: { detail: MetaDet
       </Grid>
     </Block>
     {funnel.length > 1 && <Block><Card title="Funil"><Funnel steps={funnel} /></Card></Block>}
-    <Block><Card title="Investimento por dia">
-      <ComposedChart width={fullChart} height={190} data={daily} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={C.line} />
-        <XAxis dataKey="label" tick={{ fontSize: 9.5, fill: C.muted }} tickLine={false} axisLine={false} />
-        <YAxis tick={{ fontSize: 9.5, fill: C.muted }} tickLine={false} axisLine={false} width={54} tickFormatter={(v) => moneyShort(v, currency)} />
-        <Tooltip formatter={(v: any) => money(Number(v), currency)} contentStyle={{ borderRadius: 8, border: `1px solid ${C.line}` }} />
-        <Bar dataKey="spend" name="Investimento" fill={C.blue} radius={[3, 3, 0, 0]} maxBarSize={40} isAnimationActive={false} />
-      </ComposedChart>
+    <Block><Card title="Funil de conversão (e-commerce)">
+      <FunnelChart
+        steps={[
+          { label: "Impressões", value: k.impressions },
+          { label: "Alcance", value: k.reach },
+          { label: "Cliques", value: k.clicks },
+          { label: "Cliques no link", value: linkClicks },
+          { label: "Add to Cart", value: pickVal(k.results, ATC_KEYS) },
+          { label: "Init Checkout", value: pickVal(k.results, CHECKOUT_KEYS) },
+          { label: "Compras", value: purchases },
+        ].filter((s) => s.value > 0)}
+        compact={compact}
+      />
     </Card></Block>
     <Block><div style={{ display: "flex", gap: 12, flexDirection: compact ? "column" : "row" }}>
       <Card title="Cliques e CTR ao longo do tempo">
@@ -316,14 +321,15 @@ function GoogleSection({ block }: { block: GoogleBlock }) {
       <Kpi label="ROAS" value={roas ? mult(roas) : "—"} cur={roas || undefined} prev={prevRoas || undefined} prevText={prevRoas ? mult(prevRoas) : undefined} />
     </Grid>
     {funnel.length > 1 && <Card title="Funil"><Funnel steps={funnel} /></Card>}
-    <Card title="Investimento por dia">
-      <ComposedChart width={fullChart} height={190} data={daily} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={C.line} />
-        <XAxis dataKey="label" tick={{ fontSize: 9.5, fill: C.muted }} tickLine={false} axisLine={false} />
-        <YAxis tick={{ fontSize: 9.5, fill: C.muted }} tickLine={false} axisLine={false} width={54} tickFormatter={(v) => moneyShort(v, cur)} />
-        <Tooltip formatter={(v: any) => money(Number(v), cur)} contentStyle={{ borderRadius: 8, border: `1px solid ${C.line}` }} />
-        <Bar dataKey="spend" name="Investimento" fill={C.google} radius={[3, 3, 0, 0]} maxBarSize={40} isAnimationActive={false} />
-      </ComposedChart>
+    <Card title="Funil de conversão">
+      <FunnelChart
+        steps={[
+          { label: "Impressões", value: gi },
+          { label: "Cliques", value: gc },
+          { label: "Conversões", value: conv },
+        ].filter((s) => s.value > 0)}
+        compact={compact}
+      />
     </Card>
     {e?.campaigns && e.campaigns.length > 0 && <Card title="Campanhas"><GoogleTable rows={e.campaigns.slice(0, 10)} cur={block.currency} /></Card>}
     {e?.keywords && e.keywords.length > 0 && <Card title="Termos de busca"><GoogleTable rows={e.keywords.slice(0, 10)} cur={block.currency} /></Card>}
@@ -364,6 +370,35 @@ function PrintStyles() {
       table { page-break-inside: auto; } tr { page-break-inside: avoid; }
     }
   `}</style>;
+}
+
+function FunnelChart({ steps, compact }: { steps: { label: string; value: number }[]; compact?: boolean }) {
+  const maxVal = Math.max(...steps.map((s) => s.value), 1);
+  const barMaxW = compact ? 200 : 400;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "8px 0" }}>
+      {steps.map((s, i) => {
+        const pct = (s.value / maxVal) * 100;
+        const prevPct = i > 0 ? (steps[i - 1].value / maxVal) * 100 : 100;
+        const drop = prevPct > 0 ? (1 - pct / prevPct) * 100 : 0;
+        const barW = (s.value / maxVal) * barMaxW;
+        const colors = ["#06b6d4", "#0ea5e9", "#3b82f6", "#6366f1", "#8b5cf6", "#a855f7", "#10b981"];
+        return (
+          <div key={s.label} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%" }}>
+            <div style={{ width: compact ? 80 : 110, textAlign: "right", fontSize: compact ? 9 : 10, color: C.muted, flexShrink: 0 }}>{s.label}</div>
+            <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>
+              <div style={{ width: barW, height: 22, borderRadius: 4, background: colors[i % colors.length], display: "flex", alignItems: "center", justifyContent: "center", minWidth: 40, transition: "width 0.3s" }}>
+                <span style={{ fontSize: compact ? 9 : 10, fontWeight: 700, color: "#fff" }}>{num(s.value)}</span>
+              </div>
+            </div>
+            <div style={{ width: 40, textAlign: "right", fontSize: 9, color: i > 0 ? (drop > 20 ? C.red : drop > 5 ? C.amber : C.green) : "transparent" }}>
+              {i > 0 && drop > 0 ? `-${drop.toFixed(0)}%` : ""}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 // Insights humanizados em linguagem de cliente leigo
