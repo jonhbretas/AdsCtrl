@@ -177,6 +177,10 @@ export default function AccountDetail({
   const [changeNote, setChangeNote] = useState<{ text: string; bad?: boolean } | null>(null);
   // Campanha escolhida para duplicar; null = diálogo fechado.
   const [duplicating, setDuplicating] = useState<{ id: string; name: string } | null>(null);
+  const [budgetModal, setBudgetModal] = useState<{ id: string; name: string } | null>(null);
+  const [budgetPct, setBudgetPct] = useState("30");
+  const [budgetDir, setBudgetDir] = useState<"up" | "down">("up");
+  const [budgetLoading, setBudgetLoading] = useState(false);
   const [previewAd, setPreviewAd] = useState<string | null>(null);
   const [tableSort, setTableSort] = usePersistentSort<DetailSortKey>(
     "adsctrl:sort:account-detail",
@@ -604,35 +608,8 @@ export default function AccountDetail({
                       <td style={{ padding: "10px 14px", textAlign: "right", whiteSpace: "nowrap" }}>
                         <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
                           <button className="ec-btn" data-variant="ghost" data-size="sm"
-                            onClick={async () => {
-                              try {
-                                const res = await fetch("/api/account/budget", {
-                                  method: "POST",
-                                  headers: { "Content-Type": "application/json" },
-                                  body: JSON.stringify({ account_id: accountId, level: "campaign", id: r.id, percentual: 0.7 }),
-                                });
-                                const d = await res.json();
-                                if (d.ok) alert(`Orçamento reduzido em ${d.percentual}% (${formatMoney(d.anterior)} → ${formatMoney(d.atual)})`);
-                                else alert(d.error || "Falha ao reduzir.");
-                              } catch {}
-                            }}
-                            title="Reduzir orçamento em 30%"
-                            style={{ color: "#ef4444", fontSize: 10 }}>-30%</button>
-                          <button className="ec-btn" data-variant="ghost" data-size="sm"
-                            onClick={async () => {
-                              try {
-                                const res = await fetch("/api/account/budget", {
-                                  method: "POST",
-                                  headers: { "Content-Type": "application/json" },
-                                  body: JSON.stringify({ account_id: accountId, level: "campaign", id: r.id, percentual: 1.3 }),
-                                });
-                                const d = await res.json();
-                                if (d.ok) alert(`Orçamento aumentado em ${d.percentual}% (${formatMoney(d.anterior)} → ${formatMoney(d.atual)})`);
-                                else alert(d.error || "Falha ao aumentar.");
-                              } catch {}
-                            }}
-                            title="Aumentar orçamento em 30%"
-                            style={{ color: "#22c55e", fontSize: 10 }}>+30%</button>
+                            onClick={() => { setBudgetModal({ id: r.id, name: r.name }); setBudgetPct("30"); setBudgetDir("up"); }}
+                            title="Ajustar orçamento da campanha">Orçamento</button>
                           <button className="ec-btn" data-variant="ghost" data-size="sm"
                             onClick={() => setDuplicating({ id: r.id, name: r.name })}
                             title="Copiar campanha e conjuntos para outra conta de anúncios">⧉</button>
@@ -749,6 +726,52 @@ export default function AccountDetail({
           onMouseLeave={() => setPreviewAd(null)}
         >
           <img src={previewAd} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+        </div>
+      )}
+
+      {/* Modal de ajuste de orçamento */}
+      {budgetModal && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setBudgetModal(null)}>
+          <div style={{ background: "#fff", borderRadius: 16, padding: 24, width: 340, boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>Ajustar orçamento</h3>
+            <p style={{ fontSize: 13, color: "#666", marginBottom: 16 }}>{budgetModal.name}</p>
+
+            <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
+              <button onClick={() => setBudgetDir("up")} style={{ flex: 1, padding: "8px 0", border: `2px solid ${budgetDir === "up" ? "#22c55e" : "#e2e8f0"}`, borderRadius: 10, background: budgetDir === "up" ? "#f0fdf4" : "#fff", color: budgetDir === "up" ? "#22c55e" : "#666", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>↑ Aumentar</button>
+              <button onClick={() => setBudgetDir("down")} style={{ flex: 1, padding: "8px 0", border: `2px solid ${budgetDir === "down" ? "#ef4444" : "#e2e8f0"}`, borderRadius: 10, background: budgetDir === "down" ? "#fef2f2" : "#fff", color: budgetDir === "down" ? "#ef4444" : "#666", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>↓ Reduzir</button>
+            </div>
+
+            <label style={{ display: "grid", gap: 6, marginBottom: 16 }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: "#666" }}>Percentual</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <input type="number" value={budgetPct} onChange={(e) => setBudgetPct(e.target.value)} min={1} max={300} style={{ flex: 1, height: 40, borderRadius: 10, border: "1px solid #d1d5db", padding: "0 12px", fontSize: 16, fontWeight: 700, textAlign: "center" }} />
+                <span style={{ fontSize: 14, fontWeight: 700, color: "#666" }}>%</span>
+              </div>
+            </label>
+
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => setBudgetModal(null)} style={{ flex: 1, height: 40, borderRadius: 10, border: "1px solid #d1d5db", background: "#fff", color: "#666", fontWeight: 600, fontSize: 14, cursor: "pointer" }}>Cancelar</button>
+              <button
+                disabled={budgetLoading || !budgetPct || Number(budgetPct) <= 0}
+                onClick={async () => {
+                  setBudgetLoading(true);
+                  try {
+                    const pct = budgetDir === "up" ? (100 + Number(budgetPct)) / 100 : (100 - Number(budgetPct)) / 100;
+                    const res = await fetch("/api/account/budget", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ account_id: accountId, level: "campaign", id: budgetModal.id, percentual: pct }),
+                    });
+                    const d = await res.json();
+                    if (d.ok) { alert(`Orçamento alterado em ${d.percentual}% (${formatMoney(d.anterior || 0)} → ${formatMoney(d.atual || 0)})`); setBudgetModal(null); }
+                    else alert(d.error || "Falha ao ajustar.");
+                  } catch { alert("Erro ao ajustar orçamento."); }
+                  finally { setBudgetLoading(false); }
+                }}
+                style={{ flex: 1, height: 40, borderRadius: 10, border: "none", background: budgetDir === "up" ? "#22c55e" : "#ef4444", color: "#fff", fontWeight: 700, fontSize: 14, cursor: "pointer", opacity: budgetLoading ? 0.6 : 1 }}
+              >{budgetLoading ? "Ajustando…" : `Confirmar ${budgetDir === "up" ? "aumento" : "redução"}`}</button>
+            </div>
+          </div>
         </div>
       )}
     </div>

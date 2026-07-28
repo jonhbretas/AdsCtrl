@@ -231,47 +231,6 @@ export default function TodayPage() {
         </Card>
       )}
 
-      {/* Budget Quick Adjust */}
-      {data && data.clients.some((c) => c.pacing.budget > 0) && (
-        <Card className="border-dashed border-primary/30">
-          <CardContent className="p-4">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-2">
-              <Wallet className="h-3.5 w-3.5 text-primary" /> Ajuste rápido de orçamento
-              <span className="font-normal text-[10px] text-muted-foreground">(simulação — ajuste manual na plataforma)</span>
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-              {data.clients.filter((c) => c.pacing.budget > 0).slice(0, 9).map((c) => {
-                const atual = c.pacing.budget;
-                const reduzido = atual * 0.7;
-                const aumentado = atual * 1.3;
-                const gastoAteHoje = c.metrics.mtd.spend;
-                const projecao = c.pacing.forecast;
-                const eti = c.pacing.percentOfExpected ?? 0;
-                return (
-                  <div key={c.id} className="p-3 rounded-lg border border-border/50 text-xs space-y-1.5">
-                    <div className="font-semibold truncate">{c.name}</div>
-                    <div className="text-muted-foreground text-[10px]">Orçamento: {currencyMoney(atual, c.currency)}</div>
-                    <div className="text-muted-foreground text-[10px]">Gasto até hoje: {currencyMoney(gastoAteHoje, c.currency)} · {(eti).toFixed(0)}% do ritmo</div>
-                    <div className="flex gap-1 pt-1">
-                      <button
-                        onClick={() => navigator.clipboard.writeText(`${c.name}: reduzir orçamento de ${currencyMoney(atual, c.currency)} para ${currencyMoney(reduzido, c.currency)} (-30%)`)}
-                        className="flex-1 px-2 py-1 rounded text-[10px] font-semibold bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors border-none cursor-pointer"
-                        title="Copiar sugestão de redução"
-                      >-30% ({currencyMoney(reduzido, c.currency)})</button>
-                      <button
-                        onClick={() => navigator.clipboard.writeText(`${c.name}: aumentar orçamento de ${currencyMoney(atual, c.currency)} para ${currencyMoney(aumentado, c.currency)} (+30%)`)}
-                        className="flex-1 px-2 py-1 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 transition-colors border-none cursor-pointer"
-                        title="Copiar sugestão de aumento"
-                      >+30% ({currencyMoney(aumentado, c.currency)})</button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <CockpitKpi label="Investimento no ciclo" value={data.summary.mixedCurrencies ? "Múltiplas moedas" : currencyMoney(data.summary.spend, portfolioCurrency)} sub={data.summary.mixedCurrencies ? "Veja os valores por cliente" : data.summary.budget ? `${portfolioPacing.toFixed(0)}% do orçamento` : "Cadastre os orçamentos"} />
