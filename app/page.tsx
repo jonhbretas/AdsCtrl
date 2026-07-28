@@ -815,6 +815,7 @@ export default function Dashboard() {
               {liveReady && filtered.map((a) => {
                 const g = groupById(a.group_id);
                 const open = !a.hidden && expanded === a.account_id;
+                const dimmed = expanded !== null && !open && !a.hidden;
                 const m = accMetrics(a);
                 const previous = accPrev(a);
                 const liveError = isLive ? live?.errors?.find((item) => item.account_id === a.account_id) : undefined;
@@ -823,7 +824,7 @@ export default function Dashboard() {
                 const linkedGoogle = a.platform === "meta" ? accounts.filter((google) => google.platform === "google" && google.linked_meta_account_id === a.account_id && !google.hidden) : [];
 
                 return (
-                  <div key={a.account_id} className={cn("border-b border-border/30 last:border-b-0", a.hidden && "opacity-55")}>
+                  <div key={a.account_id} className={cn("border-b border-border/30 last:border-b-0 transition-all duration-300", a.hidden && "opacity-55", dimmed && "opacity-5 pointer-events-none")}>
                     <div
                       onClick={() => { if (!a.hidden) setExpanded(open ? null : a.account_id); }}
                       className={cn(
