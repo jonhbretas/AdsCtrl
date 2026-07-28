@@ -89,6 +89,19 @@
   }
 }
 
+/* Card hover effect — mesh glassmorphism na borda */
+.card-hover {
+  transition: box-shadow 0.3s ease, border-color 0.3s ease, transform 0.2s ease;
+}
+.card-hover:hover {
+  border-color: color-mix(in srgb, var(--color-primary) 30%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--color-primary) 15%, transparent),
+    0 4px 20px color-mix(in srgb, var(--color-primary) 8%, transparent),
+    0 1px 3px rgba(0, 0, 0, 0.04);
+  transform: translateY(-1px);
+}
+
 /* Smooth page transitions */
 ::view-transition-old(root),
 ::view-transition-new(root) {

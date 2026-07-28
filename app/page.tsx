@@ -910,8 +910,8 @@ export default function Dashboard() {
                         <OperationalLinks accountId={a.account_id} accountName={a.name} platform={a.platform} balance={a.balance} currency={a.currency} />
                         <AccountChanges accountId={a.account_id} platform={a.platform} since={range.since} until={range.until} />
                         <CollapsibleSection
-                          icon={a.platform === "google" ? "G" : "f"}
-                          title={a.platform === "google" ? "Google Ads" : "Meta Ads"}
+                          icon={a.platform === "google" ? <GoogleIcon /> : <MetaIcon />}
+                          title={a.platform === "google" ? `Google Ads (${a.name})` : `Meta Ads (${a.name})`}
                           subtitle="campanhas, criativos, segmentações"
                           meta={liveError ? "indisponível" : money(m.spend, a.currency)}
                         >
@@ -926,8 +926,8 @@ export default function Dashboard() {
                               return (
                                 <div key={google.account_id}>
                                   <CollapsibleSection
-                                    icon="G"
-                                    title={google.name}
+                                    icon={<GoogleIcon />}
+                                    title={`Google Ads (${google.name})`}
                                     meta={money(gm.spend, google.currency)}
                                     subtitle={`${num(gm.results.conversoes || gm.result || 0)} conversões`}
                                   >
@@ -965,7 +965,7 @@ function KpiCard({ icon: Icon, label, value, trend, invertTrend }: {
 }) {
   const isGood = trend != null ? (invertTrend ? trend < 0 : trend > 0) : null;
   return (
-    <Card className="relative overflow-hidden group">
+    <Card className="relative overflow-hidden group card-hover">
       <CardContent className="p-4">
         <div className="flex items-center justify-between mb-2">
           <span className="text-xs text-muted-foreground font-medium">{label}</span>
@@ -1200,7 +1200,7 @@ function OperationalLinks({ accountId, accountName, platform, balance, currency,
 }
 
 function CollapsibleSection({ icon, title, subtitle, meta, children }: {
-  icon: string;
+  icon: React.ReactNode;
   title: string;
   subtitle: string;
   meta: string;
@@ -1211,7 +1211,7 @@ function CollapsibleSection({ icon, title, subtitle, meta, children }: {
     <div className="rounded-lg border border-border/50 overflow-hidden">
       <button onClick={() => setOpen(!open)}
         className="flex items-center gap-3 w-full px-4 py-3 text-left bg-muted/10 hover:bg-accent/20 transition-colors cursor-pointer border-none">
-        <span className="w-6 h-6 rounded text-xs font-bold grid place-items-center bg-primary/10 text-primary shrink-0">
+        <span className="w-6 h-6 rounded grid place-items-center shrink-0">
           {icon}
         </span>
         <span className="flex-1 min-w-0">
@@ -1223,5 +1223,27 @@ function CollapsibleSection({ icon, title, subtitle, meta, children }: {
       </button>
       {open && <div className="px-4 py-3 border-t border-border/30 space-y-3">{children}</div>}
     </div>
+  );
+}
+
+function MetaIcon() {
+  return (
+    <svg viewBox="0 0 36 36" className="w-6 h-6">
+      <defs><linearGradient id="metaG" x1="50%" x2="50%" y1="0%" y2="100%"><stop offset="0%" stopColor="#0062E0" /><stop offset="100%" stopColor="#19AFFF" /></linearGradient></defs>
+      <rect width="36" height="36" rx="8" fill="url(#metaG)" />
+      <path fill="#fff" d="M24.73 11.3c-2.48 0-4.63 1.47-5.73 3.63-1.1-2.16-3.25-3.63-5.73-3.63-3.56 0-6.45 2.9-6.45 6.46 0 .64.09 1.26.27 1.85.74 2.43 3.14 5.03 6.07 7.19.5.37 1.01.74 1.54 1.11.3.21.6.42.91.63l.33.22c.44.3.82.46 1.06.46.24 0 .62-.16 1.06-.46l.33-.22c.31-.21.61-.42.91-.63.53-.37 1.04-.74 1.54-1.11 2.93-2.16 5.33-4.76 6.07-7.19.18-.59.27-1.21.27-1.85 0-3.56-2.89-6.46-6.45-6.46Z" />
+    </svg>
+  );
+}
+
+function GoogleIcon() {
+  return (
+    <svg viewBox="0 0 36 36" className="w-6 h-6">
+      <rect width="36" height="36" rx="8" fill="#fff" stroke="#e8eaed" strokeWidth="1" />
+      <path fill="#4285F4" d="M25.77 18.2c0-.68-.06-1.34-.17-1.98H18v3.75h4.36a4.46 4.46 0 0 1-1.93 2.93v2.44h3.13c1.83-1.68 2.89-4.16 2.89-7.14Z" />
+      <path fill="#34A853" d="M18 26c2.61 0 4.8-.87 6.4-2.36l-3.13-2.44c-.87.58-1.98.93-3.27.93-2.51 0-4.64-1.7-5.4-3.98H9.38v2.52A9.63 9.63 0 0 0 18 26Z" />
+      <path fill="#FBBC05" d="M12.6 18.15c-.2-.58-.31-1.2-.31-1.85s.11-1.27.31-1.85v-2.52H9.38a9.63 9.63 0 0 0 0 8.74l3.22-2.52Z" />
+      <path fill="#EA4335" d="M18 11.98c1.42 0 2.7.49 3.7 1.45l2.78-2.78C22.97 8.4 20.72 7.4 18 7.4a9.63 9.63 0 0 0-8.62 5.33l3.22 2.52c.76-2.28 2.89-4.27 5.4-4.27Z" />
+    </svg>
   );
 }
