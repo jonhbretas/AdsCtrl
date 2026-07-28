@@ -3,11 +3,12 @@ import { headers } from "next/headers";
 import LoginForm from "./LoginForm";
 import BrandMark from "@/components/BrandMark";
 import { getAuthConfiguration, mayBypassAuthInDevelopment, safeInternalPath } from "@/lib/auth";
+import { appBrandName, appBrandDescription } from "@/lib/brand";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Entrar | Assertivus Dash",
+  title: `Entrar | ${appBrandName()}`,
   robots: { index: false, follow: false },
 };
 
@@ -40,8 +41,8 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         <div className="flex items-center gap-3 mb-6">
           <BrandMark size={40} />
           <div>
-            <div className="text-lg font-semibold text-white">Assertivus Dash</div>
-            <div className="text-xs text-white/60">Cockpit de performance em mídia paga</div>
+            <div className="text-lg font-semibold text-white">{appBrandName()}</div>
+            <div className="text-xs text-white/60">{appBrandDescription()}</div>
           </div>
         </div>
 

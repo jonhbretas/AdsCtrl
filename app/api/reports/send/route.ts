@@ -207,7 +207,7 @@ async function handle(req: Request) {
           link,
           dashboardLink: dashboard,
           dryRun,
-          // Marca do cliente quando configurada; Assertivus por padrão.
+          // Marca do cliente quando configurada; APP_BRAND_NAME por padrão.
           brand: (client as any).brand_name ?? null,
         });
         const sent = await sendEmail({

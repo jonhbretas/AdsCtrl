@@ -167,7 +167,7 @@ export default function TodayPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">{greeting}, Jonathan.</h1>
+          <h1 className="text-2xl font-bold tracking-tight">{greeting}.</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             {critical ? `${critical} situação(ões) crítica(s) exigem atenção.` : "Nenhuma situação crítica detectada."}
           </p>

@@ -1,124 +1,164 @@
-# Ads Dashboard — Overview de mídia paga (Meta + Google Ads)
+# AdsCtrl — Dashboard de mídia paga (Meta + Google Ads)
 
 Dashboard para acompanhar múltiplas contas de anúncio da Meta e Google Ads:
-gasto 7d, agrupamento por cliente, saldo (prepaid), status de conta e alertas
-(sem saldo, cartão recusado, criativo reprovado, queda de gasto).
-
-Um token de System User percorre as contas da Meta e uma autorização OAuth
-single-user percorre as contas vinculadas ao Google Ads MCC.
+gasto 7d, agrupamento por cliente, saldo (prepaid), status de conta, alertas,
+cockpit operacional, quadro de tarefas, laboratório de criativos e relatórios
+semanais automáticos por e-mail.
 
 ## Stack
-- Next.js 16 (App Router, TypeScript) — deploy na Vercel
+- Next.js 16 (App Router, TypeScript, Tailwind CSS v4) — deploy na Vercel
 - Supabase — banco privado (acesso somente pelo servidor)
-- Vercel Cron — coleta automática (1×/dia no plano Hobby; a cada 30 min requer Pro)
+- Vercel Cron — coleta automática 1×/dia
+- Resend — envio de relatórios semanais por e-mail
 
 ## Setup
 
-### 1. Supabase
-1. Crie um projeto em supabase.com (plano free).
-2. Em um projeto novo, rode no SQL Editor, nesta ordem:
-   - `supabase-schema.sql`
-   - `supabase-migration-v2.sql`
-   - `supabase-migration-metrics.sql`
-   - `supabase-migration-alerts.sql`
-   - `supabase-migration-account-links.sql`
-3. Em Settings → API, copie a `URL` e a `service_role key`.
-4. Para atualizar o projeto atual para esta versão, execute/reexecute, nesta ordem:
-   - `supabase-migration-clients.sql`
-   - `supabase-migration-operations.sql`
-   - `supabase-migration-security.sql`
-   - `supabase-migration-tasks.sql` (quadro de tarefas)
-   - `supabase-migration-projects.sql` (projetos com prazo, contexto do alerta na
-     tarefa e histórico do lembrete por e-mail)
+### 1. Supabase — SQL Editor (ordem obrigatória)
+
+Em um projeto novo (ou existente) no Supabase, execute os arquivos SQL abaixo
+**na ordem listada**. Cada migração é aditiva e idempotente:
+
+| # | Arquivo | O que faz |
+|---|---------|-----------|
+| 1 | `supabase-schema.sql` | Tabelas base: grupos, contas, snapshots |
+| 2 | `supabase-migration-v2.sql` | Contas ocultas, períodos 14d/30d |
+| 3 | `supabase-migration-metrics.sql` | Sparkline e série diária de métricas |
+| 4 | `supabase-migration-alerts.sql` | Alertas com "ciente" e histórico |
+| 5 | `supabase-migration-account-links.sql` | Vincula Google Ads a conta Meta |
+| 6 | `supabase-migration-clients.sql` | Fundação da tabela de clientes |
+| 7 | `supabase-migration-operations.sql` | Fatos diários (`daily_account_metrics`) |
+| 8 | `supabase-migration-security.sql` | RLS sem políticas públicas |
+| 9 | `supabase-migration-tasks.sql` | Quadro de tarefas (kanban) |
+| 10 | `supabase-migration-projects.sql` | Projetos com prazo e lembretes |
+| 11 | `supabase-migration-vendas.sql` | Vendas reais por cliente/mês |
+| 12 | `supabase-migration-task-extras.sql` | Comentários e checklists nas tarefas |
+| 13 | `supabase-migration-reports.sql` | Relatório semanal (Resend) |
+| 14 | `supabase-migration-report-cache.sql` | Cache do relatório público |
+| 15 | `supabase-migration-brand.sql` | Marca personalizada por cliente |
+| 16 | `supabase-migration-balance.sql` | Saldo vs fatura em aberto |
+
+**Importante:** para um projeto novo, rode do 1 ao 16 sequencialmente.
+Para atualizar um projeto existente, rode apenas as migrations que faltam,
+sempre da mais antiga para a mais nova.
+
+Após executar, em Settings → API, copie a `URL` e a `service_role key`.
 
 ### 2. Variáveis de ambiente
-Copie `.env.example` para `.env.local` e preencha:
-- `META_ACCESS_TOKEN` — seu token de System User (não expira)
-- `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
-- `CRON_SECRET` — string aleatória qualquer
-- Google Ads: `GOOGLE_ADS_CLIENT_ID`, `GOOGLE_ADS_CLIENT_SECRET`,
-  `GOOGLE_ADS_REFRESH_TOKEN`, `GOOGLE_ADS_DEVELOPER_TOKEN` e
-  `GOOGLE_ADS_LOGIN_CUSTOMER_ID`
-- Acesso privado: `DASHBOARD_PASSWORD` (mín. 12 caracteres) e
-  `SESSION_SECRET` (mín. 32 caracteres aleatórios)
+
+Copie `.env.example` para `.env.local` e preencha todos os campos:
+
+```
+NEXT_PUBLIC_APP_BRAND_NAME     # Nome da sua agência (ex: "Assertivus Dash")
+META_ACCESS_TOKEN              # Token de System User (não expira)
+NEXT_PUBLIC_SUPABASE_URL       # URL do seu projeto Supabase
+SUPABASE_SERVICE_ROLE_KEY       # service_role key do Supabase
+CRON_SECRET                     # String aleatória para o cron
+GOOGLE_ADS_CLIENT_ID            # OAuth client ID
+GOOGLE_ADS_CLIENT_SECRET        # OAuth client secret
+GOOGLE_ADS_REFRESH_TOKEN        # Refresh token OAuth
+GOOGLE_ADS_DEVELOPER_TOKEN      # Developer token
+GOOGLE_ADS_LOGIN_CUSTOMER_ID    # MCC ID
+DASHBOARD_PASSWORD              # Mín. 12 caracteres
+SESSION_SECRET                  # Mín. 32 caracteres aleatórios
+RESEND_API_KEY                  # Chave da API Resend
+REPORT_FROM_EMAIL               # Remetente dos relatórios
+TASK_ALERT_EMAIL                # OBRIGATÓRIO — seu e-mail para lembretes
+```
 
 ### 3. Rodar local
+
 ```bash
 npm install
 npm run dev
 ```
+
 Dispare a primeira coleta manualmente:
 ```bash
 curl -H "Authorization: Bearer SEU_CRON_SECRET" http://localhost:3000/api/collect
 ```
+
 Abra http://localhost:3000
 
 ### 4. Deploy na Vercel
+
 ```bash
 npm i -g vercel
 vercel
 ```
+
 Adicione as mesmas variáveis de ambiente no painel da Vercel.
 O `vercel.json` agenda a coleta 1×/dia (`0 10 * * *` = 07:00 BRT), compatível
 com o plano Hobby. No plano Pro dá para usar `*/30 * * * *` (a cada 30 min).
-Configure o `CRON_SECRET` também como variável para o cron autenticar.
-O detalhe por conta é buscado ao vivo na Meta API (não depende do cron).
 
-## Estrutura
-- `lib/meta.ts` — cliente da Meta Marketing API (contas, insights, reprovados)
-- `lib/google-ads.ts` — cliente REST da Google Ads API (MCC, contas e métricas)
-- `lib/alerts.ts` — motor de alertas
-- `app/api/collect/route.ts` — coleta (cron)
-- `app/api/accounts/route.ts` — leitura para o front
-- `app/page.tsx` — overview matinal
-- `app/today/page.tsx` — cockpit com pacing, metas e prioridades
-- `app/creatives/page.tsx` — Laboratório de Criativos Meta
-- `app/api/cockpit/route.ts` — consolidação operacional por cliente
-- `lib/meta-creatives.ts` — métricas e diagnósticos criativos
+## Estrutura do projeto
 
-## Organizar contas por cliente
+```
+lib/
+  meta.ts              — Cliente da Meta Marketing API
+  google-ads.ts        — Cliente REST da Google Ads API
+  alerts.ts            — Motor de alertas
+  meta-creatives.ts    — Métricas e diagnósticos de criativos
+  resend.ts            — Envio de e-mail (Resend)
+  report-email.ts      — HTML do relatório semanal
+  report-data.ts       — Dados para o relatório
+  report-token.ts      — Links assinados para relatórios públicos
+  task-digest.ts       — Lembrete interno de pendências
+  supabase.ts          — Cliente Supabase (service role)
+  auth.ts              — Autenticação (senha + sessão)
+  brand.ts             — Nome da marca (via env APP_BRAND_NAME)
+  format.ts            — Formatação de valores, moedas, percentuais
+  utils.ts             — Utilitários diversos
+app/
+  api/collect          — Coleta diária (cron)
+  api/accounts         — Leitura de contas para o front
+  api/cockpit          — Consolidação operacional por cliente
+  api/alerts           — Alertas
+  api/tasks            — CRUD de tarefas
+  api/clients          — CRUD de clientes
+  api/reports/send     — Envio semanal de relatórios
+  page.tsx             — Visão geral (overview matinal)
+  today/page.tsx       — Cockpit com pacing, metas e prioridades
+  creatives/page.tsx   — Laboratório de Criativos Meta
+  tarefas/page.tsx     — Quadro de tarefas (kanban)
+  vendas/page.tsx      — ROI por cliente
+  admin/page.tsx       — Configurações (clientes, contas)
+  login/page.tsx       — Tela de login
+  r/[token]/page.tsx   — Relatório público assinado
+  c/[token]/page.tsx   — Painel público do cliente
+components/
+  AppNav.tsx           — Navegação principal
+  BrandMark.tsx        — Logotipo "A" em SVG
+  ReportDocument.tsx   — Documento do relatório (Recharts)
+```
+
+## Uso
+
+### Organizar contas por cliente
 Use `/admin` para configurar clientes, orçamento, objetivo e KPI, e para
-vincular as contas Meta e Google. Os grupos legados continuam disponíveis
-como filtro visual no overview.
+vincular contas Meta e Google.
 
-## Notas sobre a Meta API
-- **Saldo restante** só existe para contas prepaid; contas no cartão pós-pago
-  não expõem "saldo" — nesse caso o alerta de saldo não dispara.
-- O acesso depende das permissões e contas concedidas ao token configurado.
-
-## Seleção de contas
-Use `/admin` para sincronizar Meta/Google e ativar somente as contas desejadas.
-Contas novas entram ocultas. Contas ocultas não têm insights consultados pelo
-cron nem pelo overview ao vivo; ao reativar, voltam a ser coletadas.
-
-## Cockpit e metas
+### Cockpit e metas
 `/today` mostra investimento MTD, orçamento, pacing, projeção de fim do mês,
-saúde dos dados e uma fila priorizada de decisões. Configure objetivo,
-orçamento, KPI principal e meta em `/admin#clients`.
+saúde dos dados e fila priorizada de decisões.
 
-O coletor também grava fatos idempotentes em `daily_account_metrics`; erros de
-uma conta não viram zeros e não resolvem alertas válidos das demais.
+### Laboratório de Criativos
+`/creatives` consulta uma conta Meta por vez e mostra thumbnail, investimento,
+CPM, frequência, hook, hold, outbound CTR, CVR, CPA, ROAS, funil de retenção,
+quadrante e diagnósticos relativos à mediana da conta.
 
-## Laboratório de Criativos
-`/creatives` consulta uma conta Meta por vez e mostra thumbnail, amostra,
-investimento, CPM, frequência, hook, hold, outbound CTR, LPV rate, CVR, CPA,
-ROAS, funil de retenção, quadrante e diagnósticos relativos à mediana da conta.
+### Relatório semanal
+O cron de segunda-feira envia relatório por e-mail para os clientes com
+report_enabled = true. Use `/api/reports/send?dry=1` para testar.
+
+### Lembrete interno de tarefas
+Junto da coleta diária, um e-mail é enviado para `TASK_ALERT_EMAIL` listando
+tarefas atrasadas e projetos no prazo final.
 
 ## Segurança
-Em produção, todas as páginas e APIs exigem a senha do dashboard. O Vercel Cron
-continua usando `Authorization: Bearer CRON_SECRET`. Sem as variáveis de
-autenticação, produção retorna uma tela de configuração em vez de expor dados.
-`supabase-migration-security.sql` ativa RLS sem políticas públicas; a service
-role usada pelas APIs do servidor continua funcionando.
+Todas as páginas e APIs exigem autenticação (DASHBOARD_PASSWORD + sessão).
+O Vercel Cron usa `Authorization: Bearer CRON_SECRET`. O Supabase tem RLS
+ativado sem políticas públicas — o acesso é exclusivamente via service role.
 
-## Vincular Google a um cliente Meta
-Rode `supabase-migration-account-links.sql` no SQL Editor do Supabase. Depois,
-em `/admin`, escolha para cada conta Google qual conta Meta representa o cliente.
-O overview abre inicialmente em “Meta / Clientes”; ao expandir um cliente Meta,
-as contas Google ativas vinculadas aparecem ao final. O filtro “Google Ads”
-permite analisar as contas Google separadamente.
-
-## Próximos passos sugeridos
-- Inteligência de termos de pesquisa e negativas no Google Ads
-- Histórico de decisões e anotações por cliente
-- Relatório executivo automático por cliente
+## Personalização da marca
+Defina `NEXT_PUBLIC_APP_BRAND_NAME` no .env para substituir "AdsCtrl" pelo
+nome da sua agência em todo o dashboard, relatórios e e-mails.

@@ -20,6 +20,7 @@ import {
   DollarSign,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { appBrandName } from "@/lib/brand";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -127,7 +128,7 @@ export default function AppNav() {
             A
           </div>
           <div>
-            <div className="text-sm font-semibold text-foreground">Assertivus</div>
+            <div className="text-sm font-semibold text-foreground">{appBrandName()}</div>
             <div className="text-[10px] text-muted-foreground leading-tight">Dash</div>
           </div>
         </div>
@@ -157,7 +158,7 @@ export default function AppNav() {
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent side="right" align="end" className="w-48">
-              <DropdownMenuLabel>Assertivus Dash</DropdownMenuLabel>
+              <DropdownMenuLabel>{appBrandName()} Dash</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
                 {theme === "dark" ? "☀️" : "🌙"} {theme === "dark" ? "Modo claro" : "Modo escuro"}
@@ -180,7 +181,7 @@ export default function AppNav() {
           <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white text-[10px] font-bold">
             A
           </div>
-          <span className="text-sm font-semibold">Assertivus</span>
+          <span className="text-sm font-semibold">{appBrandName()}</span>
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -211,7 +212,7 @@ export default function AppNav() {
                 <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white text-[10px] font-bold">
                   A
                 </div>
-                <span className="text-sm font-semibold">Assertivus</span>
+                <span className="text-sm font-semibold">{appBrandName()}</span>
               </div>
               <button onClick={() => setSidebarOpen(false)} className="p-1 text-muted-foreground">
                 <X className="h-5 w-5" />

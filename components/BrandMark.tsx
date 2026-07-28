@@ -1,5 +1,5 @@
 // components/BrandMark.tsx
-// Símbolo da Assertivus: o "A" desenhado em vetor (não em fonte), igual ao
+// Símbolo da marca: o "A" desenhado em vetor (não em fonte), igual ao
 // favicon em app/icon.svg — assim a marca sai idêntica na tela, no PDF e em
 // qualquer máquina, sem depender de fonte instalada.
 
@@ -18,7 +18,7 @@ export default function BrandMark({
       height={size}
       viewBox="0 0 100 100"
       role="img"
-      aria-label="Assertivus"
+      aria-label="AdsCtrl"
       style={{ display: "block", flexShrink: 0 }}
     >
       <rect width="100" height="100" rx="22" fill={background} />

@@ -3,6 +3,7 @@ import "./components.css";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import AppNav from "@/components/AppNav";
+import { appBrandName, appBrandDescription } from "@/lib/brand";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -16,10 +17,12 @@ const jetbrains = JetBrains_Mono({
   display: "swap",
 });
 
-export const metadata = {
-  title: "Assertivus Dash",
-  description: "Cockpit de performance em mídia paga",
-};
+export function generateMetadata() {
+  return {
+    title: appBrandName(),
+    description: appBrandDescription(),
+  };
+}
 
 export const viewport = {
   width: "device-width",

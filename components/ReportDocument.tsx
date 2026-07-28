@@ -4,6 +4,7 @@ import { createContext, useContext } from "react";
 import { Bar, BarChart, CartesianGrid, ComposedChart, Line, Tooltip, XAxis, YAxis, Area, AreaChart, Pie, PieChart, Cell, Legend } from "recharts";
 import BrandMark from "@/components/BrandMark";
 import { money, moneyShort, num, pct, dayLabel, resultLabel, pickVal, delta, PURCHASE_KEYS, ATC_KEYS, CHECKOUT_KEYS, LINKCLICK_KEYS, RESULT_FAMILY_BY_SLUG } from "@/lib/format";
+import { appBrandName } from "@/lib/brand";
 
 const PAGE_W = 700;
 const HALF = (PAGE_W - 14) / 2;
@@ -73,7 +74,7 @@ function primaryRowResult(row: Row, focus: Focus | null): { label: string; value
 export default function ReportDocument({ data, compact = false, width }: { data: ReportPayload; compact?: boolean; width?: number; }) {
   const w = compact ? Math.max(280, width ?? 340) : PAGE_W;
   const { meta, google, range, prevRange, account } = data;
-  const brand = (data.brand || "").trim() || "Assertivus";
+  const brand = (data.brand || "").trim() || appBrandName();
   const cur = account.currency || "BRL";
   const m = (v: number, digits = 2) => money(v, cur, digits);
   const metaOk = meta && !meta.error;

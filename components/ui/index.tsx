@@ -1,7 +1,6 @@
 "use client";
 
-// components/ui/index.tsx — shadcn-based rewrite of the old Ectolab UI.
-// All old pages import from here. Now they get modern shadcn components.
+// Wrappers shadcn/ui para compatibilidade com componentes legados.
 
 import React from "react";
 import { cn } from "@/lib/utils";

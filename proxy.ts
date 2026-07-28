@@ -7,6 +7,7 @@ import {
   safeInternalPath,
   verifySessionToken,
 } from "@/lib/auth";
+import { appBrandName } from "@/lib/brand";
 
 const LOGIN_PAGE = "/login";
 const LOGIN_API = "/api/auth/login";
@@ -103,7 +104,7 @@ export async function proxy(request: NextRequest) {
         status: 401,
         headers: {
           "Cache-Control": "no-store",
-          "WWW-Authenticate": 'Cookie realm="Assertivus Dash"',
+          "WWW-Authenticate": `Cookie realm="${appBrandName()}"`,
         },
       }
     );

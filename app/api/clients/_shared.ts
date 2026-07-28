@@ -166,7 +166,7 @@ export function clientPatchFromBody(body: unknown, creating = false): Record<str
     patch.report_enabled = input.report_enabled;
   }
 
-  // Marca que o CLIENTE vê (relatório, painel e e-mail). Vazio = Assertivus.
+  // Marca que o CLIENTE vê (relatório, painel e e-mail). Vazio = APP_BRAND_NAME.
   if (Object.prototype.hasOwnProperty.call(input, "brand_name")) {
     patch.brand_name = nullableText(input.brand_name, "brand_name", 60);
   }

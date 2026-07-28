@@ -6,6 +6,7 @@
 // desempenho ruim de ausência de amostra.
 
 import { CONVERSION_FAMILIES } from "./meta";
+import { appBrandName } from "./brand";
 
 const GRAPH = "https://graph.facebook.com/v25.0";
 
@@ -897,7 +898,7 @@ function diagnose(
       tone: "neutral",
       title: "Aguarde mais dados",
       detail:
-        "O Assertivus Dash preservou as métricas, mas não recomenda uma decisão com esta amostra.",
+        `O ${appBrandName()} preservou as métricas, mas não recomenda uma decisão com esta amostra.`,
       evidence: [
         `${metrics.impressions.toLocaleString("pt-BR")} impressões`,
         video.isVideo

@@ -41,7 +41,7 @@ export default function PublicReportPage() {
       <div className="no-print max-w-[740px] mx-auto px-4 pt-5 pb-0 flex items-center gap-2.5 flex-wrap">
         <BrandMark size={22} />
         <span className="text-xs text-muted-foreground">
-          Relatório de mídia paga · {(data?.brand || "").trim() || "Assertivus"}
+          Relatório de mídia paga · {(data?.brand || "").trim() || process.env.NEXT_PUBLIC_APP_BRAND_NAME || "AdsCtrl"}
         </span>
         <div className="flex-1" />
         <ModeToggle compact={compact} onChange={choose} />

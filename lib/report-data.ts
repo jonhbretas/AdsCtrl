@@ -33,7 +33,7 @@ export async function resultFamilyForAccount(accountId: string): Promise<string 
 
 export interface ClientReportSettings {
   result_family: string | null;
-  /** Marca que assina o que o cliente vê. Nulo = Assertivus. */
+  /** Marca que assina o que o cliente vê. Nulo = usa APP_BRAND_NAME. */
   brand: string | null;
 }
 

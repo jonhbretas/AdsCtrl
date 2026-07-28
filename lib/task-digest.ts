@@ -16,6 +16,7 @@
 import { appBaseUrl } from "./report-token";
 import { looksLikeEmail, resendIssues, sendEmail } from "./resend";
 import { getServiceClient, supabaseEnvMissing } from "./supabase";
+import { appBrandName } from "./brand";
 
 const INK = "#12161f";
 const MUTED = "#6f7787";
@@ -25,13 +26,12 @@ const AMBER = "#8a6117";
 const BLUE = "#2f6fe4";
 const FONT = "Arial, Helvetica, sans-serif";
 
-// O destinatário é fixo por natureza: este e-mail é o meu despertador. A env
-// existe para trocar sem deploy, não para virar lista.
-const DEFAULT_RECIPIENT = "jonathanbretas@gmail.com";
-
 export function digestRecipient(): string {
   const configured = (process.env.TASK_ALERT_EMAIL || "").trim();
-  return looksLikeEmail(configured) ? configured : DEFAULT_RECIPIENT;
+  if (!looksLikeEmail(configured)) {
+    throw new Error("TASK_ALERT_EMAIL não configurado. Defina no .env o e-mail que receberá os lembretes de tarefas.");
+  }
+  return configured;
 }
 
 export interface DigestTask {
@@ -281,7 +281,7 @@ export function renderTaskDigestEmail(digest: TaskDigest): {
            style="width:600px;max-width:100%;background:#ffffff;border-radius:12px;border:1px solid ${LINE};">
       <tr><td style="padding:22px 22px 4px;">
         <div style="font-size:10px;font-weight:bold;letter-spacing:1.2px;text-transform:uppercase;color:${MUTED};font-family:${FONT};">
-          Assertivus Dash · lembrete interno
+          ${escapeHtml(appBrandName())} · lembrete interno
         </div>
         <div style="font-size:22px;font-weight:bold;color:${INK};font-family:${FONT};padding:6px 0 2px;">
           O que precisa sair hoje

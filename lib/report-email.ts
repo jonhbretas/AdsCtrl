@@ -6,6 +6,7 @@
 
 import { money, num, pct, pickVal, PURCHASE_KEYS, LINKCLICK_KEYS, RESULT_FAMILY_BY_SLUG } from "./format";
 import type { ReportPayloadData } from "./report-data";
+import { appBrandName } from "./brand";
 
 const INK = "#12161f";
 const MUTED = "#6f7787";
@@ -170,9 +171,7 @@ export function renderReportEmail(
   options: { clientName: string; link: string; dashboardLink?: string; dryRun?: boolean; brand?: string | null }
 ): ReportEmail {
   const currency = report.account.currency || "BRL";
-  // Assertivus é o padrão da entrega; a marca do cliente sobrescreve quando
-  // configurada (clients.brand_name).
-  const brand = (options.brand || "").trim() || "Assertivus";
+  const brand = (options.brand || "").trim() || appBrandName();
   const m = (v: number) => money(v, currency);
   const meta: any = report.meta && !report.meta.error ? report.meta : null;
   const k = meta?.kpis;
