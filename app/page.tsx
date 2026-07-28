@@ -1,29 +1,37 @@
 "use client";
 
-// app/page.tsx — Visão geral (overview) das contas de anúncio Meta.
-// Topo: grupos + filtros + período. Esquerda: alertas. Centro: tabela expansível.
-//
-// Período: HOJE / 7D / 14D / 30D + personalizado.
-// Todos os períodos visíveis são buscados ao vivo para que o resumo e o
-// detalhe expandido usem a mesma consolidação da plataforma.
-
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import {
+  RefreshCw,
+  Download,
+  MoreHorizontal,
+  AlertTriangle,
+  Info,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  Eye,
+  EyeOff,
+  ChevronDown,
+  ChevronUp,
+  Search,
+  DollarSign,
+  Target,
+  BarChart3,
+  Wallet,
+  Activity,
+  Menu,
+  X,
+  ExternalLink,
+  Copy,
+  Check,
+  Settings,
+  ArrowUpRight,
+  ArrowDownRight,
+} from "lucide-react";
 import AccountDetail from "@/components/AccountDetail";
 import AccountChanges from "@/components/AccountChanges";
-import {
-  Badge,
-  Button,
-  Collapsible,
-  Input,
-  Menu,
-  Notice,
-  PageHeader,
-  Segmented,
-  Select,
-  Skeleton,
-  SkeletonCard,
-} from "@/components/ui";
 import {
   compareSortValues,
   SortButton,
@@ -31,14 +39,28 @@ import {
   usePersistentSort,
 } from "@/components/SortableHeader";
 import { money, num, delta, RESULT_FAMILIES, RESULT_FAMILY_BY_SLUG } from "@/lib/format";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface Metrics {
   spend: number;
   conversions: number;
   purchases?: number;
-  purchase_value?: number; // snapshot (cache)
-  value?: number; // overview ao vivo
-  results?: Record<string, number> | null; // por família (vendas/mensagens/...)
+  purchase_value?: number;
+  value?: number;
+  results?: Record<string, number> | null;
   cpc?: number;
   daily?: { date: string; spend: number }[] | null;
 }
@@ -70,9 +92,6 @@ interface Account {
   currency: string;
   status: string;
   balance: number | null;
-  // Separa o que é saldo do que é dívida: em conta pré-paga vale `balance`
-  // (saldo restante); em conta de cartão/PayPal vale `unbilled_amount`
-  // (gasto ainda não faturado). Nulo = ainda não classificada pela coleta.
   is_prepaid?: boolean | null;
   unbilled_amount?: number | null;
   group_id: string | null;
@@ -97,28 +116,9 @@ interface LiveOverview {
   errors?: { account_id: string; platform: string; message: string }[];
 }
 
-const LEVEL_LABEL: Record<string, string> = {
-  critical: "Crítico",
-  warning: "Atenção",
-  info: "Info",
-};
-
 type Period = "today" | "7d" | "14d" | "30d" | "custom";
-type AccountSortKey =
-  | "name"
-  | "channels"
-  | "trend"
-  | "spend"
-  | "result"
-  | "balance";
-const ACCOUNT_SORT_KEYS: readonly AccountSortKey[] = [
-  "name",
-  "channels",
-  "trend",
-  "spend",
-  "result",
-  "balance",
-];
+type AccountSortKey = "name" | "channels" | "trend" | "spend" | "result" | "balance";
+const ACCOUNT_SORT_KEYS: readonly AccountSortKey[] = ["name", "channels", "trend", "spend", "result", "balance"];
 const PRESETS: { key: Period; label: string }[] = [
   { key: "today", label: "Hoje" },
   { key: "7d", label: "7D" },
@@ -126,14 +126,12 @@ const PRESETS: { key: Period; label: string }[] = [
   { key: "30d", label: "30D" },
 ];
 
-// Data (yyyy-mm-dd) "n" dias atrás, em UTC — igual ao cron, para casar com o cache.
 function isoDaysAgo(n: number) {
   const d = new Date();
   d.setUTCDate(d.getUTCDate() - n);
   return d.toISOString().slice(0, 10);
 }
 
-// Janela (since/until) de cada período. Presets terminam ONTEM.
 function rangeForPeriod(period: Period, customSince: string, customUntil: string) {
   const today = isoDaysAgo(0);
   switch (period) {
@@ -149,6 +147,23 @@ const PERIOD_SHORT: Record<Period, string> = { today: "hoje", "7d": "7d", "14d":
 
 function initials(name: string) {
   return name.trim().charAt(0).toUpperCase() || "?";
+}
+
+function Sparkline({ points, color = "#22d3ee", width = 72, height = 22 }: { points: number[]; color?: string; width?: number; height?: number }) {
+  if (!points || points.length < 2) return <div style={{ width, height }} />;
+  const max = Math.max(...points, 1);
+  const min = Math.min(...points, 0);
+  const span = max - min || 1;
+  const step = width / (points.length - 1);
+  const coords = points.map((v, i) => [i * step, height - ((v - min) / span) * (height - 4) - 2]);
+  const path = coords.map(([x, y], i) => `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+  const area = `${path} L${width},${height} L0,${height} Z`;
+  return (
+    <svg width={width} height={height} className="block">
+      <path d={area} fill={color + "18"} />
+      <path d={path} fill="none" stroke={color} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
 }
 
 export default function Dashboard() {
@@ -178,8 +193,6 @@ export default function Dashboard() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [acking, setAcking] = useState<number | null>(null);
   const [live, setLive] = useState<LiveOverview | null>(null);
-  // Métricas das contas Google vinculadas, buscadas sob demanda ao abrir a
-  // conta Meta. Fora daqui elas não entram no overview, que é por plataforma.
   const [linkedLive, setLinkedLive] = useState<Record<string, Metrics>>({});
   const [liveLoading, setLiveLoading] = useState(false);
   const [tableSort, setTableSort] = usePersistentSort<AccountSortKey>(
@@ -197,7 +210,6 @@ export default function Dashboard() {
   const periodKey = period === "7d" || period === "14d" || period === "30d" ? period : null;
   const liveReady = !isLive || !!live;
 
-  // Forma normalizada (cache usa purchase_value; live usa value).
   type M = { spend: number; conversions: number; value: number; results: Record<string, number>; result: number; daily: { date: string; spend: number }[] };
   const norm = (m?: Metrics | PrevMetrics | null): M => {
     const results = m?.results || {};
@@ -206,16 +218,12 @@ export default function Dashboard() {
       conversions: m?.conversions || 0,
       value: (m as Metrics)?.value ?? m?.purchase_value ?? 0,
       results,
-      result: results[focus] || 0, // resultado do foco selecionado
+      result: results[focus] || 0,
       daily: (m as Metrics)?.daily || [],
     };
   };
 
-  // Métricas da conta no período selecionado (cache p/ presets, live p/ hoje/custom).
   function accMetrics(a: Account): M {
-    // linkedLive cobre a conta Google mostrada DENTRO de uma conta Meta: a
-    // busca ao vivo é filtrada por plataforma, então com o filtro em Meta ela
-    // não traz Google e aquele resumo ficava em R$ 0,00.
     if (isLive) return norm(live?.metrics?.[a.account_id] || linkedLive[a.account_id]);
     return norm((periodKey && a.metricsByPeriod?.[periodKey]) || a.metrics);
   }
@@ -252,16 +260,10 @@ export default function Dashboard() {
     if (requested?.status !== "ACTIVE") setOnlyActive(false);
     if (requested?.hidden) setShowHidden(true);
     setExpanded(requestedAccount);
-    window.setTimeout(() => {
-      document.getElementById(`account-${requestedAccount}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 0);
   }, [accounts]);
 
-  useEffect(() => {
-    load();
-  }, []);
+  useEffect(() => { load(); }, []);
 
-  // Busca overview ao vivo quando o período é HOJE ou personalizado.
   useEffect(() => {
     if (!isLive) { setLive(null); return; }
     if (period === "custom" && (!range.since || !range.until || range.since > range.until)) return;
@@ -279,13 +281,8 @@ export default function Dashboard() {
       .catch(() => { if (alive) setLive({ range, metrics: {}, prev: {} }); })
       .finally(() => { if (alive) setLiveLoading(false); });
     return () => { alive = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [period, range.since, range.until, platformFilter]);
 
-  // Ao abrir uma conta Meta, busca as métricas das contas Google vinculadas a
-  // ela. O overview é filtrado por plataforma e nunca as traz junto — por isso
-  // o resumo "Google Ads vinculado ao cliente" aparecia zerado mesmo com a
-  // conta faturando. Só as vinculadas àquela conta, e só quando ela é aberta.
   useEffect(() => {
     if (!expanded) return;
     const aberta = accounts.find((a) => a.account_id === expanded);
@@ -295,27 +292,16 @@ export default function Dashboard() {
       .map((g) => g.account_id)
       .filter((id) => !live?.metrics?.[id] && !linkedLive[id]);
     if (!ids.length) return;
-
     let alive = true;
-    const params = new URLSearchParams({
-      since: range.since,
-      until: range.until,
-      accounts: ids.join(","),
-    });
+    const params = new URLSearchParams({ since: range.since, until: range.until, accounts: ids.join(",") });
     fetch(`/api/accounts/overview?${params}`)
       .then((r) => r.json())
-      .then((d) => {
-        if (alive && d?.metrics) setLinkedLive((prev) => ({ ...prev, ...d.metrics }));
-      })
-      .catch(() => { /* o resumo continua em branco; o detalhe abaixo tem o dado */ });
+      .then((d) => { if (alive && d?.metrics) setLinkedLive((prev) => ({ ...prev, ...d.metrics })); })
+      .catch(() => {});
     return () => { alive = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expanded, accounts, range.since, range.until]);
 
-  // Período novo invalida o que foi buscado para o período antigo.
-  useEffect(() => {
-    setLinkedLive({});
-  }, [range.since, range.until]);
+  useEffect(() => { setLinkedLive({}); }, [range.since, range.until]);
 
   async function refresh() {
     setRefreshing(true);
@@ -325,15 +311,12 @@ export default function Dashboard() {
         const r = await fetch(`/api/accounts/overview?since=${range.since}&until=${range.until}&platform=${platformFilter}`);
         const t = await r.text();
         setLive(t ? JSON.parse(t) : null);
-      } catch { /* silencioso */ }
+      } catch { /* silent */ }
     }
     if (alertTab === "history") await loadHistory();
     setRefreshing(false);
   }
 
-  // Dispara a coleta (insights + alertas) na hora, sem esperar o cron. Coletar
-  // uma plataforma só é seguro: o fechamento de alerta é feito conta a conta,
-  // sobre as processadas na rodada — o que ficou de fora não é tocado.
   async function collectNow(platform: "all" | "meta" | "google" = "all") {
     if (collecting) return;
     setCollecting(true);
@@ -348,11 +331,7 @@ export default function Dashboard() {
       const d = await r.json();
       if (!r.ok || d.error) throw new Error(d.error || `Falha (HTTP ${r.status}).`);
       await load();
-      setSyncMsg(
-        `Coleta concluída: ${d.accounts} conta(s), ${d.alerts} alerta(s)`
-        + (d.failed ? `, ${d.failed} falha(s)` : "")
-        + ` em ${(d.took_ms / 1000).toFixed(0)}s.`
-      );
+      setSyncMsg(`Coleta concluída: ${d.accounts} conta(s), ${d.alerts} alerta(s)` + (d.failed ? `, ${d.failed} falha(s)` : "") + ` em ${(d.took_ms / 1000).toFixed(0)}s.`);
     } catch (e: any) {
       setSyncMsg(e?.message ?? "Erro na coleta.");
     } finally {
@@ -360,13 +339,9 @@ export default function Dashboard() {
     }
   }
 
-  // Puxa o catálogo; contas novas entram ocultas. A plataforma é escolhida
-  // porque quase sempre a conta nova está em UMA delas: varrer as duas gasta
-  // o dobro de chamada e de tempo de função para descobrir o mesmo.
   async function syncAccounts(platform: "all" | "meta" | "google" = "all") {
     setSyncing(true);
     setSyncMsg(null);
-    const escopo = platform === "meta" ? "no Meta" : platform === "google" ? "no Google" : "nas plataformas";
     try {
       const r = await fetch("/api/accounts/sync", {
         method: "POST",
@@ -376,11 +351,7 @@ export default function Dashboard() {
       const d = await r.json();
       if (!r.ok || d.error) throw new Error(d.error || `Falha (HTTP ${r.status}).`);
       await load();
-      setSyncMsg(
-        d.added > 0
-          ? `+${d.added} conta(s) nova(s): ${d.addedNames.join(", ")}`
-          : `Nenhuma conta nova. ${d.total} contas acessíveis ${escopo}.`
-      );
+      setSyncMsg(d.added > 0 ? `+${d.added} conta(s) nova(s): ${d.addedNames.join(", ")}` : `Nenhuma conta nova. ${d.total} contas acessíveis.`);
     } catch (e: any) {
       setSyncMsg(e?.message ?? "Erro ao sincronizar.");
     } finally {
@@ -394,18 +365,11 @@ export default function Dashboard() {
       const r = await fetch("/api/alerts?scope=history");
       const d = await r.json();
       setHistory(d.alerts || []);
-    } catch {
-      /* silencioso */
-    } finally {
-      setHistoryLoading(false);
-    }
+    } catch { /* silent */ } finally { setHistoryLoading(false); }
   }
 
-  useEffect(() => {
-    if (alertTab === "history") loadHistory();
-  }, [alertTab]);
+  useEffect(() => { if (alertTab === "history") loadHistory(); }, [alertTab]);
 
-  // Marca/desmarca "ciente". Ao marcar, o alerta sai dos ativos e vai p/ histórico.
   async function setAck(id: number, acknowledged: boolean) {
     setAcking(id);
     try {
@@ -420,12 +384,9 @@ export default function Dashboard() {
         setHistory((prev) => prev.filter((a) => a.id !== id));
         await load();
       }
-    } finally {
-      setAcking(null);
-    }
+    } finally { setAcking(null); }
   }
 
-  // Oculta/reexibe uma conta (persistido no Supabase).
   async function toggleHidden(id: string, hidden: boolean) {
     setAccounts((prev) => prev.map((a) => (a.account_id === id ? { ...a, hidden } : a)));
     try {
@@ -435,22 +396,15 @@ export default function Dashboard() {
         body: JSON.stringify({ account_id: id, hidden }),
       });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok || payload.error) {
-        throw new Error(payload.error || `Falha ao atualizar conta (HTTP ${response.status}).`);
-      }
-    } catch {
-      await load();
-    }
+      if (!response.ok || payload.error) throw new Error(payload.error || `Falha ao atualizar conta.`);
+    } catch { await load(); }
   }
 
   const hiddenCount = useMemo(() => accounts.filter((a) => a.hidden).length, [accounts]);
-  const platformCounts = useMemo(
-    () => ({
-      meta: accounts.filter((a) => a.platform !== "google").length,
-      google: accounts.filter((a) => a.platform === "google").length,
-    }),
-    [accounts]
-  );
+  const platformCounts = useMemo(() => ({
+    meta: accounts.filter((a) => a.platform !== "google").length,
+    google: accounts.filter((a) => a.platform === "google").length,
+  }), [accounts]);
 
   const filtered = useMemo(() => {
     let list = accounts;
@@ -465,95 +419,43 @@ export default function Dashboard() {
     const value = (account: Account) => {
       const metrics = accMetrics(account);
       const previous = accPrev(account);
-      const unavailable =
-        isLive &&
-        Boolean(
-          live?.errors?.some(
-            (item) => item.account_id === account.account_id
-          )
-        );
+      const unavailable = isLive && Boolean(live?.errors?.some((item) => item.account_id === account.account_id));
       switch (tableSort.key) {
         case "name": return account.name;
-        case "channels":
-          return account.platform === "meta"
-            ? 1 + Number(
-                accounts.some(
-                  (candidate) =>
-                    candidate.platform === "google" &&
-                    candidate.linked_meta_account_id === account.account_id &&
-                    !candidate.hidden
-                )
-              )
-            : 1;
-        case "trend":
-          return !unavailable && previous.spend > 0
-            ? ((metrics.spend - previous.spend) / previous.spend) * 100
-            : null;
+        case "channels": return account.platform === "meta" ? 1 + Number(accounts.some((candidate) => candidate.platform === "google" && candidate.linked_meta_account_id === account.account_id && !candidate.hidden)) : 1;
+        case "trend": return !unavailable && previous.spend > 0 ? ((metrics.spend - previous.spend) / previous.spend) * 100 : null;
         case "spend": return unavailable ? null : metrics.spend;
         case "result": return unavailable ? null : metrics.result;
-        case "balance":
-          return account.platform === "meta" ? account.balance : null;
+        case "balance": return account.platform === "meta" ? account.balance : null;
       }
     };
     return [...list].sort((left, right) => {
       const leftValue = value(left);
       const rightValue = value(right);
-      if (
-        tableSort.key === "spend" ||
-        tableSort.key === "balance"
-      ) {
-        const leftMissing =
-          leftValue == null ||
-          (typeof leftValue === "number" && Number.isNaN(leftValue));
-        const rightMissing =
-          rightValue == null ||
-          (typeof rightValue === "number" && Number.isNaN(rightValue));
+      if (tableSort.key === "spend" || tableSort.key === "balance") {
+        const leftMissing = leftValue == null || (typeof leftValue === "number" && Number.isNaN(leftValue));
+        const rightMissing = rightValue == null || (typeof rightValue === "number" && Number.isNaN(rightValue));
         if (leftMissing !== rightMissing) return leftMissing ? 1 : -1;
-        if (left.currency !== right.currency) {
-          return compareSortValues(left.currency, right.currency, "asc");
-        }
+        if (left.currency !== right.currency) return compareSortValues(left.currency, right.currency, "asc");
       }
-      return (
-        compareSortValues(
-          leftValue,
-          rightValue,
-          tableSort.direction
-        ) || compareSortValues(left.name, right.name, "asc")
-      );
+      return compareSortValues(leftValue, rightValue, tableSort.direction) || compareSortValues(left.name, right.name, "asc");
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accounts, groupFilter, platformFilter, onlyActive, search, showHidden, period, live, tableSort, focus]);
 
   const totals = useMemo(() => {
     let spend = 0, res = 0, val = 0;
     let prevSpend = 0, prevRes = 0, prevVal = 0;
-    const byCurrency: Record<string, {
-      spend: number;
-      res: number;
-      val: number;
-      prevSpend: number;
-      prevRes: number;
-      prevVal: number;
-    }> = {};
+    const byCurrency: Record<string, { spend: number; res: number; val: number; prevSpend: number; prevRes: number; prevVal: number }> = {};
     for (const a of filtered) {
       const m = accMetrics(a), p = accPrev(a);
       const currency = (a.currency || "BRL").toUpperCase();
-      const bucket = byCurrency[currency] || (byCurrency[currency] = {
-        spend: 0,
-        res: 0,
-        val: 0,
-        prevSpend: 0,
-        prevRes: 0,
-        prevVal: 0,
-      });
+      const bucket = byCurrency[currency] || (byCurrency[currency] = { spend: 0, res: 0, val: 0, prevSpend: 0, prevRes: 0, prevVal: 0 });
       spend += m.spend; res += m.result; val += m.value;
       prevSpend += p.spend; prevRes += p.result; prevVal += p.value;
       bucket.spend += m.spend; bucket.res += m.result; bucket.val += m.value;
       bucket.prevSpend += p.spend; bucket.prevRes += p.result; bucket.prevVal += p.value;
     }
-    const currencyTotals = Object.entries(byCurrency)
-      .sort(([left], [right]) => left.localeCompare(right, "pt-BR"))
-      .map(([currency, values]) => ({ currency, ...values }));
+    const currencyTotals = Object.entries(byCurrency).sort(([left], [right]) => left.localeCompare(right, "pt-BR")).map(([currency, values]) => ({ currency, ...values }));
     return {
       spend, res, val,
       cpr: res ? spend / res : 0,
@@ -564,20 +466,16 @@ export default function Dashboard() {
       currencyTotals,
       mixedCurrencies: currencyTotals.length > 1,
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtered, period, live, focus]);
 
   const visibleAlerts = useMemo(() => {
     const names = new Set(filtered.map((a) => a.name));
     const order = { critical: 0, warning: 1, info: 2 } as Record<string, number>;
-    return alerts
-      .filter((a) => names.has(a.account_name))
-      .sort((a, b) => order[a.level] - order[b.level]);
+    return alerts.filter((a) => names.has(a.account_name)).sort((a, b) => order[a.level] - order[b.level]);
   }, [alerts, filtered]);
 
   const visibleHistory = useMemo(() => {
     const names = new Set(filtered.map((a) => a.name));
-    // se um grupo específico está selecionado, filtra por contas visíveis
     return groupFilter === "all" ? history : history.filter((a) => names.has(a.account_name));
   }, [history, filtered, groupFilter]);
 
@@ -587,635 +485,579 @@ export default function Dashboard() {
   }, [accounts]);
 
   const groupById = (id: string | null) => groups.find((g) => g.id === id);
-  // Filtro recolhido no celular não pode virar filtro esquecido: o botão diz
-  // o período em vigor e conta o que está fora do padrão.
-  const activeFilters = [
-    groupFilter !== "all",
-    platformFilter !== "meta",
-    !onlyActive,
-    search.trim() !== "",
-    showHidden,
-  ].filter(Boolean).length;
-  const periodLabel =
-    period === "custom" ? "personalizado" : PRESETS.find((p) => p.key === period)?.label || period;
+  const activeFilters = [groupFilter !== "all", platformFilter !== "meta", !onlyActive, search.trim() !== "", showHidden].filter(Boolean).length;
+  const periodLabel = period === "custom" ? "personalizado" : PRESETS.find((p) => p.key === period)?.label || period;
   const platformLabel = platformFilter === "google" ? "Google" : "Meta";
   const short = PERIOD_SHORT[period];
   const fam = RESULT_FAMILY_BY_SLUG[focus] || RESULT_FAMILIES[0];
   const primaryCurrency = totals.currencyTotals[0]?.currency || "BRL";
-  const moneySummary = (
-    getValue: (entry: (typeof totals.currencyTotals)[number]) => number,
-    digits = 2
-  ) =>
-    totals.currencyTotals.length
-      ? totals.currencyTotals
-          .map((entry) => money(getValue(entry), entry.currency, digits))
-          .join(" · ")
-      : "—";
-  const investmentValue = totals.mixedCurrencies
-    ? moneySummary((entry) => entry.spend, 0)
-    : money(totals.spend, primaryCurrency, 0);
-  const cprValue = totals.mixedCurrencies
-    ? totals.currencyTotals
-        .map((entry) =>
-          entry.res > 0
-            ? money(entry.spend / entry.res, entry.currency)
-            : `— ${entry.currency}`
-        )
-        .join(" · ")
-    : totals.res > 0
-      ? money(totals.cpr, primaryCurrency)
-      : "—";
-  const purchaseValue = totals.mixedCurrencies
-    ? moneySummary((entry) => entry.val, 0)
-    : money(totals.val, primaryCurrency, 0);
-  const roasValue = totals.mixedCurrencies
-    ? totals.currencyTotals
-        .map((entry) =>
-          entry.spend > 0
-            ? `${(entry.val / entry.spend).toFixed(2)}x ${entry.currency}`
-            : `— ${entry.currency}`
-        )
-        .join(" · ")
-    : totals.spend > 0
-      ? `${totals.roas.toFixed(2)}x`
-      : "—";
+  const moneySummary = (getValue: (entry: (typeof totals.currencyTotals)[number]) => number, digits = 2) =>
+    totals.currencyTotals.length ? totals.currencyTotals.map((entry) => money(getValue(entry), entry.currency, digits)).join(" · ") : "—";
+  const investmentValue = totals.mixedCurrencies ? moneySummary((entry) => entry.spend, 0) : money(totals.spend, primaryCurrency, 0);
+  const cprValue = totals.mixedCurrencies ? totals.currencyTotals.map((entry) => entry.res > 0 ? money(entry.spend / entry.res, entry.currency) : `— ${entry.currency}`).join(" · ") : totals.res > 0 ? money(totals.cpr, primaryCurrency) : "—";
+  const purchaseValue = totals.mixedCurrencies ? moneySummary((entry) => entry.val, 0) : money(totals.val, primaryCurrency, 0);
+  const roasValue = totals.mixedCurrencies ? totals.currencyTotals.map((entry) => entry.spend > 0 ? `${(entry.val / entry.spend).toFixed(2)}x ${entry.currency}` : `— ${entry.currency}`).join(" · ") : totals.spend > 0 ? `${totals.roas.toFixed(2)}x` : "—";
 
-  // Esqueleto no lugar de "Carregando overview…": o texto fazia a tela saltar
-  // inteira quando os dados chegavam.
   if (loading) {
     return (
-      <div className="ec-page">
-        <div style={{ display: "grid", gap: "var(--sp-3)", maxWidth: 420, marginBottom: "var(--sp-5)" }}>
-          <Skeleton h={30} w="45%" />
-          <Skeleton h={14} w="72%" />
+      <div className="p-4 md:p-6 md:ml-56 pb-20 md:pb-6 space-y-4">
+        <div className="space-y-2">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-4 w-72" />
         </div>
-        <div className="ec-cols" style={{ marginBottom: "var(--sp-4)" }}>
-          <SkeletonCard lines={2} />
-          <SkeletonCard lines={2} />
-          <SkeletonCard lines={2} />
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[1,2,3,4].map((i) => <Skeleton key={i} className="h-24 rounded-xl" />)}
         </div>
-        <SkeletonCard lines={6} />
+        <Skeleton className="h-64 rounded-xl" />
       </div>
     );
   }
+
   if (error) {
     return (
-      <div className="ec-page">
-        <PageHeader title="Não foi possível carregar" subtitle="Os dados de overview não voltaram." />
-        <Notice tone="danger">{error}</Notice>
-        <div style={{ marginTop: "var(--sp-4)" }}>
-          <Button variant="primary" onClick={refresh}>
-            Tentar de novo
-          </Button>
-        </div>
+      <div className="p-4 md:p-6 md:ml-56 pb-20 md:pb-6">
+        <Card className="max-w-lg mx-auto mt-20">
+          <CardContent className="p-8 text-center space-y-4">
+            <AlertTriangle className="h-12 w-12 text-destructive mx-auto" />
+            <h2 className="text-xl font-semibold">Não foi possível carregar</h2>
+            <p className="text-sm text-muted-foreground">{error}</p>
+            <Button onClick={refresh}>Tentar de novo</Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className="ec-page">
-      <PageHeader
-        title="Visão geral"
-        subtitle="Métricas de mídia paga (Meta + Google) por conta."
-        meta={lastUpdated ? <Badge>Coleta: {lastUpdated}</Badge> : undefined}
-        actions={
-          <>
-            {/* Atualizar já obedece ao filtro de Plataforma — só relê o que
-                está na tela. Um segundo seletor aqui poderia contradizer o
-                filtro; o rótulo diz o escopo em vez de duplicá-lo. */}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={refresh}
-              disabled={refreshing}
-              title={`Reler os números ${platformLabel} do período em tela`}
-            >
-              {refreshing ? "Atualizando…" : `↻ Atualizar ${platformLabel}`}
-            </Button>
-            <Menu
-              label={syncing ? "Sincronizando…" : "⇅ Sincronizar"}
-              disabled={syncing}
-              title="Buscar novas contas no catálogo; elas entram ocultas"
-              items={[
-                {
-                  label: "Só Meta",
-                  hint: `${platformCounts.meta} contas no catálogo`,
-                  onSelect: () => syncAccounts("meta"),
-                },
-                {
-                  label: "Só Google",
-                  hint: `${platformCounts.google} contas no catálogo`,
-                  onSelect: () => syncAccounts("google"),
-                },
-                {
-                  label: "As duas",
-                  hint: "mais lento; use quando não souber onde entrou",
-                  onSelect: () => syncAccounts("all"),
-                },
-              ]}
-            />
-            <Link href="/admin" className="ec-btn" data-variant="secondary" data-size="sm">
-              ⚙ Grupos
-            </Link>
-            {/* Coletar é a ação que traz dado novo: é a dominante da tela. */}
-            <Menu
-              variant="primary"
-              label={collecting ? "Coletando…" : "⟳ Coletar agora"}
-              disabled={collecting}
-              title="Buscar métricas e alertas das contas ativas agora"
-              items={[
-                {
-                  label: "Só Meta",
-                  hint: "métricas e alertas das contas Meta ativas",
-                  onSelect: () => collectNow("meta"),
-                },
-                {
-                  label: "Só Google",
-                  hint: "métricas e alertas das contas Google ativas",
-                  onSelect: () => collectNow("google"),
-                },
-                {
-                  label: "Tudo",
-                  hint: "as duas plataformas; é o que o cron faz de madrugada",
-                  onSelect: () => collectNow("all"),
-                },
-              ]}
-            />
-          </>
-        }
-      />
-
-      {syncMsg && (
-        <div style={{ marginBottom: "var(--sp-3)" }}>
-          <Notice tone="brand" onDismiss={() => setSyncMsg(null)}>{syncMsg}</Notice>
+    <div className="p-4 md:p-6 md:ml-56 pb-20 md:pb-6 space-y-4 animate-fade-in">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Visão Geral</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">Métricas de mídia paga (Meta + Google) por conta</p>
         </div>
-      )}
+        <div className="flex items-center gap-2">
+          {lastUpdated && <Badge variant="secondary" className="text-xs">Coleta: {lastUpdated}</Badge>}
+          {syncMsg && (
+            <Badge variant="info" className="text-xs max-w-[240px] truncate" title={syncMsg}>
+              {syncMsg}
+            </Badge>
+          )}
+          <Button variant="ghost" size="sm" onClick={refresh} disabled={refreshing}>
+            <RefreshCw className={cn("h-4 w-4 mr-1", refreshing && "animate-spin")} />
+            {refreshing ? "Atualizando…" : `Atualizar ${platformLabel}`}
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuItem onClick={() => syncAccounts("meta")} disabled={syncing}>
+                <Download className="h-4 w-4" /> Sincronizar Meta
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => syncAccounts("google")} disabled={syncing}>
+                <Download className="h-4 w-4" /> Sincronizar Google
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => collectNow("meta")} disabled={collecting}>
+                <Activity className="h-4 w-4" /> Coletar Meta
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => collectNow("google")} disabled={collecting}>
+                <Activity className="h-4 w-4" /> Coletar Google
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => collectNow("all")} disabled={collecting}>
+                <Activity className="h-4 w-4" /> Coletar Tudo
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <Link href="/admin"><Settings className="h-4 w-4" /> Grupos</Link>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+
+      {/* Live errors */}
       {!!live?.errors?.length && (
-        <div style={{ marginBottom: "var(--sp-3)" }}>
-          <Notice tone="warn">
-            {live.errors.length} conta(s) com dados ao vivo indisponíveis. A falha não foi convertida em zero.
-          </Notice>
+        <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-sm text-amber-600 dark:text-amber-400">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span>{live.errors.length} conta(s) com dados ao vivo indisponíveis.</span>
         </div>
       )}
 
-      {/* No celular tudo daqui até o fim da régua entra atrás deste botão. */}
-      <Button
-        className="ec-filters__toggle"
-        variant="secondary"
-        size="sm"
-        onClick={() => setFiltersOpen((open) => !open)}
-        aria-expanded={filtersOpen}
-        aria-controls="filtros-visao-geral"
-      >
-        ☰ Filtros · {periodLabel}
-        {activeFilters > 0 ? ` (${activeFilters})` : ""}
-      </Button>
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-1.5 p-1 rounded-lg bg-muted/50 border border-border/50">
+          {PRESETS.map((p) => (
+            <button
+              key={p.key}
+              onClick={() => { setPeriod(p.key); setShowCustom(false); }}
+              className={cn(
+                "px-3 py-1.5 text-xs font-medium rounded-md transition-colors",
+                period === p.key ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {p.label}
+            </button>
+          ))}
+          <button
+            onClick={() => setShowCustom(true)}
+            className={cn(
+              "px-3 py-1.5 text-xs font-medium rounded-md transition-colors",
+              period === "custom" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            Personalizado
+          </button>
+        </div>
 
-      <div className="ec-filters" id="filtros-visao-geral" data-open={filtersOpen ? "true" : undefined}>
-      {/* GRUPOS (chips) */}
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
-        <Chip active={groupFilter === "all"} onClick={() => setGroupFilter("all")} label="Todos" color="var(--text-strong)" />
+        <div className="flex items-center gap-1.5 p-1 rounded-lg bg-muted/50 border border-border/50">
+          <button onClick={() => setPlatformFilter("meta")} className={cn("px-3 py-1.5 text-xs font-medium rounded-md transition-colors", platformFilter === "meta" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+            Meta
+          </button>
+          <button onClick={() => { setPlatformFilter("google"); setFocus("conversoes"); }} className={cn("px-3 py-1.5 text-xs font-medium rounded-md transition-colors", platformFilter === "google" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+            Google
+          </button>
+        </div>
+
+        <div className="relative flex-1 min-w-[140px] max-w-[220px]">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar conta…"
+            className="w-full h-8 pl-8 pr-3 text-xs rounded-lg border border-border/50 bg-muted/30 focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring transition-colors placeholder:text-muted-foreground"
+          />
+        </div>
+
+        <select
+          value={onlyActive ? "active" : "all"}
+          onChange={(e) => setOnlyActive(e.target.value === "active")}
+          className="h-8 px-2.5 text-xs rounded-lg border border-border/50 bg-muted/30 focus:outline-none focus:ring-2 focus:ring-ring/30"
+        >
+          <option value="active">Somente ativas</option>
+          <option value="all">Todas</option>
+        </select>
+
+        <select
+          value={focus}
+          onChange={(e) => setFocus(e.target.value)}
+          className="h-8 px-2.5 text-xs rounded-lg border border-border/50 bg-muted/30 focus:outline-none focus:ring-2 focus:ring-ring/30"
+        >
+          {RESULT_FAMILIES.map((f) => (
+            <option key={f.slug} value={f.slug}>{f.label}</option>
+          ))}
+        </select>
+
+        {hiddenCount > 0 && (
+          <Button variant="ghost" size="sm" onClick={() => setShowHidden((v) => !v)} className="h-8 text-xs">
+            {showHidden ? "Ocultar" : `Mostrar (${hiddenCount})`}
+          </Button>
+        )}
+      </div>
+
+      {/* Custom period */}
+      {showCustom && (
+        <div className="flex items-center gap-2 text-sm">
+          <input type="date" value={customSince} max={customUntil}
+            onChange={(e) => { setCustomSince(e.target.value); setPeriod("custom"); }}
+            className="h-8 px-2.5 text-xs rounded-lg border border-border/50 bg-muted/30 focus:outline-none focus:ring-2 focus:ring-ring/30"
+          />
+          <span className="text-muted-foreground">→</span>
+          <input type="date" value={customUntil} min={customSince} max={isoDaysAgo(0)}
+            onChange={(e) => { setCustomUntil(e.target.value); setPeriod("custom"); }}
+            className="h-8 px-2.5 text-xs rounded-lg border border-border/50 bg-muted/30 focus:outline-none focus:ring-2 focus:ring-ring/30"
+          />
+          <span className="text-xs text-muted-foreground">{range.since} → {range.until}</span>
+          <Badge variant={liveLoading ? "warning" : "success"} className="text-[10px]">
+            {liveLoading ? "buscando…" : "dados ao vivo"}
+          </Badge>
+          {totals.mixedCurrencies && (
+            <Badge variant="warning" className="text-[10px]">
+              Moedas: {totals.currencyTotals.map((e) => e.currency).join(" · ")}
+            </Badge>
+          )}
+        </div>
+      )}
+
+      {/* Groups */}
+      <div className="flex flex-wrap gap-1.5">
+        <button
+          onClick={() => setGroupFilter("all")}
+          className={cn(
+            "px-3 py-1.5 text-xs font-medium rounded-full border transition-colors",
+            groupFilter === "all"
+              ? "bg-primary/10 border-primary/30 text-primary"
+              : "border-border/50 text-muted-foreground hover:text-foreground hover:bg-accent/50"
+          )}
+        >
+          Todos
+        </button>
         {groups.map((g) => (
-          <Chip key={g.id} active={groupFilter === g.id} onClick={() => setGroupFilter(g.id)} label={g.name} color={g.color} />
+          <button
+            key={g.id}
+            onClick={() => setGroupFilter(g.id)}
+            className={cn(
+              "px-3 py-1.5 text-xs font-medium rounded-full border transition-colors",
+              groupFilter === g.id
+                ? "border-primary/30 text-primary"
+                : "border-border/50 text-muted-foreground hover:text-foreground hover:bg-accent/50"
+            )}
+            style={groupFilter === g.id ? { backgroundColor: g.color + "18", borderColor: g.color + "40", color: g.color } : undefined}
+          >
+            <span className="inline-block w-1.5 h-1.5 rounded-full mr-1.5" style={{ backgroundColor: g.color }} />
+            {g.name}
+          </button>
         ))}
       </div>
 
-      {/* FILTROS
-          Antes eram oito controles no mesmo plano visual, todos com o mesmo
-          peso. Agora: plataforma e período em controle segmentado (a escolha
-          fica visível sem ler), busca e foco como campos, e o resto discreto. */}
-      <div className="ec-toolbar">
-        <Segmented
-          label="Plataforma"
-          value={platformFilter}
-          onChange={(value) => {
-            setPlatformFilter(value);
-            setFocus(value === "google" ? "conversoes" : "vendas");
-          }}
-          options={[
-            { value: "meta", label: "Meta / Clientes" },
-            { value: "google", label: "Google Ads" },
-          ]}
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <KpiCard
+          icon={DollarSign}
+          label={`Investimento (${short})`}
+          value={liveReady ? investmentValue : "…"}
+          trend={!totals.mixedCurrencies && totals.prevSpend > 0 ? ((totals.spend - totals.prevSpend) / totals.prevSpend) * 100 : null}
         />
-        <Input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Pesquisar conta…"
-          aria-label="Pesquisar conta"
-          style={{ flex: "0 1 210px" }}
+        <KpiCard
+          icon={Target}
+          label={`${fam.label} (${short})`}
+          value={liveReady ? num(totals.res) : "…"}
+          trend={totals.prevRes > 0 ? ((totals.res - totals.prevRes) / totals.prevRes) * 100 : null}
         />
-        <Select
-          value={onlyActive ? "active" : "all"}
-          onChange={(e) => setOnlyActive(e.target.value === "active")}
-          aria-label="Filtrar por status"
-          style={{ flex: "0 1 165px" }}
-        >
-          <option value="active">Somente ativas</option>
-          <option value="all">Todas as contas</option>
-        </Select>
-        <label className="ec-inline-field">
-          <span>Foco</span>
-          <Select
-            value={focus}
-            onChange={(e) => setFocus(e.target.value)}
-            title="Resultado principal do negócio (vendas, mensagens, leads…)"
-          >
-            {RESULT_FAMILIES.map((f) => (
-              <option key={f.slug} value={f.slug}>{f.label}</option>
-            ))}
-          </Select>
-        </label>
-        {hiddenCount > 0 && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowHidden((v) => !v)}
-            aria-pressed={showHidden}
-            title="Mostrar ou esconder as contas que você ocultou"
-          >
-            {showHidden ? "Ocultar escondidas" : `Mostrar ocultas (${hiddenCount})`}
-          </Button>
-        )}
-        <span style={{ flex: 1 }} />
-        <Segmented
-          label="Período"
-          value={period}
-          onChange={(value) => {
-            setPeriod(value);
-            setShowCustom(value === "custom");
-          }}
-          options={[
-            ...PRESETS.map((p) => ({ value: p.key, label: p.label })),
-            { value: "custom", label: "Personalizado" },
-          ]}
+        <KpiCard
+          icon={BarChart3}
+          label="Custo por resultado"
+          value={liveReady ? cprValue : "…"}
+          trend={!totals.mixedCurrencies && totals.prevCpr > 0 ? ((totals.cpr - totals.prevCpr) / totals.prevCpr) * 100 : null}
+          invertTrend
         />
-      </div>
-      </div>
-
-      {/* LINHA DE PERÍODO (datas + procedência do dado) */}
-      <div className="ec-metaline">
-        {(showCustom || period === "custom") && (
-          <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
-            <Input
-              type="date"
-              value={customSince}
-              max={customUntil}
-              onChange={(e) => { setCustomSince(e.target.value); setPeriod("custom"); }}
-              aria-label="Início do período"
-              style={{ width: 148 }}
-            />
-            <span aria-hidden="true" style={{ color: "var(--text-faint)" }}>→</span>
-            <Input
-              type="date"
-              value={customUntil}
-              min={customSince}
-              max={isoDaysAgo(0)}
-              onChange={(e) => { setCustomUntil(e.target.value); setPeriod("custom"); }}
-              aria-label="Fim do período"
-              style={{ width: 148 }}
-            />
-          </span>
-        )}
-        <span className="ec-metaline__dates">{range.since} → {range.until}</span>
-        {/* Procedência do número é decisão, não decoração: ao vivo e cache
-            levam a leituras diferentes do mesmo valor. */}
-        {isLive ? (
-          <Badge tone={liveLoading ? "warn" : "ok"}>
-            {liveLoading ? `buscando no ${platformFilter === "google" ? "Google Ads" : "Meta Ads"}…` : "dados ao vivo"}
-          </Badge>
-        ) : (
-          <Badge title="A coleta roda uma vez por dia e não inclui o dia de hoje">cache · sem hoje</Badge>
-        )}
-        {totals.mixedCurrencies && (
-          <Badge tone="warn">
-            Moedas separadas: {totals.currencyTotals.map((entry) => entry.currency).join(" · ")}
-          </Badge>
-        )}
-      </div>
-
-      {/* KPIs GERAIS (agregado do período vs período anterior, guiado pelo foco) */}
-      <section className="ec-kpis" aria-label="Resumo do período">
-        <Kpi label={`Investimento (${short})`} value={liveReady ? investmentValue : "…"} cur={totals.mixedCurrencies ? undefined : totals.spend} prev={totals.mixedCurrencies ? undefined : totals.prevSpend} neutral />
-        <Kpi label={`${fam.label} (${short})`} value={liveReady ? num(totals.res) : "…"} cur={totals.res} prev={totals.prevRes} />
-        <Kpi label={`Custo por resultado`} value={liveReady ? cprValue : "…"} cur={!totals.mixedCurrencies && totals.res > 0 ? totals.cpr : undefined} prev={!totals.mixedCurrencies && totals.prevRes > 0 ? totals.prevCpr : undefined} invert />
         {fam.sales && (
-          <>
-            <Kpi label="Valor de compra" value={liveReady ? purchaseValue : "…"} cur={totals.mixedCurrencies ? undefined : totals.val} prev={totals.mixedCurrencies ? undefined : totals.prevVal} />
-            <Kpi label="ROAS" value={liveReady ? roasValue : "…"} cur={!totals.mixedCurrencies && totals.spend > 0 ? totals.roas : undefined} prev={!totals.mixedCurrencies && totals.prevSpend > 0 ? totals.prevRoas : undefined} />
-          </>
+          <KpiCard
+            icon={Activity}
+            label="ROAS"
+            value={liveReady ? roasValue : "…"}
+            trend={!totals.mixedCurrencies && totals.prevSpend > 0 ? ((totals.roas - totals.prevRoas) / totals.prevRoas) * 100 : null}
+          />
         )}
-      </section>
+      </div>
 
-      {/* LAYOUT: alertas (esq) + tabela (centro).
-          Em tela estreita os alertas passam para cima da tabela em vez de
-          espremer as duas colunas. */}
-      <div className="ec-split">
-        {/* ALERTAS */}
-        <aside id="alerts" className="ec-split__side">
-          <div className="ec-tabgroup ec-tabgroup--mb">
-            <TabBtn active={alertTab === "active"} onClick={() => setAlertTab("active")}>
-              Ativos {visibleAlerts.length > 0 && <b>({visibleAlerts.length})</b>}
-            </TabBtn>
-            <TabBtn active={alertTab === "history"} onClick={() => setAlertTab("history")}>
+      {/* Main area: Alerts + Table */}
+      <div className="grid grid-cols-1 xl:grid-cols-[320px_1fr] gap-4">
+        {/* Alerts */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-1.5 p-1 rounded-lg bg-muted/50 border border-border/50 w-fit">
+            <button onClick={() => setAlertTab("active")} className={cn("px-3 py-1.5 text-xs font-medium rounded-md transition-colors", alertTab === "active" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground")}>
+              Ativos {visibleAlerts.length > 0 && <span className="ml-1 text-primary font-bold">({visibleAlerts.length})</span>}
+            </button>
+            <button onClick={() => setAlertTab("history")} className={cn("px-3 py-1.5 text-xs font-medium rounded-md transition-colors", alertTab === "history" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground")}>
               Histórico
-            </TabBtn>
+            </button>
           </div>
 
-          <div className="ec-ackwrap">
+          <div className="space-y-2 max-h-[65vh] overflow-y-auto pr-1">
             {alertTab === "active" && (
               <>
-                {visibleAlerts.length === 0 && <Empty>Nenhum alerta ativo. 🎉</Empty>}
+                {visibleAlerts.length === 0 && (
+                  <div className="text-sm text-muted-foreground text-center py-8">Nenhum alerta ativo</div>
+                )}
                 {visibleAlerts.map((a) => (
-                  <div key={a.id} className="ec-alert" data-tone={a.level}>
-                    <div className="ec-alert__row">
-                      <span className="ec-alert__dot" data-tone={a.level} />
-                      <span className="ec-alert__level" data-tone={a.level}>{LEVEL_LABEL[a.level]}</span>
-                    </div>
-                    <div className="ec-alert__client" data-tone={a.level}>{a.account_name}</div>
-                    <div className="ec-alert__title">{a.title}</div>
-                    <div className="ec-alert__detail">{a.detail}</div>
-                    <label className="ec-alert__ack" data-tone={a.level}>
-                      <input
-                        type="checkbox"
-                        checked={false}
-                        disabled={acking === a.id}
-                        onChange={() => setAck(a.id, true)}
-                      />
-                      Estou ciente
-                    </label>
-                  </div>
+                  <AlertCard
+                    key={a.id}
+                    alert={a}
+                    onAck={() => setAck(a.id, true)}
+                    acking={acking === a.id}
+                  />
                 ))}
               </>
             )}
-
             {alertTab === "history" && (
               <>
-                {historyLoading && <Empty>Carregando histórico…</Empty>}
-                {!historyLoading && visibleHistory.length === 0 && <Empty>Sem histórico ainda.</Empty>}
-                {!historyLoading &&
-                  visibleHistory.map((a) => {
-                    const badge = a.resolved ? { t: "Resolvido", c: "#16a34a" } : { t: "Ciente", c: "#6b7280" };
-                    const when = a.resolved_at || a.acknowledged_at || a.last_seen_at;
-                    return (
-                      <div key={a.id} className="ec-history">
-                        <div className="ec-history__row">
-                          <span className="ec-alert__dot" data-tone={a.level} />
-                          <span className="ec-alert__level" data-tone={a.level} style={{ color: "var(--text-muted)" }}>{LEVEL_LABEL[a.level]}</span>
-                          <span className="ec-history__badge" style={{ marginLeft: "auto", color: badge.c, background: badge.c + "18" }}>
-                            {badge.t}
-                          </span>
-                        </div>
-                        <div className="ec-history__client">{a.account_name}</div>
-                        <div className="ec-history__title">{a.title}</div>
-                        <div className="ec-history__last">
-                          <span className="ec-history__when">{when ? new Date(when).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : ""}</span>
-                          {a.acknowledged && !a.resolved && (
-                            <button className="ec-history__reopen" onClick={() => setAck(a.id, false)} disabled={acking === a.id}>
-                              reabrir
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
+                {historyLoading && <div className="text-sm text-muted-foreground text-center py-8">Carregando…</div>}
+                {!historyLoading && visibleHistory.length === 0 && <div className="text-sm text-muted-foreground text-center py-8">Sem histórico.</div>}
+                {!historyLoading && visibleHistory.map((a) => (
+                  <HistoryCard
+                    key={a.id}
+                    alert={a}
+                    onReopen={a.acknowledged && !a.resolved ? () => setAck(a.id, false) : undefined}
+                    acking={acking === a.id}
+                  />
+                ))}
               </>
             )}
           </div>
-        </aside>
+        </div>
 
-        {/* TABELA */}
-        <main className="ec-card ec-scroll-x" style={{ minWidth: 0 }}>
-          <div className="ec-thead" style={{ minWidth: 900, display: "grid", gridTemplateColumns: GRID, padding: "12px 16px 10px", alignItems: "end", columnGap: 8 }}>
-            <GridSortHeader sortKey="name" sort={tableSort} onSort={setTableSort} align="left">Cliente</GridSortHeader>
-            <GridSortHeader sortKey="channels" sort={tableSort} onSort={setTableSort} align="left" initialDirection="desc">Canais</GridSortHeader>
-            <GridSortHeader sortKey="trend" sort={tableSort} onSort={setTableSort} align="center" initialDirection="desc">Tendência</GridSortHeader>
-            <GridSortHeader sortKey="spend" sort={tableSort} onSort={setTableSort} initialDirection="desc">Investimento ({short})</GridSortHeader>
-            <GridSortHeader sortKey="result" sort={tableSort} onSort={setTableSort} initialDirection="desc">{fam.label.split(" ")[0]}</GridSortHeader>
-            <GridSortHeader sortKey="balance" sort={tableSort} onSort={setTableSort} initialDirection="desc">Saldo / fatura</GridSortHeader>
-            <span />
-            <span />
-          </div>
-          {isLive && !liveReady && <div style={{ padding: 28, textAlign: "center", color: "var(--text-faint)" }}>Buscando dados ao vivo nas plataformas…</div>}
-          {liveReady && filtered.length === 0 && <div style={{ padding: 28, textAlign: "center", color: "var(--text-faint)" }}>Nenhuma conta com os filtros atuais.</div>}
-          {liveReady && filtered.map((a) => {
-            const g = groupById(a.group_id);
-            const open = !a.hidden && expanded === a.account_id;
-            const m = accMetrics(a);
-            const previous = accPrev(a);
-            const liveError = isLive ? live?.errors?.find((item) => item.account_id === a.account_id) : undefined;
-            const spendTrend = !liveError && previous.spend > 0
-              ? ((m.spend - previous.spend) / previous.spend) * 100
-              : null;
-            const linkedMeta = a.platform === "google" && a.linked_meta_account_id
-              ? accounts.find((meta) => meta.account_id === a.linked_meta_account_id)
-              : null;
-            const linkedGoogle = a.platform === "meta"
-              ? accounts.filter((google) =>
-                  google.platform === "google" &&
-                  google.linked_meta_account_id === a.account_id &&
-                  !google.hidden
-                )
-              : [];
-            return (
-              <div id={`account-${a.account_id}`} key={a.account_id} className="ec-accrow" data-hidden={a.hidden ? "true" : undefined}>
-                <div
-                  onClick={() => { if (!a.hidden) setExpanded(open ? null : a.account_id); }}
-                  className={"ec-accrow__grid" + (a.hidden ? "" : " ec-row")}
-                  style={{ minWidth: 900, display: "grid", gridTemplateColumns: GRID, padding: "12px 16px", alignItems: "center", columnGap: 8 }}
-                  data-open={open ? "true" : undefined}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-                    <span className="ec-accavatar" style={{ background: g?.color || "var(--text-faint)" }}>
-                      {initials(a.name)}
-                    </span>
-                    <div style={{ minWidth: 0 }}>
-                      <div className="ec-accname" title={a.name}>{a.name}</div>
-                      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                        {g && <span className="ec-accbadge" style={{ background: g.color + "22", color: g.color }}>{g.name}</span>}
-                        {linkedMeta && <span className="ec-accbadge" style={{ background: "var(--platform-meta-bg)", color: "var(--platform-meta-linked)" }}>Cliente: {linkedMeta.name}</span>}
-                        {a.status !== "ACTIVE" && <span className="ec-accstatus">● {a.status}</span>}
-                        {a.hidden && <span style={{ fontSize: 10, color: "var(--text-faint)" }}>oculta</span>}
-                      </div>
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", gap: 4 }}>
-                    {a.platform === "google" ? (
-                      <span title="Google Ads" className="ec-accbadge" data-platform="google" style={{ width: 22, height: 22, display: "grid", placeItems: "center", fontWeight: 700, fontSize: 12, borderRadius: 6 }}>G</span>
-                    ) : (
-                      <span title="Meta / Instagram" className="ec-accbadge" data-platform="meta" style={{ width: 22, height: 22, display: "grid", placeItems: "center", fontWeight: 700, fontSize: 12, borderRadius: 6 }}>f</span>
-                    )}
-                    {a.platform === "meta" && linkedGoogle.length > 0 && (
-                      <span title={`${linkedGoogle.length} conta(s) Google vinculada(s)`} className="ec-glinked" data-platform="google" style={{ width: 22, height: 22, display: "grid", placeItems: "center", fontWeight: 700, fontSize: 11, borderRadius: 6 }}>G</span>
-                    )}
-                  </div>
-                  <div className="ec-trend">
-                    <Sparkline points={(m.daily || []).map((d) => d.spend)} color={g?.color || "var(--brand-500)"} width={72} height={22} />
-                    <span className="ec-trend__pct" data-tone={spendTrend == null ? "flat" : spendTrend >= 0 ? "good" : "bad"}>
-                      {spendTrend == null ? "—" : `${spendTrend >= 0 ? "+" : ""}${spendTrend.toFixed(1)}%`}
-                    </span>
-                  </div>
-                  <div title={liveError?.message} className="ec-cellspend" data-error={liveError ? "true" : undefined}>
-                    {liveError ? "Indisponível" : money(m.spend, a.currency)}
-                  </div>
-                  <div className="ec-cellresult">
-                    <div className="ec-cellresult__num" data-empty={m.result <= 0 ? "true" : undefined}>
-                      {liveError ? "—" : m.result > 0 ? num(m.result) : "—"}
-                    </div>
-                    {fam.sales && m.value > 0 && m.spend > 0 && (
-                      <div className="ec-roas">{(m.value / m.spend).toFixed(1)}x ROAS</div>
-                    )}
-                  </div>
-                  <BalanceCell account={a} />
-                  <button
-                    className="ec-touch"
-                    onClick={(e) => { e.stopPropagation(); toggleHidden(a.account_id, !a.hidden); }}
-                    title={a.hidden ? "Reexibir esta conta" : "Ocultar esta conta do dashboard"}
-                    style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14, color: "var(--text-faint)", padding: 0, lineHeight: 1 }}
-                  >
-                    {a.hidden ? "↩" : "🚫"}
-                  </button>
-                  <div style={{ textAlign: "center", color: "var(--text-faint)", fontSize: 14 }}>{a.hidden ? "—" : open ? "▲" : "▼"}</div>
-                </div>
-                {open && (
-                  <div className="ec-row__detail" style={{ borderTop: "1px solid var(--border)", padding: "0 16px" }}>
-                    <OperationalLinks
-                      accountId={a.account_id}
-                      accountName={a.name}
-                      platform={a.platform}
-                      balance={a.balance}
-                      currency={a.currency}
-                    />
-                    <AccountChanges
-                      accountId={a.account_id}
-                      platform={a.platform}
-                      since={range.since}
-                      until={range.until}
-                    />
-                    {/* O detalhe da plataforma agora abre por clique, como o
-                        Google já fazia. São ~16 chamadas de API por conta:
-                        expandir um cliente só para ver as últimas edições não
-                        deve custar isso. */}
-                    <Collapsible
-                      tone="brand"
-                      summary={
-                        <>
-                          <span className="ec-collapse__icon" aria-hidden="true">
-                            {a.platform === "google" ? "G" : "f"}
-                          </span>
-                          <span className="ec-collapse__title">
-                            {a.platform === "google" ? "Google Ads" : "Meta Ads"} · detalhe do período
-                          </span>
-                          <span className="ec-collapse__meta">
-                            {liveError ? "indisponível" : money(m.spend, a.currency)}
-                          </span>
-                          <span className="ec-collapse__hint">campanhas, criativos, segmentações</span>
-                        </>
-                      }
-                    >
-                      <AccountDetail
-                        accountId={a.account_id}
-                        platform={a.platform}
-                        since={range.since}
-                        until={range.until}
-                        status={a.status}
-                        balance={a.balance}
-                        currency={a.currency}
-                      />
-                    </Collapsible>
-                    {a.platform === "meta" && (
-                      <div className="ec-gsection">
-                        <div className="ec-gsection__title">
-                          Google Ads vinculado ao cliente
-                        </div>
-                        {linkedGoogle.length === 0 ? (
-                          <div className="ec-gsection__empty">
-                            Nenhuma conta Google ativa vinculada. Faça o vínculo em Configurações → Contas.
-                          </div>
-                        ) : linkedGoogle.map((google) => {
-                          const gm = accMetrics(google);
-                          return (
-                            <div key={google.account_id} style={{ marginTop: 10 }}>
-                              <Collapsible
-                                summary={
-                                  <>
-                                    <span className="ec-collapse__icon" aria-hidden="true">G</span>
-                                    <span className="ec-collapse__title">{google.name}</span>
-                                    <span className="ec-collapse__meta">{money(gm.spend, google.currency)}</span>
-                                    <span className="ec-collapse__hint">
-                                      {num(gm.results.conversoes || gm.result || 0)} conversões
-                                    </span>
-                                  </>
-                                }
-                              >
-                                <OperationalLinks
-                                  accountId={google.account_id}
-                                  accountName={google.name}
-                                  platform="google"
-                                  balance={null}
-                                  currency={google.currency}
-                                  compact
-                                />
-                                <AccountChanges
-                                  accountId={google.account_id}
-                                  platform="google"
-                                  since={range.since}
-                                  until={range.until}
-                                  compact
-                                />
-                                <AccountDetail
-                                  accountId={google.account_id}
-                                  platform="google"
-                                  since={range.since}
-                                  until={range.until}
-                                  status={google.status}
-                                  balance={null}
-                                  currency={google.currency}
-                                />
-                              </Collapsible>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )}
+        {/* Table */}
+        <Card className="min-w-0 overflow-hidden">
+          <div className="overflow-x-auto">
+            <div className="min-w-[900px]">
+              {/* Header */}
+              <div className="grid grid-cols-[1.7fr_0.5fr_0.8fr_1fr_0.9fr_0.9fr_28px_28px] gap-2 px-4 py-2.5 border-b border-border/50 bg-muted/30 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider items-center">
+                <GridSortHeader sortKey="name" sort={tableSort} onSort={setTableSort} align="left">Cliente</GridSortHeader>
+                <GridSortHeader sortKey="channels" sort={tableSort} onSort={setTableSort} align="left" initialDirection="desc">Canais</GridSortHeader>
+                <GridSortHeader sortKey="trend" sort={tableSort} onSort={setTableSort} align="center" initialDirection="desc">Tendência</GridSortHeader>
+                <GridSortHeader sortKey="spend" sort={tableSort} onSort={setTableSort} initialDirection="desc">Investimento ({short})</GridSortHeader>
+                <GridSortHeader sortKey="result" sort={tableSort} onSort={setTableSort} initialDirection="desc">{fam.label.split(" ")[0]}</GridSortHeader>
+                <GridSortHeader sortKey="balance" sort={tableSort} onSort={setTableSort} initialDirection="desc">Saldo / fatura</GridSortHeader>
+                <span /><span />
               </div>
-            );
-          })}
-        </main>
+
+              {isLive && !liveReady && (
+                <div className="py-12 text-center text-sm text-muted-foreground">Buscando dados ao vivo…</div>
+              )}
+              {liveReady && filtered.length === 0 && (
+                <div className="py-12 text-center text-sm text-muted-foreground">Nenhuma conta com os filtros atuais.</div>
+              )}
+
+              {liveReady && filtered.map((a) => {
+                const g = groupById(a.group_id);
+                const open = !a.hidden && expanded === a.account_id;
+                const m = accMetrics(a);
+                const previous = accPrev(a);
+                const liveError = isLive ? live?.errors?.find((item) => item.account_id === a.account_id) : undefined;
+                const spendTrend = !liveError && previous.spend > 0 ? ((m.spend - previous.spend) / previous.spend) * 100 : null;
+                const linkedMeta = a.platform === "google" && a.linked_meta_account_id ? accounts.find((meta) => meta.account_id === a.linked_meta_account_id) : null;
+                const linkedGoogle = a.platform === "meta" ? accounts.filter((google) => google.platform === "google" && google.linked_meta_account_id === a.account_id && !google.hidden) : [];
+
+                return (
+                  <div key={a.account_id} className={cn("border-b border-border/30 last:border-b-0", a.hidden && "opacity-55")}>
+                    <div
+                      onClick={() => { if (!a.hidden) setExpanded(open ? null : a.account_id); }}
+                      className={cn(
+                        "grid grid-cols-[1.7fr_0.5fr_0.8fr_1fr_0.9fr_0.9fr_28px_28px] gap-2 px-4 py-3 items-center transition-colors",
+                        a.hidden ? "cursor-default" : "cursor-pointer hover:bg-accent/30",
+                        open && "bg-accent/20"
+                      )}
+                    >
+                      {/* Client */}
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <Avatar className="h-7 w-7 border border-border/50">
+                          <AvatarFallback className="text-[11px] font-bold" style={{ backgroundColor: g?.color || "var(--color-muted-foreground)", color: "#fff" }}>
+                            {initials(a.name)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium truncate" title={a.name}>{a.name}</div>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            {g && <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium" style={{ backgroundColor: g.color + "20", color: g.color }}>{g.name}</span>}
+                            {linkedMeta && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-sky-500/10 text-sky-600 dark:text-sky-400 font-medium">Cliente</span>}
+                            {a.status !== "ACTIVE" && <span className="text-[10px] text-destructive font-medium">● {a.status}</span>}
+                            {a.hidden && <span className="text-[10px] text-muted-foreground">oculta</span>}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Platform badges */}
+                      <div className="flex gap-1">
+                        {a.platform === "google" ? (
+                          <span className="w-5 h-5 rounded text-[10px] font-bold grid place-items-center bg-sky-500/10 text-sky-600 dark:text-sky-400" title="Google Ads">G</span>
+                        ) : (
+                          <span className="w-5 h-5 rounded text-[10px] font-bold grid place-items-center bg-blue-500/10 text-blue-600 dark:text-blue-400" title="Meta">f</span>
+                        )}
+                        {a.platform === "meta" && linkedGoogle.length > 0 && (
+                          <span className="w-5 h-5 rounded text-[10px] font-bold grid place-items-center bg-sky-500/10 text-sky-600 dark:text-sky-400" title={`${linkedGoogle.length} vinculada(s)`}>G</span>
+                        )}
+                      </div>
+
+                      {/* Trend */}
+                      <div className="grid justify-items-center gap-1">
+                        <Sparkline points={(m.daily || []).map((d) => d.spend)} color={g?.color || "var(--color-chart-1)"} width={64} height={20} />
+                        {spendTrend != null && (
+                          <span className={cn("text-[10px] font-semibold flex items-center gap-0.5", spendTrend >= 0 ? "text-emerald-500" : "text-red-500")}>
+                            {spendTrend >= 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+                            {Math.abs(spendTrend).toFixed(1)}%
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Spend */}
+                      <div className={cn("text-right text-sm font-semibold", liveError && "text-amber-500")} title={liveError?.message}>
+                        {liveError ? "Indisponível" : money(m.spend, a.currency)}
+                      </div>
+
+                      {/* Result */}
+                      <div className="text-right">
+                        <div className={cn("text-sm font-semibold", m.result > 0 ? "text-foreground" : "text-muted-foreground")}>
+                          {liveError ? "—" : m.result > 0 ? num(m.result) : "—"}
+                        </div>
+                        {fam.sales && m.value > 0 && m.spend > 0 && (
+                          <div className="text-[11px] text-emerald-500 font-medium">{(m.value / m.spend).toFixed(1)}x ROAS</div>
+                        )}
+                      </div>
+
+                      {/* Balance */}
+                      <BalanceCell account={a} />
+
+                      {/* Hide/Show */}
+                      <button onClick={(e) => { e.stopPropagation(); toggleHidden(a.account_id, !a.hidden); }}
+                        className="text-muted-foreground hover:text-foreground transition-colors" title={a.hidden ? "Reexibir" : "Ocultar"}>
+                        {a.hidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                      </button>
+
+                      {/* Expand */}
+                      <div className="text-center text-muted-foreground">
+                        {a.hidden ? "—" : open ? <ChevronUp className="h-3.5 w-3.5 inline" /> : <ChevronDown className="h-3.5 w-3.5 inline" />}
+                      </div>
+                    </div>
+
+                    {/* Expanded content */}
+                    {open && (
+                      <div className="border-t border-border/30 px-4 py-4 space-y-4 bg-muted/10">
+                        <OperationalLinks accountId={a.account_id} accountName={a.name} platform={a.platform} balance={a.balance} currency={a.currency} />
+                        <AccountChanges accountId={a.account_id} platform={a.platform} since={range.since} until={range.until} />
+                        <CollapsibleSection
+                          icon={a.platform === "google" ? "G" : "f"}
+                          title={a.platform === "google" ? "Google Ads" : "Meta Ads"}
+                          subtitle="campanhas, criativos, segmentações"
+                          meta={liveError ? "indisponível" : money(m.spend, a.currency)}
+                        >
+                          <AccountDetail accountId={a.account_id} platform={a.platform} since={range.since} until={range.until}
+                            status={a.status} balance={a.balance} currency={a.currency} />
+                        </CollapsibleSection>
+
+                        {a.platform === "meta" && (
+                          <div className="space-y-3">
+                            <h4 className="text-xs font-bold text-sky-600 dark:text-sky-400 uppercase tracking-wider">
+                              Google Ads vinculado ao cliente
+                            </h4>
+                            {linkedGoogle.length === 0 ? (
+                              <div className="px-4 py-3 rounded-lg bg-muted/30 text-sm text-muted-foreground">
+                                Nenhuma conta Google ativa vinculada. Faça o vínculo em Configurações → Contas.
+                              </div>
+                            ) : linkedGoogle.map((google) => {
+                              const gm = accMetrics(google);
+                              return (
+                                <div key={google.account_id}>
+                                  <CollapsibleSection
+                                    icon="G"
+                                    title={google.name}
+                                    meta={money(gm.spend, google.currency)}
+                                    subtitle={`${num(gm.results.conversoes || gm.result || 0)} conversões`}
+                                  >
+                                    <OperationalLinks accountId={google.account_id} accountName={google.name} platform="google" balance={null} currency={google.currency} compact />
+                                    <AccountChanges accountId={google.account_id} platform="google" since={range.since} until={range.until} compact />
+                                    <AccountDetail accountId={google.account_id} platform="google" since={range.since} until={range.until}
+                                      status={google.status} balance={null} currency={google.currency} />
+                                  </CollapsibleSection>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </Card>
       </div>
     </div>
   );
 }
 
-// ---------- subcomponentes ----------
+// --- Subcomponents ---
 
-// Largura das colunas da tabela. Dois defeitos que esta grade precisa evitar:
-//
-//   1. "1fr" só na coluna Cliente fazia ela engolir todo o espaço que sobrava
-//      — o nome ficava isolado à esquerda e as métricas espremidas à direita,
-//      com um vão enorme entre os dois. Agora toda coluna de conteúdo tem um
-//      mínimo e uma fatia do que sobra, então o conjunto cresce junto.
-//
-//   2. Coluna fixa estreita demais para o próprio título ("Investimento
-//      (período)" não cabe em 120px) fazia o rótulo vazar por cima do vizinho.
-//      O mínimo abaixo já considera o título + a seta de ordenação; o que
-//      ainda assim não couber quebra em duas linhas (ver SortButton).
-const GRID =
-  "minmax(200px,1.7fr) minmax(48px,.5fr) minmax(96px,.8fr) minmax(128px,1fr) minmax(96px,.9fr) minmax(104px,.9fr) 28px 26px";
+function KpiCard({ icon: Icon, label, value, trend, invertTrend }: {
+  icon: React.ElementType;
+  label: string;
+  value: string;
+  trend: number | null;
+  invertTrend?: boolean;
+}) {
+  const isGood = trend != null ? (invertTrend ? trend < 0 : trend > 0) : null;
+  return (
+    <Card className="relative overflow-hidden group">
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs text-muted-foreground font-medium">{label}</span>
+          <Icon className="h-4 w-4 text-muted-foreground/60" />
+        </div>
+        <div className="text-xl font-bold tracking-tight truncate">{value}</div>
+        {trend != null && (
+          <div className={cn("flex items-center gap-1 mt-1 text-xs font-medium", isGood ? "text-emerald-500" : "text-red-500")}>
+            {isGood ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+            <span>{Math.abs(trend).toFixed(1)}%</span>
+            <span className="text-muted-foreground font-normal">vs anterior</span>
+          </div>
+        )}
+      </CardContent>
+      <div className="absolute inset-x-0 bottom-0 h-0.5 bg-gradient-to-r from-transparent via-primary/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+    </Card>
+  );
+}
 
-// Saldo e fatura na mesma coluna, mas nunca com a mesma cara.
-//
-// A Meta devolve um campo `balance` para toda conta, com significados opostos:
-// em conta pré-paga é quanto ainda há para gastar; em conta de cartão ou PayPal
-// é quanto já se gastou e ainda vai ser cobrado. Mostrar os dois como "saldo"
-// levava à leitura invertida — uma conta devendo R$ 1.865 parecia ter esse
-// tanto disponível. Aqui o número vem sempre com o que ele é.
+function AlertCard({ alert, onAck, acking }: { alert: AlertItem; onAck: () => void; acking: boolean }) {
+  const colors = {
+    critical: { border: "border-red-500/30", bg: "bg-red-500/5", text: "text-red-600 dark:text-red-400", dot: "bg-red-500" },
+    warning: { border: "border-amber-500/30", bg: "bg-amber-500/5", text: "text-amber-600 dark:text-amber-400", dot: "bg-amber-500" },
+    info: { border: "border-sky-500/30", bg: "bg-sky-500/5", text: "text-sky-600 dark:text-sky-400", dot: "bg-sky-500" },
+  };
+  const c = colors[alert.level];
+  return (
+    <Card className={cn("border-l-2", c.border, c.bg)}>
+      <CardContent className="p-3 space-y-1.5">
+        <div className="flex items-center gap-1.5">
+          <span className={cn("w-1.5 h-1.5 rounded-full", c.dot)} />
+          <span className={cn("text-[11px] font-bold", c.text)}>
+            {alert.level === "critical" ? "Crítico" : alert.level === "warning" ? "Atenção" : "Info"}
+          </span>
+        </div>
+        <div className={cn("text-sm font-semibold", c.text)}>{alert.account_name}</div>
+        <div className="text-xs text-muted-foreground">{alert.title}</div>
+        <div className="text-xs text-muted-foreground/70">{alert.detail}</div>
+        <label className="flex items-center gap-2 pt-1 text-xs text-muted-foreground cursor-pointer">
+          <input type="checkbox" checked={false} disabled={acking} onChange={onAck}
+            className="rounded border-border accent-primary" />
+          Estou ciente
+        </label>
+      </CardContent>
+    </Card>
+  );
+}
+
+function HistoryCard({ alert, onReopen, acking }: { alert: AlertItem; onReopen?: () => void; acking: boolean }) {
+  const dotColors: Record<string, string> = { critical: "bg-red-500", warning: "bg-amber-500", info: "bg-sky-500" };
+  const badge = alert.resolved ? { label: "Resolvido", color: "text-emerald-500 bg-emerald-500/10" } : { label: "Ciente", color: "text-gray-500 bg-gray-500/10" };
+  const when = alert.resolved_at || alert.acknowledged_at || alert.last_seen_at;
+  return (
+    <Card className="opacity-80">
+      <CardContent className="p-3 space-y-1">
+        <div className="flex items-center gap-1.5">
+          <span className={cn("w-1.5 h-1.5 rounded-full", dotColors[alert.level])} />
+          <span className="text-[11px] font-bold text-muted-foreground">
+            {alert.level === "critical" ? "Crítico" : alert.level === "warning" ? "Atenção" : "Info"}
+          </span>
+          <span className={cn("ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-full", badge.color)}>
+            {badge.label}
+          </span>
+        </div>
+        <div className="text-sm font-semibold text-foreground/80">{alert.account_name}</div>
+        <div className="text-xs text-muted-foreground">{alert.title}</div>
+        <div className="flex items-center justify-between pt-1">
+          <span className="text-[10px] text-muted-foreground">
+            {when ? new Date(when).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : ""}
+          </span>
+          {onReopen && (
+            <button onClick={onReopen} disabled={acking}
+              className="text-[11px] text-primary hover:underline bg-transparent border-none cursor-pointer p-0">
+              reabrir
+            </button>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function BalanceCell({ account }: { account: Account }) {
   if (account.platform !== "meta") {
-    return <div className="ec-cellbal"><div className="ec-cellbal__val" data-tone="void">—</div></div>;
+    return <div className="text-right text-sm text-muted-foreground">—</div>;
   }
-
   const prepaid = account.is_prepaid;
   const balance = account.balance;
   const unbilled = account.unbilled_amount ?? null;
@@ -1223,44 +1065,35 @@ function BalanceCell({ account }: { account: Account }) {
   if (prepaid === true && balance != null) {
     const empty = balance <= 0;
     return (
-      <div className="ec-cellbal">
-        <div className="ec-cellbal__val" data-tone={empty ? "danger" : undefined}>
+      <div className="text-right leading-tight">
+        <div className={cn("text-sm", empty ? "text-red-500 font-bold" : "text-foreground font-medium")}>
           {money(balance, account.currency)}
         </div>
-        <div className="ec-cellbal__label" data-tone={empty ? "danger" : "muted"}>
+        <div className={cn("text-[10px]", empty ? "text-red-500" : "text-muted-foreground")}>
           {empty ? "sem saldo" : "saldo"}
         </div>
       </div>
     );
   }
-
   if (prepaid === false) {
     return (
-      <div className="ec-cellbal" title="Gasto já realizado que ainda será cobrado no cartão ou no PayPal. Não é saldo disponível.">
-        <div className="ec-cellbal__val" data-tone="muted">
+      <div className="text-right leading-tight" title="Gasto a faturar no cartão/PayPal">
+        <div className="text-sm text-muted-foreground font-normal">
           {unbilled != null ? money(unbilled, account.currency) : "—"}
         </div>
-        <div className="ec-cellbal__label" data-tone="muted">a faturar</div>
+        <div className="text-[10px] text-muted-foreground/60">a faturar</div>
       </div>
     );
   }
-
   return (
-    <div className="ec-cellbal" title="A próxima coleta identifica se a conta é pré-paga ou pós-paga.">
-      <div className="ec-cellbal__val" data-tone="void">—</div>
-      <div className="ec-cellbal__label" data-tone="void">sem classificação</div>
+    <div className="text-right leading-tight" title="Aguardando classificação">
+      <div className="text-sm text-muted-foreground">—</div>
+      <div className="text-[10px] text-muted-foreground/60">sem classificação</div>
     </div>
   );
 }
 
-function GridSortHeader({
-  children,
-  sortKey,
-  sort,
-  onSort,
-  align = "right",
-  initialDirection = "asc",
-}: {
+function GridSortHeader({ children, sortKey, sort, onSort, align = "right", initialDirection = "asc" }: {
   children: React.ReactNode;
   sortKey: AccountSortKey;
   sort: SortState<AccountSortKey>;
@@ -1269,28 +1102,13 @@ function GridSortHeader({
   initialDirection?: "asc" | "desc";
 }) {
   return (
-    <SortButton
-      column={sortKey}
-      sort={sort}
-      onSort={onSort}
-      align={align}
-      initialDirection={initialDirection}
-    >
+    <SortButton column={sortKey} sort={sort} onSort={onSort} align={align} initialDirection={initialDirection}>
       {children}
     </SortButton>
   );
 }
 
-
-
-function OperationalLinks({
-  accountId,
-  accountName,
-  platform,
-  balance,
-  currency,
-  compact = false,
-}: {
+function OperationalLinks({ accountId, accountName, platform, balance, currency, compact = false }: {
   accountId: string;
   accountName: string;
   platform: "meta" | "google";
@@ -1300,297 +1118,116 @@ function OperationalLinks({
 }) {
   const [copied, setCopied] = useState<string | null>(null);
   const [business, setBusiness] = useState<{ id: string; name: string | null } | null>(null);
-  const [finance, setFinance] = useState<{
-    is_prepaid: boolean;
-    balance: number | null;
-    spend_7d: number;
-    average_daily_spend: number;
-    runway_days: number | null;
-    estimated_depletion_date: string | null;
-  } | null>(null);
+  const [finance, setFinance] = useState<{ is_prepaid: boolean; balance: number | null; spend_7d: number; average_daily_spend: number; runway_days: number | null; estimated_depletion_date: string | null } | null>(null);
   const bareId = accountId.replace(/^act_/, "").replace(/^google:/, "");
   const isMeta = platform === "meta";
+
   useEffect(() => {
     if (!isMeta) return;
     let alive = true;
     fetch(`/api/account/links?account_id=${encodeURIComponent(accountId)}`, { cache: "no-store" })
-      .then((response) => response.json())
-      .then((payload) => {
-        if (alive && payload?.business_id) {
-          setBusiness({ id: payload.business_id, name: payload.business_name || null });
-        }
-        if (alive && payload?.finance) setFinance(payload.finance);
+      .then((r) => r.json())
+      .then((p) => {
+        if (alive && p?.business_id) setBusiness({ id: p.business_id, name: p.business_name || null });
+        if (alive && p?.finance) setFinance(p.finance);
       })
       .catch(() => {});
     return () => { alive = false; };
   }, [accountId, isMeta]);
-  const businessParam = business?.id
-    ? `&business_id=${encodeURIComponent(business.id)}`
-    : "";
+
+  const businessParam = business?.id ? `&business_id=${encodeURIComponent(business.id)}` : "";
   const billingUrl = isMeta
     ? `https://business.facebook.com/billing_hub/payment_settings?asset_id=${encodeURIComponent(bareId)}${businessParam}&placement=standalone`
     : `https://ads.google.com/aw/billing/summary?ocid=${encodeURIComponent(bareId)}`;
   const links = isMeta
     ? [
-        {
-          label: "Ads Manager",
-          title: "Abrir campanhas desta conta no Meta Ads Manager",
-          url: `https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=${encodeURIComponent(bareId)}`,
-        },
-        {
-          label: "Saldo / pagamento",
-          title: "Abrir formas de pagamento ou adicionar fundos nesta conta",
-          url: billingUrl,
-          accent: true,
-        },
-        {
-          label: "Faturas",
-          title: "Abrir o faturamento desta conta",
-          url: `https://business.facebook.com/billing_hub/accounts/details?asset_id=${encodeURIComponent(bareId)}${businessParam}&placement=standalone`,
-        },
-        {
-          label: "Conta e acessos",
-          title: "Abrir a conta de anúncios nas configurações da BM",
-          url: `https://business.facebook.com/settings/ad-accounts/${encodeURIComponent(bareId)}${business?.id ? `?business_id=${encodeURIComponent(business.id)}` : ""}`,
-        },
-        {
-          label: "Business Manager",
-          title: business?.name
-            ? `Abrir a BM ${business.name}`
-            : "Abrir as configurações do Meta Business",
-          url: business?.id
-            ? `https://business.facebook.com/settings?business_id=${encodeURIComponent(business.id)}`
-            : "https://business.facebook.com/settings",
-        },
+        { label: "Ads Manager", url: `https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=${encodeURIComponent(bareId)}`, accent: false },
+        { label: "Saldo / pagamento", url: billingUrl, accent: true },
+        { label: "Faturas", url: `https://business.facebook.com/billing_hub/accounts/details?asset_id=${encodeURIComponent(bareId)}${businessParam}&placement=standalone`, accent: false },
+        { label: "Conta e acessos", url: `https://business.facebook.com/settings/ad-accounts/${encodeURIComponent(bareId)}${business?.id ? `?business_id=${encodeURIComponent(business.id)}` : ""}`, accent: false },
+        { label: "Business Manager", url: business?.id ? `https://business.facebook.com/settings?business_id=${encodeURIComponent(business.id)}` : "https://business.facebook.com/settings", accent: false },
       ]
     : [
-        {
-          label: "Google Ads",
-          title: "Abrir a visão geral deste cliente Google Ads",
-          url: `https://ads.google.com/aw/overview?ocid=${encodeURIComponent(bareId)}`,
-        },
-        {
-          label: "Campanhas",
-          title: "Abrir as campanhas deste cliente Google Ads",
-          url: `https://ads.google.com/aw/campaigns?ocid=${encodeURIComponent(bareId)}`,
-        },
-        {
-          label: "Faturamento",
-          title: "Abrir o resumo de faturamento ou adicionar fundos",
-          url: billingUrl,
-          accent: true,
-        },
-        {
-          label: "Acessos",
-          title: "Abrir usuários, acessos e segurança deste cliente",
-          url: `https://ads.google.com/aw/accountaccess/users?ocid=${encodeURIComponent(bareId)}`,
-        },
+        { label: "Google Ads", url: `https://ads.google.com/aw/overview?ocid=${encodeURIComponent(bareId)}`, accent: false },
+        { label: "Campanhas", url: `https://ads.google.com/aw/campaigns?ocid=${encodeURIComponent(bareId)}`, accent: false },
+        { label: "Faturamento", url: billingUrl, accent: true },
+        { label: "Acessos", url: `https://ads.google.com/aw/accountaccess/users?ocid=${encodeURIComponent(bareId)}`, accent: false },
       ];
-
-  async function copy(value: string, key: string) {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopied(key);
-      window.setTimeout(() => setCopied(null), 1_800);
-    } catch {
-      window.prompt("Copie este link:", value);
-    }
-  }
   const effectiveBalance = finance ? finance.balance : balance;
   const runwayDays = finance?.runway_days ?? null;
-  const formatCurrency = (value: number) =>
-    new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: currency || "BRL",
-    }).format(value);
-  const runwayText =
-    runwayDays == null
-      ? null
-      : runwayDays < 1
-        ? `${Math.max(1, Math.round(runwayDays * 24))}h`
-        : runwayDays < 10
-          ? `${runwayDays.toFixed(1)} dias`
-          : `${Math.round(runwayDays)} dias`;
-  const depletionText = finance?.estimated_depletion_date
-    ? new Date(`${finance.estimated_depletion_date}T12:00:00`).toLocaleDateString("pt-BR")
-    : null;
-  const balanceText = effectiveBalance == null
-    ? ""
-    : `\nSaldo disponível: ${formatCurrency(effectiveBalance)}.` +
-      (runwayText
-        ? ` No ritmo médio dos últimos 7 dias, a previsão é durar ${runwayText}${depletionText ? ` (até aproximadamente ${depletionText})` : ""}.`
-        : "");
-  const clientMessage =
-    `Olá! Para manter as campanhas da conta "${accountName}" (ID ${bareId}) ativas, ` +
-    `acesse o link abaixo para conferir o faturamento e adicionar saldo.${balanceText}\n\n${billingUrl}\n\n` +
-    "É necessário entrar com um perfil que tenha permissão financeira ou de administrador nessa conta.";
+  const formatCurrency = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: currency || "BRL" }).format(v);
+  const runwayText = runwayDays == null ? null : runwayDays < 1 ? `${Math.max(1, Math.round(runwayDays * 24))}h` : runwayDays < 10 ? `${runwayDays.toFixed(1)} dias` : `${Math.round(runwayDays)} dias`;
+  const depletionText = finance?.estimated_depletion_date ? new Date(`${finance.estimated_depletion_date}T12:00:00`).toLocaleDateString("pt-BR") : null;
+
+  async function copy(value: string, key: string) {
+    try { await navigator.clipboard.writeText(value); setCopied(key); setTimeout(() => setCopied(null), 1800); }
+    catch { window.prompt("Copie:", value); }
+  }
 
   const balTone = runwayDays != null && runwayDays <= 1 ? "danger" : runwayDays != null && runwayDays <= 5 ? "warn" : "ok";
 
   return (
-    <section className="ec-linkrow" style={{ margin: compact ? "12px 0 0" : "14px 0 2px" }}>
-      <span className="ec-linkrow__head">
+    <div className={cn("flex flex-wrap items-center gap-1.5", compact ? "py-2" : "py-1")}>
+      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mr-1">
         Acesso rápido{business?.name ? ` · ${business.name}` : ""}
       </span>
       {isMeta && finance?.is_prepaid && effectiveBalance != null && (
-        <span
-          className={"ec-linkrow__bal ec-linkrow__bal--" + balTone}
-          data-tone={balTone}
-          title={
-            finance.average_daily_spend > 0
-              ? `Média diária (7d): ${formatCurrency(finance.average_daily_spend)}`
-              : "Sem gasto nos últimos 7 dias"
-          }
-        >
-          Saldo {formatCurrency(effectiveBalance)}
-          {runwayText ? ` · dura ${runwayText}` : " · sem gasto 7d"}
-          {depletionText && runwayText ? ` · até ${depletionText}` : ""}
+        <span className={cn(
+          "px-2 py-1 text-[10px] font-bold rounded-md border",
+          balTone === "danger" ? "bg-red-500/10 border-red-500/30 text-red-500" :
+          balTone === "warn" ? "bg-amber-500/10 border-amber-500/30 text-amber-600" :
+          "bg-emerald-500/10 border-emerald-500/30 text-emerald-500"
+        )}>
+          Saldo {formatCurrency(effectiveBalance)} · {runwayText ? `dura ${runwayText}` : "sem gasto 7d"}
+          {depletionText ? ` · até ${depletionText}` : ""}
         </span>
       )}
       {links.map((link) => (
-        <a
-          key={link.label}
-          href={link.url}
-          target="_blank"
-          rel="noreferrer"
-          title={link.title}
-          className={"ec-linkrow__item" + (link.accent ? " ec-linkrow__item--accent" : "")}
-          data-accent={link.accent ? "true" : undefined}
-        >
-          {link.label} ↗
+        <a key={link.label} href={link.url} target="_blank" rel="noreferrer"
+          className={cn(
+            "px-2 py-1 text-[10px] font-semibold rounded-md border transition-colors inline-flex items-center gap-1 no-underline",
+            link.accent
+              ? "bg-primary/10 border-primary/20 text-primary hover:bg-primary/20"
+              : "bg-muted/30 border-border/50 text-muted-foreground hover:text-foreground hover:bg-accent/50"
+          )}>
+          {link.label} <ExternalLink className="h-2.5 w-2.5" />
         </a>
       ))}
-      <button
-        className="ec-linkrow__action"
-        onClick={() => copy(billingUrl, "billing")}
-        title="Copiar para enviar ao cliente; ele precisará entrar com um perfil autorizado"
-      >
-        {copied === "billing" ? "Link copiado ✓" : "Copiar link de saldo"}
+      <button onClick={() => copy(billingUrl, "billing")}
+        className="px-2 py-1 text-[10px] font-semibold rounded-md border border-dashed border-primary/30 text-primary hover:bg-primary/10 transition-colors cursor-pointer bg-transparent">
+        {copied === "billing" ? <><Check className="h-2.5 w-2.5 inline" /> Copiado</> : <><Copy className="h-2.5 w-2.5 inline" /> Copiar link</>}
       </button>
-      {isMeta && (
-        <>
-          <a
-            href={`https://wa.me/?text=${encodeURIComponent(clientMessage)}`}
-            target="_blank"
-            rel="noreferrer"
-            title="Abrir o WhatsApp com o aviso de saldo pronto para enviar"
-            style={{
-              padding: "6px 9px",
-              borderRadius: "var(--r-sm)",
-              border: "1px solid #bfe0c8",
-              background: "#edf9f0",
-              color: "#20713a",
-              fontSize: 11,
-              fontWeight: 700,
-              textDecoration: "none",
-            }}
-          >
-            Enviar no WhatsApp ↗
-          </a>
-          <button
-            onClick={() => copy(clientMessage, "message")}
-            title="Copiar uma mensagem pronta com conta, saldo e link para enviar ao cliente"
-            style={{
-              padding: "6px 9px",
-              borderRadius: "var(--r-sm)",
-              border: "1px dashed #bfe0c8",
-              background: "#f6fbf7",
-              color: "#267a45",
-              fontSize: 11,
-              fontWeight: 650,
-              cursor: "pointer",
-            }}
-          >
-            {copied === "message" ? "Mensagem copiada ✓" : "Copiar aviso"}
-          </button>
-        </>
-      )}
-      <button
-        onClick={() => copy(bareId, "id")}
-        title="Copiar o ID desta conta de anúncios"
-        style={{
-          padding: "6px 9px",
-          borderRadius: "var(--r-sm)",
-          border: "1px solid transparent",
-          background: "transparent",
-          color: "var(--text-muted)",
-          fontSize: 10.5,
-          cursor: "pointer",
-        }}
-      >
-        {copied === "id" ? "ID copiado ✓" : `ID ${bareId}`}
+      <button onClick={() => copy(bareId, "id")}
+        className="px-2 py-1 text-[10px] rounded-md text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none">
+        {copied === "id" ? "✓ ID" : `ID ${bareId}`}
       </button>
-    </section>
-  );
-}
-
-function Chip({ active, onClick, label, color }: { active: boolean; onClick: () => void; label: string; color: string }) {
-  return (
-    <button
-      onClick={onClick}
-      className={"ec-chip" + (active ? " ec-chip--active" : "")}
-      style={{ color, borderColor: active ? color : undefined }}
-      data-active={active ? "true" : undefined}
-    >
-      <span className="ec-chip__dot" style={{ background: color }} />
-      {label}
-    </button>
-  );
-}
-
-function TabBtn({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button onClick={onClick} className="ec-tab" data-active={active ? "true" : undefined} aria-pressed={active}>
-      {children}
-    </button>
-  );
-}
-
-function Empty({ children }: { children: React.ReactNode }) {
-  return <div style={{ fontSize: 13, color: "var(--text-faint)", padding: "8px 2px" }}>{children}</div>;
-}
-
-function Kpi({ label, value, cur, prev, invert, neutral }: { label: string; value: string; cur?: number; prev?: number; invert?: boolean; neutral?: boolean }) {
-  const d = cur != null && prev != null ? delta(cur, prev) : null;
-  let badge = null;
-  if (d && d.hasPrev) {
-    const up = d.pct >= 0;
-    const good = invert ? !up : up;
-    const tone = neutral || Math.abs(d.pct) < 0.05 ? "flat" : good ? "good" : "bad";
-    badge = (
-      <span className="ec-kpi__delta" data-tone={tone}>
-        {up ? "▲" : "▼"} {Math.abs(d.pct).toFixed(1)}%<span> vs. anterior</span>
-      </span>
-    );
-  }
-  return (
-    <div className="ec-kpi">
-      <div className="ec-kpi__label">{label}</div>
-      {/* Números tabulares: a coluna não "dança" quando o valor muda. */}
-      <div className="ec-kpi__value">{value}</div>
-      <div className="ec-kpi__foot">{badge}</div>
     </div>
   );
 }
 
-// Mini-gráfico de tendência em SVG.
-function Sparkline({ points, color = "var(--data-1)", width = 84, height = 26 }: { points: number[]; color?: string; width?: number; height?: number }) {
-  if (!points || points.length < 2) return <div style={{ width, height }} />;
-  const max = Math.max(...points, 1);
-  const min = Math.min(...points, 0);
-  const span = max - min || 1;
-  const step = width / (points.length - 1);
-  const coords = points.map((v, i) => [i * step, height - ((v - min) / span) * (height - 4) - 2]);
-  const path = coords.map(([x, y], i) => `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
-  const area = `${path} L${width},${height} L0,${height} Z`;
+function CollapsibleSection({ icon, title, subtitle, meta, children }: {
+  icon: string;
+  title: string;
+  subtitle: string;
+  meta: string;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
   return (
-    <svg width={width} height={height} style={{ display: "block" }}>
-      <path d={area} fill={color + "18"} />
-      <path d={path} fill="none" stroke={color} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
-    </svg>
+    <div className="rounded-lg border border-border/50 overflow-hidden">
+      <button onClick={() => setOpen(!open)}
+        className="flex items-center gap-3 w-full px-4 py-3 text-left bg-muted/10 hover:bg-accent/20 transition-colors cursor-pointer border-none">
+        <span className="w-6 h-6 rounded text-xs font-bold grid place-items-center bg-primary/10 text-primary shrink-0">
+          {icon}
+        </span>
+        <span className="flex-1 min-w-0">
+          <span className="text-sm font-semibold text-foreground">{title}</span>
+          <span className="text-xs text-muted-foreground ml-2">{meta}</span>
+        </span>
+        <span className="text-[11px] text-muted-foreground hidden sm:inline">{subtitle}</span>
+        {open ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
+      </button>
+      {open && <div className="px-4 py-3 border-t border-border/30 space-y-3">{children}</div>}
+    </div>
   );
-}
-
-function Center({ children }: { children: React.ReactNode }) {
-  return <div style={{ maxWidth: 640, margin: "60px auto", padding: 24, fontFamily: "system-ui, sans-serif", display: "grid", gap: 12 }}>{children}</div>;
 }

@@ -1,258 +1,194 @@
-/* ==========================================================================
-   Fundação de estilo — Apple Design System (via DESIGN.md).
-   Identidade visual inspirada na Apple: fotografia em primeiro plano, UI
-   rebaixada, azul único (#0066cc) como tom de ação, texto near-black (#1d1d1f)
-   e superfícies branca/parchment alternadas.
-   ========================================================================== */
+@import "tailwindcss";
 
-:root {
-  /* ---------- cor: Apple ----------
-     Action Blue é o ÚNICO tom de interação. Não existe segunda cor de marca.
-     Ink é near-black (#1d1d1f) — nunca pure black — para manter o caráter
-     fotográfico em vez de impresso. */
-  --brand-500: #0066cc;    /* Action Blue — interação, link, foco */
-  --brand-600: #0071e3;    /* Focus Blue — focus ring */
-  --brand-700: #0066cc;    /* Action Blue (consistência com botão primary) */
-  --brand-800: #004999;    /* Pressed state */
-  --brand-900: #003366;    /* Mais escuro para hover em superfícies claras */
-  --brand-50: #e8f0fe;     /* Azul muito claro — fundo de badge/link hover */
-  --brand-100: #d0e3ff;    /* Azul claro — seleção */
-  --brand-200: #a8c9ff;    /* Borda sutil */
+@custom-variant dark (&:is(.dark *));
 
-  /* ---------- cor: superfície ----------
-     Apple usa white, parchment (#f5f5f7) e três near-blacks para tiles. */
-  --surface: #ffffff;
-  --surface-sunken: #f5f5f7;    /* Parchment — canvas alternativo */
-  --surface-raised: rgba(255, 255, 255, 0.76); /* vidro */
-  --border: #e0e0e0;           /* Hairline */
-  --border-strong: #c0c0c0;
+@theme inline {
+  --color-background: #f8fafc;
+  --color-foreground: #0f172a;
+  --color-card: #ffffff;
+  --color-card-foreground: #0f172a;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #0f172a;
+  --color-primary: #06b6d4;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #f1f5f9;
+  --color-secondary-foreground: #1e293b;
+  --color-muted: #f1f5f9;
+  --color-muted-foreground: #64748b;
+  --color-accent: #f8fafc;
+  --color-accent-foreground: #1e293b;
+  --color-destructive: #ef4444;
+  --color-destructive-foreground: #ffffff;
+  --color-border: #e2e8f0;
+  --color-input: #e2e8f0;
+  --color-ring: #06b6d4;
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-info: #3b82f6;
 
-  /* ---------- cor: texto ----------
-     Ink (#1d1d1f) para headlines e body. Muted (#cccccc) para secundário
-     em dark tile (não aplicado no painel interno — só em /c e /r). */
-  --text-strong: #1d1d1f;  /* Near-black — headlines, body */
-  --text: #1d1d1f;          /* Body */
-  --text-muted: #6e6e73;    /* Secondary info */
-  --text-faint: #86868b;    /* Rótulo grande, ícone decorativo */
+  --color-chart-1: #06b6d4;
+  --color-chart-2: #10b981;
+  --color-chart-3: #8b5cf6;
+  --color-chart-4: #f59e0b;
+  --color-chart-5: #ef4444;
 
-  /* ---------- cor: semântica ----------
-     Apple usa vermelho e verde minimalistas. */
-  --ok-600: #1d7a4d;
-  --ok-50: #eef7f1;
-  --warn-700: #956e1c;
-  --warn-50: #fff8e9;
-  --danger-600: #b5372c;
-  --danger-50: #fdf0ef;
+  --color-sidebar: #ffffff;
+  --color-sidebar-foreground: #0f172a;
+  --color-sidebar-accent: #f1f5f9;
+  --color-sidebar-accent-foreground: #1e293b;
+  --color-sidebar-ring: #06b6d4;
 
-  /* ---------- espaço: tokens Apple ----------
-     Base 8px. Estrutura em 8/12/16/20/24/32/48/80. */
-  --sp-1: 4px;
-  --sp-2: 8px;
-  --sp-3: 12px;
-  --sp-4: 17px;
-  --sp-5: 24px;
-  --sp-6: 32px;
-  --sp-7: 48px;
-
-  /* ---------- raio ----------
-     Apple usa 0 (full-bleed), 5px (inline), 8px (utility),
-     11px (pearl capsule), 18px (utility cards), pill (9999px). */
-  --r-sm: 8px;
-  --r-md: 11px;
-  --r-lg: 18px;
-  --r-full: 9999px;
-
-  /* ---------- sombra: UMA, e só ----------
-     Apple usa exatamente UMA sombra — para produto sobre superfície.
-     Cards não têm sombra; o sistema usa borda sutil (hairline). */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06);
-
-  /* ---------- tipo: Inter substituto do SF Pro ----------
-     SF Pro Display (headlines) / SF Pro Text (body). Inter é o substituto
-     recomendado pelo DESIGN.md. Ajustamos letter-spacing para -0.01em em
-     display e line-height ligeiramente mais justo (1.44 vs 1.47). */
-  --font-display: var(--font-inter), system-ui, -apple-system, sans-serif;
-  --font-text: var(--font-inter), system-ui, -apple-system, sans-serif;
-
-  /* ---------- cor: plataforma ----------
-     Cores das plataformas de anúncio para badges e indicadores. */
-  --platform-meta: #1877f2;
-  --platform-meta-bg: #e7f0fd;
-  --platform-google: #4285f4;
-  --platform-google-bg: #f5f7fa;
-  --platform-meta-linked: #315b91;
-
-  /* ---------- cor: dados ----------
-     Paleta para visualização de dados (sparklines, charts). */
-  --data-1: #3987e5;
-  --data-2: #22c55e;
-  --data-3: #f59e0b;
-  --data-4: #ef4444;
-  --data-5: #a855f7;
-  --data-6: #06b6d4;
-
-  /* ---------- cor: saldo ----------
-     Tons para indicador de saldo/pista (runway). */
-  --bal-ok: #2b7143;
-  --bal-ok-bg: #f1f8f3;
-  --bal-ok-border: #c9dfcf;
-  --bal-warn: #8a6117;
-  --bal-warn-bg: #fff8e9;
-  --bal-warn-border: #edd49f;
-  --bal-danger: #ad3d36;
-  --bal-danger-bg: #fff1ef;
-  --bal-danger-border: #efc0bb;
-
-  /* ---------- movimento ---------- */
-  --t-fast: 120ms;
-  --t: 180ms;
-  --ease: cubic-bezier(0.2, 0, 0.2, 1);
+  --radius: 0.75rem;
+  --spacing: 0.25rem;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
 }
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
+.dark {
+  --color-background: #0a0f1e;
+  --color-foreground: #f1f5f9;
+  --color-card: #111827;
+  --color-card-foreground: #f1f5f9;
+  --color-popover: #111827;
+  --color-popover-foreground: #f1f5f9;
+  --color-primary: #22d3ee;
+  --color-primary-foreground: #0a0f1e;
+  --color-secondary: #1e293b;
+  --color-secondary-foreground: #f1f5f9;
+  --color-muted: #1e293b;
+  --color-muted-foreground: #94a3b8;
+  --color-accent: #1e293b;
+  --color-accent-foreground: #f1f5f9;
+  --color-destructive: #f87171;
+  --color-destructive-foreground: #0a0f1e;
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-input: rgba(255, 255, 255, 0.1);
+  --color-ring: #22d3ee;
+  --color-success: #34d399;
+  --color-warning: #fbbf24;
+  --color-info: #60a5fa;
+
+  --color-chart-1: #22d3ee;
+  --color-chart-2: #34d399;
+  --color-chart-3: #a78bfa;
+  --color-chart-4: #fbbf24;
+  --color-chart-5: #f87171;
+
+  --color-sidebar: #0f172a;
+  --color-sidebar-foreground: #f1f5f9;
+  --color-sidebar-accent: #1e293b;
+  --color-sidebar-accent-foreground: #f1f5f9;
+  --color-sidebar-ring: #22d3ee;
 }
 
-html {
-  -webkit-text-size-adjust: 100%;
+@layer base {
+  * { @apply border-border; }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
 }
 
-body {
-  margin: 0;
-  background: var(--surface);
-  color: var(--text-strong);
-  font-family: var(--font-text);
-  font-size: 17px;
-  line-height: 1.47;
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
+/* Smooth page transitions */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 0.3s;
 }
 
-h1,
-h2,
-h3,
-h4 {
-  font-family: var(--font-display);
-  color: var(--text-strong);
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  margin: 0;
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-muted-foreground); }
+
+/* Animations */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
-  outline: 2px solid var(--brand-600);
-  outline-offset: 2px;
-  border-radius: var(--r-sm);
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-::selection {
-  background: var(--brand-100);
-  color: var(--text-strong);
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.animate-fade-in { animation: fade-in 0.3s ease-out; }
+.animate-slide-up { animation: slide-up 0.4s ease-out; }
+.animate-pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }
+
+@utility animate-in {
+  animation: animate-in 0.2s ease-out;
+}
+@utility fade-in {
+  animation: fade-in 0.2s ease-out;
+}
+@utility fade-in-0 {
+  opacity: 0;
+}
+@utility zoom-in-95 {
+  transform: scale(0.95);
+}
+@utility slide-in-from-top-2 {
+  transform: translateY(-2px);
+}
+@utility slide-in-from-bottom-2 {
+  transform: translateY(2px);
+}
+@utility slide-in-from-left-2 {
+  transform: translateX(-2px);
+}
+@utility slide-in-from-right-2 {
+  transform: translateX(2px);
+}
+@utility data-\[state\=open\]\:animate-in {
+  &[data-state="open"] { animation: animate-in 0.15s ease-out; }
+}
+@utility data-\[state\=closed\]\:animate-out {
+  &[data-state="closed"] { animation: animate-out 0.1s ease-in; }
+}
+@utility data-\[state\=closed\]\:fade-out-0 {
+  &[data-state="closed"] { opacity: 0; }
+}
+@utility data-\[state\=open\]\:fade-in-0 {
+  &[data-state="open"] { opacity: 1; }
+}
+@utility data-\[state\=closed\]\:zoom-out-95 {
+  &[data-state="closed"] { transform: scale(0.95); }
+}
+@utility data-\[state\=open\]\:zoom-in-95 {
+  &[data-state="open"] { transform: scale(1); }
+}
+@utility data-\[side\=bottom\]\:slide-in-from-top-2 {
+  &[data-side="bottom"] { transform: translateY(-2px); }
+}
+@utility data-\[side\=left\]\:slide-in-from-right-2 {
+  &[data-side="left"] { transform: translateX(2px); }
+}
+@utility data-\[side\=right\]\:slide-in-from-left-2 {
+  &[data-side="right"] { transform: translateX(-2px); }
+}
+@utility data-\[side\=top\]\:slide-in-from-bottom-2 {
+  &[data-side="top"] { transform: translateY(2px); }
+}
+
+@keyframes animate-in {
+  from { opacity: 0; transform: scale(0.95) translateY(4px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes animate-out {
+  from { opacity: 1; transform: scale(1) translateY(0); }
+  to { opacity: 0; transform: scale(0.95) translateY(-4px); }
+}
+
+@utility safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
-}
-
-/* ==========================================================================
-   Dark Mode — Apple-inspired dark palette.
-   Como todo o CSS usa variáveis, este bloco propaga para todos os
-   componentes sem tocar em um seletor de componente que seja.
-   ========================================================================== */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --brand-500: #0a84ff;
-    --brand-600: #409cff;
-    --brand-700: #0a84ff;
-    --brand-800: #0066cc;
-    --brand-900: #004999;
-    --brand-50: #1a2a3f;
-    --brand-100: #1a3456;
-    --brand-200: #254b70;
-
-    --surface: #1c1c1e;
-    --surface-sunken: #000000;
-    --surface-raised: rgba(28, 28, 30, 0.85);
-    --border: #38383a;
-    --border-strong: #48484a;
-
-    --text-strong: #f5f5f7;
-    --text: #e5e5ea;
-    --text-muted: #98989d;
-    --text-faint: #636366;
-
-    --ok-600: #30d158;
-    --ok-50: #1a2e1e;
-    --warn-700: #ffd60a;
-    --warn-50: #2a2410;
-    --danger-600: #ff453a;
-    --danger-50: #2e1412;
-
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
-  }
-}
-
-/* ---------- utilidades ---------- */
-
-/* Mesh gradient sutil — Apple não usa gradientes decorativos, mas mantemos
-   um mesh muito leve para o login e estados vazios. */
-.ec-mesh {
-  position: relative;
-  background:
-    radial-gradient(60% 80% at 12% 0%, rgba(0, 102, 204, 0.06), transparent 70%),
-    radial-gradient(50% 70% at 92% 8%, rgba(0, 102, 204, 0.04), transparent 72%),
-    var(--surface-sunken);
-}
-
-.ec-glass {
-  background: var(--surface-raised);
-  backdrop-filter: saturate(180%) blur(20px);
-  -webkit-backdrop-filter: saturate(180%) blur(20px);
-  border-bottom: 1px solid var(--border);
-}
-@supports not (backdrop-filter: blur(4px)) {
-  .ec-glass {
-    background: rgba(255, 255, 255, 0.96);
-  }
-}
-
-.ec-skeleton {
-  background: linear-gradient(90deg, var(--brand-100) 25%, var(--brand-50) 37%, var(--brand-100) 63%);
-  background-size: 400% 100%;
-  animation: ec-shimmer 1.3s ease-in-out infinite;
-  border-radius: var(--r-sm);
-}
-@keyframes ec-shimmer {
-  0% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0 50%;
-  }
-}
-
-.ec-scroll-x {
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  max-width: 100%;
-  min-width: 0;
-}
-
-@media print {
-  .ec-glass,
-  .ec-mesh {
-    background: #fff !important;
-    backdrop-filter: none !important;
-  }
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }

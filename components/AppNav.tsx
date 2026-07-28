@@ -1,69 +1,59 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { usePathname } from "next/navigation";
-import { useRouter } from "next/navigation";
-import BrandMark from "@/components/BrandMark";
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import {
+  LayoutDashboard,
+  Target,
+  CheckSquare2,
+  TrendingUp,
+  Palette,
+  Search,
+  Bell,
+  Settings,
+  LogOut,
+  Menu,
+  X,
+  ChevronRight,
+  BarChart3,
+  DollarSign,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useTheme } from "@/components/ThemeProvider";
 
-// Os sete itens eram uma fileira plana. Agrupados por intenção — o que se opera
-// todo dia, o que se analisa quando há dúvida, e o que se configura raramente —
-// a barra passa a dizer para que serve cada coisa. Nenhum item foi removido.
-const GROUPS: { items: { href: string; label: string; icon: string; title: string }[] }[] = [
-  {
-    items: [
-      { href: "/today", label: "Hoje", icon: "◴", title: "O que precisa de atenção agora" },
-      { href: "/", label: "Clientes", icon: "◫", title: "Contas, métricas e relatórios" },
-      { href: "/tarefas", label: "Tarefas", icon: "☑", title: "O que chegou e o que o sistema detectou" },
-    ],
-  },
-  {
-    items: [
-      { href: "/vendas", label: "Vendas", icon: "◈", title: "Vendas reais informadas, contra o investido" },
-      { href: "/creatives", label: "Criativos", icon: "◉", title: "Qual peça merece continuar no ar" },
-      { href: "/meta-assets", label: "Raio-X", icon: "⌁", title: "Estrutura e ativos das contas" },
-      { href: "/alerts", label: "Alertas", icon: "△", title: "Saldo, pagamento, reprovação" },
-    ],
-  },
-  {
-    items: [{ href: "/admin", label: "Configurações", icon: "⚙", title: "Clientes, grupos e envio semanal" }],
-  },
+const NAV_ITEMS = [
+  { href: "/", label: "Visão Geral", icon: LayoutDashboard },
+  { href: "/today", label: "Cockpit Hoje", icon: Target },
+  { href: "/tarefas", label: "Tarefas", icon: CheckSquare2 },
+  { href: "/vendas", label: "Vendas", icon: DollarSign },
+  { href: "/creatives", label: "Criativos", icon: Palette },
+  { href: "/meta-assets", label: "Raio-X", icon: Search },
+  { href: "/alerts", label: "Alertas", icon: Bell },
+  { href: "/admin", label: "Config", icon: Settings },
 ];
 
-// No celular a barra inferior cabe em quatro destinos. Os três primeiros são
-// os do dia a dia; o resto vive atrás de "Mais", com o mesmo rótulo e a mesma
-// ordem do topo. A lista plana existe para os dois desenhos não divergirem.
-const ALL_ITEMS = GROUPS.flatMap((group) => group.items);
-const PRIMARY = ALL_ITEMS.slice(0, 3);
-const SECONDARY = ALL_ITEMS.slice(3);
-
-function isItemActive(pathname: string, href: string): boolean {
-  return href === "/" ? pathname === "/" : pathname.startsWith(href);
-}
-
-// Páginas sem a navegação do sistema. As três últimas são vistas por CLIENTE:
-// ali não pode existir menu nem botão de sair — ele não é usuário do app.
-// Toda rota nova aberta por link assinado precisa entrar nesta lista.
 const CHROMELESS_PREFIXES = ["/login", "/report/", "/r/", "/c/"];
-
-function isChromeless(pathname: string): boolean {
-  return CHROMELESS_PREFIXES.some((prefix) =>
-    prefix.endsWith("/") ? pathname.startsWith(prefix) : pathname === prefix
-  );
-}
 
 export default function AppNav() {
   const pathname = usePathname();
   const router = useRouter();
-  const [sheetOpen, setSheetOpen] = useState(false);
+  const { theme, setTheme } = useTheme();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Navegar com a folha aberta deixaria ela cobrindo a tela nova.
-  useEffect(() => setSheetOpen(false), [pathname]);
-  useEffect(() => {
-    if (!sheetOpen) return;
-    const onKey = (event: KeyboardEvent) => event.key === "Escape" && setSheetOpen(false);
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [sheetOpen]);
+  if (CHROMELESS_PREFIXES.some((p) => p.endsWith("/") ? pathname.startsWith(p) : pathname === p)) return null;
+
+  useEffect(() => { setSidebarOpen(false); }, [pathname]);
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -71,113 +61,181 @@ export default function AppNav() {
     router.refresh();
   }
 
-  if (isChromeless(pathname)) return null;
+  const NavItem = ({ item, mobile }: { item: typeof NAV_ITEMS[0]; mobile?: boolean }) => {
+    const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+    const Icon = item.icon;
 
-  const inSecondary = SECONDARY.some((item) => isItemActive(pathname, item.href));
+    if (mobile) {
+      return (
+        <Link
+          href={item.href}
+          className={cn(
+            "flex flex-col items-center gap-0.5 text-[10px] font-medium transition-colors relative py-1",
+            active ? "text-primary" : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <Icon className="h-5 w-5" />
+          <span>{item.label}</span>
+          {active && <span className="absolute -top-0.5 left-1/4 right-1/4 h-0.5 rounded-full bg-primary" />}
+        </Link>
+      );
+    }
+
+    return (
+      <Link
+        href={item.href}
+        className={cn(
+          "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 group relative",
+          active
+            ? "bg-primary/10 text-primary"
+            : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+        )}
+      >
+        <Icon className={cn("h-4 w-4 shrink-0", active ? "text-primary" : "text-muted-foreground")} />
+        <span>{item.label}</span>
+        {active && <span className="absolute left-0 top-2 bottom-2 w-0.5 rounded-full bg-primary" />}
+      </Link>
+    );
+  };
 
   return (
     <>
-    <nav className="ec-nav" aria-label="Navegação principal">
-      <a href="/today" className="ec-nav__brand" aria-label="Assertivus Dash — início">
-        <BrandMark size={28} />
-        <span>Assertivus Dash</span>
-      </a>
-
-      <div className="ec-nav__links">
-        {GROUPS.map((group, groupIndex) => (
-          <div key={groupIndex} style={{ display: "flex", gap: 2, alignItems: "center" }}>
-            {groupIndex > 0 && <span className="ec-nav__group" aria-hidden="true" />}
-            {group.items.map((item) => {
-              const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
-              return (
-                <a
-                  key={item.href}
-                  href={item.href}
-                  className="ec-nav__link"
-                  data-active={active ? "true" : undefined}
-                  aria-current={active ? "page" : undefined}
-                  title={item.title}
-                >
-                  <span aria-hidden="true" style={{ fontSize: 12, opacity: active ? 1 : 0.65 }}>
-                    {item.icon}
-                  </span>
-                  <span className="ec-nav__label">{item.label}</span>
-                </a>
-              );
-            })}
+      {/* Desktop Sidebar */}
+      <aside className="hidden md:flex h-screen w-56 flex-col fixed left-0 top-0 z-30 border-r border-border/50 bg-sidebar">
+        {/* Brand */}
+        <div className="flex items-center gap-2.5 px-4 h-14 border-b border-border/50 shrink-0">
+          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white text-xs font-bold shadow-sm">
+            A
           </div>
-        ))}
-      </div>
-
-      <div className="ec-nav__tail">
-        <button onClick={logout} className="ec-btn" data-variant="ghost" data-size="sm" title="Encerrar sessão">
-          Sair
-        </button>
-      </div>
-    </nav>
-
-    {/* Barra inferior: só aparece no celular (CSS). Rótulo visível, 56px de
-        altura — os ícones de 29px do topo não davam nenhum dos dois. */}
-    <nav className="ec-tabbar" aria-label="Navegação principal (celular)">
-      {PRIMARY.map((item) => {
-        const active = isItemActive(pathname, item.href);
-        return (
-          <a
-            key={item.href}
-            href={item.href}
-            className="ec-tabbar__item"
-            data-active={active ? "true" : undefined}
-            aria-current={active ? "page" : undefined}
-          >
-            <span className="ec-tabbar__icon" aria-hidden="true">{item.icon}</span>
-            <span>{item.label}</span>
-          </a>
-        );
-      })}
-      <button
-        type="button"
-        className="ec-tabbar__item"
-        data-active={inSecondary ? "true" : undefined}
-        aria-expanded={sheetOpen}
-        onClick={() => setSheetOpen((open) => !open)}
-      >
-        <span className="ec-tabbar__icon" aria-hidden="true">☰</span>
-        <span>Mais</span>
-      </button>
-    </nav>
-
-    {sheetOpen && (
-      /* O fundo fecha a folha ao toque; é o gesto esperado e evita ficar
-         preso sem um "X" visível. */
-      <div className="ec-sheet" role="presentation" onClick={() => setSheetOpen(false)}>
-        <div className="ec-sheet__panel" role="dialog" aria-label="Mais telas" onClick={(e) => e.stopPropagation()}>
-          <div className="ec-sheet__grip" aria-hidden="true" />
-          {SECONDARY.map((item) => {
-            const active = isItemActive(pathname, item.href);
-            return (
-              <a
-                key={item.href}
-                href={item.href}
-                className="ec-sheet__item"
-                data-active={active ? "true" : undefined}
-                aria-current={active ? "page" : undefined}
-              >
-                <span className="ec-tabbar__icon" aria-hidden="true">{item.icon}</span>
-                <span>
-                  {item.label}
-                  <small>{item.title}</small>
-                </span>
-              </a>
-            );
-          })}
-          <div className="ec-sheet__sep" />
-          <button type="button" className="ec-sheet__item" onClick={logout}>
-            <span className="ec-tabbar__icon" aria-hidden="true">⏻</span>
-            <span>Sair</span>
-          </button>
+          <div>
+            <div className="text-sm font-semibold text-foreground">Assertivus</div>
+            <div className="text-[10px] text-muted-foreground leading-tight">Dash</div>
+          </div>
         </div>
-      </div>
-    )}
+
+        {/* Nav */}
+        <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
+          {NAV_ITEMS.map((item) => (
+            <NavItem key={item.href} item={item} />
+          ))}
+        </nav>
+
+        {/* Footer */}
+        <div className="p-2 border-t border-border/50">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors">
+                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center text-white text-[10px] font-bold">
+                  A
+                </div>
+                <span className="flex-1 text-left">Admin</span>
+                <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent side="right" align="end" className="w-48">
+              <DropdownMenuLabel>Assertivus Dash</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
+                {theme === "dark" ? "☀️" : "🌙"} {theme === "dark" ? "Modo claro" : "Modo escuro"}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={logout} className="text-destructive focus:text-destructive">
+                <LogOut className="h-4 w-4" /> Sair
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </aside>
+
+      {/* Mobile Header */}
+      <header className="md:hidden sticky top-0 z-30 flex items-center justify-between h-12 px-4 border-b border-border/50 bg-background/80 backdrop-blur-lg">
+        <div className="flex items-center gap-2.5">
+          <button onClick={() => setSidebarOpen(true)} className="p-1 -ml-1 text-muted-foreground hover:text-foreground">
+            <Menu className="h-5 w-5" />
+          </button>
+          <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white text-[10px] font-bold">
+            A
+          </div>
+          <span className="text-sm font-semibold">Assertivus</span>
+        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="w-7 h-7 rounded-full bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center text-white text-[10px] font-bold">
+              A
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuLabel>Admin</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
+              {theme === "dark" ? "☀️" : "🌙"} {theme === "dark" ? "Modo claro" : "Modo escuro"}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={logout} className="text-destructive focus:text-destructive">
+              <LogOut className="h-4 w-4" /> Sair
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </header>
+
+      {/* Mobile Sidebar Overlay */}
+      {sidebarOpen && (
+        <div className="md:hidden fixed inset-0 z-40 bg-black/50" onClick={() => setSidebarOpen(false)}>
+          <aside className="absolute left-0 top-0 bottom-0 w-64 bg-sidebar border-r border-border/50 animate-slide-up" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 h-12 border-b border-border/50">
+              <div className="flex items-center gap-2.5">
+                <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white text-[10px] font-bold">
+                  A
+                </div>
+                <span className="text-sm font-semibold">Assertivus</span>
+              </div>
+              <button onClick={() => setSidebarOpen(false)} className="p-1 text-muted-foreground">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <nav className="p-2 space-y-0.5">
+              {NAV_ITEMS.map((item) => (
+                <NavItem key={item.href} item={item} />
+              ))}
+              <div className="h-px bg-border/50 my-2" />
+              <button onClick={logout} className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors">
+                <LogOut className="h-4 w-4" /> Sair
+              </button>
+            </nav>
+          </aside>
+        </div>
+      )}
+
+      {/* Mobile Bottom Tab Bar */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 h-14 border-t border-border/50 bg-background/80 backdrop-blur-lg safe-area-bottom">
+        <div className="grid grid-cols-4 h-full">
+          {NAV_ITEMS.slice(0, 3).map((item) => (
+            <NavItem key={item.href} item={item} mobile />
+          ))}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className={cn(
+                "flex flex-col items-center gap-0.5 text-[10px] font-medium transition-colors py-1",
+                NAV_ITEMS.slice(3).some((i) => i.href === "/" ? pathname === "/" : pathname.startsWith(i.href))
+                  ? "text-primary" : "text-muted-foreground hover:text-foreground"
+              )}>
+                <Menu className="h-5 w-5" />
+                <span>Mais</span>
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent side="top" align="end" className="w-56 mb-2">
+              {NAV_ITEMS.slice(3).map((item) => (
+                <DropdownMenuItem key={item.href} asChild>
+                  <Link href={item.href} className="flex items-center gap-3">
+                    <item.icon className="h-4 w-4" />
+                    {item.label}
+                  </Link>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </nav>
     </>
   );
 }
