@@ -599,3 +599,77 @@
   font-weight: 600;
   white-space: nowrap;
 }
+
+/* Switch toggle (AccountDetail — pausar/reativar) */
+.ec-switchwrap {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+}
+.ec-switch {
+  width: 38px;
+  height: 21px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-muted);
+  padding: 2px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+.ec-switch__knob {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--color-muted-foreground);
+  transition: transform 0.18s ease, background 0.18s ease;
+}
+.ec-switch[data-on] {
+  background: var(--color-success);
+  border-color: var(--color-success);
+}
+.ec-switch[data-on] .ec-switch__knob {
+  transform: translateX(17px);
+  background: #fff;
+}
+.ec-switch:hover:not([data-busy]) {
+  border-color: var(--color-ring);
+}
+.ec-switch[data-busy] {
+  cursor: default;
+  opacity: 0.5;
+}
+.ec-switch__note {
+  font-size: 9.5px;
+  color: var(--color-warning);
+  max-width: 74px;
+  line-height: 1.25;
+}
+.ec-switch__frozen {
+  font-size: 10px;
+  color: var(--color-muted-foreground);
+}
+
+/* Inline empty state */
+.ec-inline-empty {
+  height: 100%;
+  min-height: 100px;
+  display: grid;
+  place-items: center;
+  color: var(--color-muted-foreground);
+  font-size: 12px;
+  text-align: center;
+}
+
+/* Sort button */
+.ec-sortbtn {
+  min-height: 44px;
+  cursor: pointer;
+}
+
+/* Touch zone */
+.ec-touch {
+  cursor: pointer;
+}
