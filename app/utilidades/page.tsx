@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -156,18 +156,19 @@ function CpaReal() {
 }
 
 /* ======================== BENCHMARK META ADS (Heatmap) ======================== */
-const BENCHMARK_DATA = [
-  { metric: "CPM (R$)", ecommerce: 12.5, leads: 18.0, traffic: 8.5, awareness: 7.0, apps: 20.0, lower: true },
-  { metric: "CTR (%)", ecommerce: 1.8, leads: 2.5, traffic: 3.2, awareness: 0.8, apps: 1.2, lower: false },
-  { metric: "CPC (R$)", ecommerce: 1.2, leads: 1.8, traffic: 0.6, awareness: 0.9, apps: 2.5, lower: true },
-  { metric: "CPA (R$)", ecommerce: 25.0, leads: 35.0, traffic: null, awareness: null, apps: 40.0, lower: true },
-  { metric: "ROAS (x)", ecommerce: 4.0, leads: null, traffic: null, awareness: null, apps: null, lower: false },
-  { metric: "Frequência", ecommerce: 2.0, leads: 2.5, traffic: 1.8, awareness: 3.5, apps: 2.2, lower: true },
-  { metric: "CTR Link (%)", ecommerce: 1.2, leads: 1.5, traffic: 2.8, awareness: 0.5, apps: 0.8, lower: false },
-  { metric: "LPV (%)", ecommerce: 65, leads: 55, traffic: 70, awareness: null, apps: null, lower: false },
-  { metric: "Conversão (%)", ecommerce: 3.0, leads: 8.0, traffic: null, awareness: null, apps: 5.0, lower: false },
-  { metric: "Hook Rate (%)", ecommerce: 25, leads: 30, traffic: 20, awareness: 15, apps: 22, lower: false },
-  { metric: "Hold Rate (%)", ecommerce: 12, leads: 15, traffic: 10, awareness: 8, apps: 11, lower: false },
+type BMEntry = { metric: string; ecommerce: number | null; leads: number | null; traffic: number | null; awareness: number | null; apps: number | null; lower: boolean; fmt: string };
+const BENCHMARK_DATA: BMEntry[] = [
+  { metric: "CPM", ecommerce: 12.5, leads: 18, traffic: 8.5, awareness: 7, apps: 20, lower: true, fmt: "money" },
+  { metric: "CTR", ecommerce: 1.8, leads: 2.5, traffic: 3.2, awareness: 0.8, apps: 1.2, lower: false, fmt: "pct" },
+  { metric: "CPC", ecommerce: 1.2, leads: 1.8, traffic: 0.6, awareness: 0.9, apps: 2.5, lower: true, fmt: "money" },
+  { metric: "CPA", ecommerce: 25, leads: 35, traffic: null, awareness: null, apps: 40, lower: true, fmt: "money" },
+  { metric: "ROAS", ecommerce: 4, leads: null, traffic: null, awareness: null, apps: null, lower: false, fmt: "x" },
+  { metric: "Frequência", ecommerce: 2, leads: 2.5, traffic: 1.8, awareness: 3.5, apps: 2.2, lower: true, fmt: "num" },
+  { metric: "CTR Link", ecommerce: 1.2, leads: 1.5, traffic: 2.8, awareness: 0.5, apps: 0.8, lower: false, fmt: "pct" },
+  { metric: "LPV", ecommerce: 65, leads: 55, traffic: 70, awareness: null, apps: null, lower: false, fmt: "pct" },
+  { metric: "Conversão", ecommerce: 3, leads: 8, traffic: null, awareness: null, apps: 5, lower: false, fmt: "pct" },
+  { metric: "Hook", ecommerce: 25, leads: 30, traffic: 20, awareness: 15, apps: 22, lower: false, fmt: "pct" },
+  { metric: "Hold", ecommerce: 12, leads: 15, traffic: 10, awareness: 8, apps: 11, lower: false, fmt: "pct" },
 ];
 
 function Heat({ value, benchmark, invert }: { value: number | null; benchmark: number | null | undefined; invert?: boolean }) {
@@ -182,6 +183,66 @@ function Heat({ value, benchmark, invert }: { value: number | null; benchmark: n
 function BenchmarkTable() {
   const [vals, setVals] = useState<Record<string, string>>({});
   const [niche, setNiche] = useState("ecommerce");
+  const [loading, setLoading] = useState(false);
+  const [accounts, setAccounts] = useState<{ account_id: string; name: string }[]>([]);
+  const [selectedAccount, setSelectedAccount] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/accounts").then((r) => r.json()).then((d) => { if (d.accounts) setAccounts(d.accounts.filter((a: any) => a.platform === "meta" && !a.hidden)); }).catch(() => {});
+  }, []);
+
+  async function carregarDados() {
+    if (!selectedAccount) return;
+    setLoading(true); setError(null);
+    try {
+      const r = await fetch(`/api/creatives/meta?account_id=${encodeURIComponent(selectedAccount)}&period=7d`, { cache: "no-store" });
+      const text = await r.text();
+      const d = JSON.parse(text);
+      if (!r.ok || d.error) throw new Error(d.error || "Falha.");
+      const lab = d.accounts?.[0];
+      if (!lab || !lab.creatives) throw new Error("Nenhum criativo encontrado no período.");
+      const c = lab.creatives;
+      const median = (picker: (cr: any) => number | null) => {
+        const vals = c.filter((cr: any) => cr.sampleStatus === "reliable" || cr.sampleStatus === "learning").map(picker).filter((v: any): v is number => v != null && Number.isFinite(v)).sort((a: number, b: number) => a - b);
+        if (vals.length < 2) return null;
+        const mid = Math.floor(vals.length / 2);
+        return vals.length % 2 === 0 ? (vals[mid - 1] + vals[mid]) / 2 : vals[mid];
+      };
+      const spend = c.reduce((s: number, cr: any) => s + (cr.metrics?.spend || 0), 0);
+      const impr = c.reduce((s: number, cr: any) => s + (cr.metrics?.impressions || 0), 0);
+      const clicks = c.reduce((s: number, cr: any) => s + (cr.metrics?.clicks || 0), 0);
+      const convs = c.reduce((s: number, cr: any) => s + (cr.metrics?.conversions || 0), 0);
+      const convVal = c.reduce((s: number, cr: any) => s + (cr.metrics?.conversionValue || 0), 0);
+      const freq = impr > 0 ? c.reduce((s: number, cr: any) => s + (cr.metrics?.impressions || 0), 0) / Math.max(1, c.reduce((s: number, cr: any) => s + (cr.metrics?.reach || 0), 0)) : null;
+      const cpm = impr > 0 ? (spend / impr) * 1000 : null;
+      const cpc = clicks > 0 ? spend / clicks : null;
+      const cpa = convs > 0 ? spend / convs : null;
+      const roas = spend > 0 && convVal > 0 ? convVal / spend : null;
+      const ctr = impr > 0 ? (clicks / impr) * 100 : null;
+      const linkClicks = c.reduce((s: number, cr: any) => s + (cr.metrics?.linkCtr != null ? (cr.metrics?.impressions || 0) * cr.metrics.linkCtr / 100 : 0), 0);
+      const linkCtr = impr > 0 ? (linkClicks / impr) * 100 : null;
+      const lpv = median((cr: any) => cr.metrics?.landingPageViewRate);
+      const convRate = median((cr: any) => cr.metrics?.conversionRate);
+      const hook = median((cr: any) => cr.metrics?.video?.hookRate);
+      const hold = median((cr: any) => cr.metrics?.video?.holdRate);
+
+      const mapValues: Record<string, string> = {};
+      mapValues["CPM"] = cpm?.toFixed(2) ?? "";
+      mapValues["CTR"] = ctr?.toFixed(2) ?? "";
+      mapValues["CPC"] = cpc?.toFixed(2) ?? "";
+      mapValues["CPA"] = cpa?.toFixed(2) ?? "";
+      mapValues["ROAS"] = roas?.toFixed(2) ?? "";
+      mapValues["Frequência"] = freq?.toFixed(1) ?? "";
+      mapValues["CTR Link"] = linkCtr?.toFixed(2) ?? "";
+      mapValues["LPV"] = lpv?.toFixed(1) ?? "";
+      mapValues["Conversão"] = convRate?.toFixed(2) ?? "";
+      mapValues["Hook"] = hook?.toFixed(1) ?? "";
+      mapValues["Hold"] = hold?.toFixed(1) ?? "";
+      setVals(mapValues);
+    } catch (e: any) { setError(e?.message); }
+    finally { setLoading(false); }
+  }
 
   const niches = [
     { key: "ecommerce", label: "E-commerce" },
@@ -208,6 +269,21 @@ function BenchmarkTable() {
           </div>
         </div>
 
+        <div className="flex items-center gap-2 flex-wrap">
+          <select value={selectedAccount} onChange={(e) => setSelectedAccount(e.target.value)} className="flex-1 min-w-[200px] h-9 rounded-lg border border-input bg-transparent px-3 text-sm">
+            <option value="">Selecione uma conta Meta…</option>
+            {accounts.map((a) => <option key={a.account_id} value={a.account_id}>{a.name}</option>)}
+          </select>
+          <Button size="sm" onClick={carregarDados} disabled={loading || !selectedAccount} className="h-9">
+            {loading ? "Carregando…" : "Carregar dados reais"}
+          </Button>
+          {Object.keys(vals).length > 0 && (
+            <Button variant="ghost" size="sm" onClick={() => setVals({})} className="h-9 text-xs">Limpar</Button>
+          )}
+        </div>
+
+        {error && <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-red-500/20 bg-red-500/10 text-sm text-red-500">{error}</div>}
+
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
@@ -220,8 +296,8 @@ function BenchmarkTable() {
             </thead>
             <tbody>
               {BENCHMARK_DATA.map((row) => {
-                const nicheKey = niche as keyof typeof row;
-                const benchVal = row[nicheKey] as number | null;
+                const k = niche as keyof typeof row;
+                const benchVal = row[k] as number | null;
                 const rawVal = parseFloat(vals[row.metric] || "");
                 const val = isNaN(rawVal) ? null : rawVal;
                 const isRelevant = benchVal != null;
@@ -231,18 +307,17 @@ function BenchmarkTable() {
                   const worse = row.lower ? val > benchVal * 1.15 : val < benchVal * 0.85;
                   status = better ? "better" : worse ? "worse" : "neutral";
                 }
-                const barW = val != null && benchVal != null
-                  ? Math.min((val / benchVal) * 100, 200)
-                  : 0;
+                const fmt = (v: number) => {
+                  if (row.fmt === "money") return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
+                  if (row.fmt === "pct") return `${v.toFixed(1)}%`;
+                  if (row.fmt === "x") return `${v.toFixed(2)}x`;
+                  return String(v);
+                };
                 return (
                   <tr key={row.metric} className={cn("border-b border-border/30", !isRelevant && "opacity-40")}>
                     <td className="p-2 font-semibold whitespace-nowrap">{row.metric}</td>
-                    <td className="p-2">
-                      <input type="number" step="any" value={vals[row.metric] || ""}
-                        onChange={(e) => setVals((p) => ({ ...p, [row.metric]: e.target.value }))}
-                        placeholder="—" className="w-20 h-7 text-center text-xs rounded-md border border-input bg-transparent" />
-                    </td>
-                    <td className="p-2 text-center tabular-nums font-semibold">{isRelevant ? benchVal.toFixed(1) : "—"}</td>
+                    <td className="p-2 text-center tabular-nums font-semibold">{val != null ? fmt(val) : "—"}</td>
+                    <td className="p-2 text-center tabular-nums font-semibold">{isRelevant ? fmt(benchVal) : "—"}</td>
                     <td className="p-2 text-center">
                       {isRelevant && status ? (
                         <span className={cn("inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full",
@@ -251,8 +326,6 @@ function BenchmarkTable() {
                         )}>
                           {status === "better" ? "▲ Melhor" : status === "worse" ? "▼ Pior" : "◆ Mediano"}
                         </span>
-                      ) : val != null && !isRelevant ? (
-                        <span className="text-muted-foreground text-[11px]">—</span>
                       ) : (
                         <span className="text-muted-foreground text-[11px]">—</span>
                       )}

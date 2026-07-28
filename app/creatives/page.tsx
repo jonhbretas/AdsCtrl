@@ -170,7 +170,14 @@ export default function CreativesPage() {
               {/* Creative Preview + Scatter */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {selectedCreative ? (
-                  <CreativePreview creative={selectedCreative} currency={lab.currency} onClose={() => setSelectedCreative(null)} />
+                  <CreativePreview
+                    creative={selectedCreative}
+                    currency={lab.currency}
+                    sorted={sorted}
+                    benchmark={benchmark}
+                    onSelect={(c) => setSelectedCreative(c)}
+                    onClose={() => setSelectedCreative(null)}
+                  />
                 ) : (
                   <div className="rounded-lg border border-border/50 bg-card p-4">
                     <PanelTitle title="Preview do criativo" subtitle="Clique em um anúncio da tabela para ver o preview e funil de retenção" />
@@ -286,71 +293,98 @@ function MetricGuide({ currency }: { currency: string }) {
   return null;
 }
 
-function CreativePreview({ creative, currency, onClose }: { creative: Creative; currency: string; onClose: () => void }) {
+function CreativePreview({ creative, currency, sorted, benchmark, onSelect, onClose }: {
+  creative: Creative; currency: string;
+  sorted: Creative[];
+  benchmark: ((goal: CreativeGoal, picker: (c: Creative) => number | null) => number | null) | null;
+  onSelect: (c: Creative) => void; onClose: () => void;
+}) {
+  const idx = sorted.findIndex((c) => c.adId === creative.adId);
+  const BM = benchmark ? (picker: (cr: Creative) => number | null) => benchmark(creative.goal, picker) : null;
+  const heat = (val: number | null, picker: (cr: Creative) => number | null): string => {
+    if (val == null) return "text-muted-foreground";
+    const bm = BM?.(picker);
+    if (bm == null) return "text-foreground";
+    return val > bm * 1.1 ? "text-emerald-500" : val < bm * 0.9 ? "text-red-500" : "text-amber-500";
+  };
+  const heatBg = (val: number | null, picker: (cr: Creative) => number | null): string => {
+    if (val == null) return "bg-muted";
+    const bm = BM?.(picker);
+    if (bm == null) return "bg-muted";
+    return val > bm * 1.1 ? "bg-emerald-500/10" : val < bm * 0.9 ? "bg-red-500/10" : "bg-amber-500/10";
+  };
+  const m = (v: number) => typeof v === "number" && !isNaN(v) ? money(v, currency) : "—";
   const v = creative.metrics.video;
   const isVideo = v.isVideo;
   const retentionSteps = isVideo ? [
-    { label: "Hook (3s)", val: v.hookRate },
-    { label: "Hold (ThruPlay)", val: v.holdRate },
-    { label: "Retenção 25%", val: v.retention25 },
-    { label: "Retenção 50%", val: v.retention50 },
-    { label: "Retenção 75%", val: v.retention75 },
-    { label: "Completude", val: v.completionRate },
+    { label: "Hook (3s)", val: v.hookRate }, { label: "Hold (ThruPlay)", val: v.holdRate },
+    { label: "Retenção 25%", val: v.retention25 }, { label: "Retenção 50%", val: v.retention50 },
+    { label: "Retenção 75%", val: v.retention75 }, { label: "Completude", val: v.completionRate },
   ] : [];
 
   return (
     <div className="rounded-lg border border-border/50 bg-card overflow-hidden">
+      {/* Navigation bar */}
+      <div className="flex items-center gap-1 px-3 py-2 border-b border-border/50 bg-muted/10">
+        <button onClick={() => { if (idx > 0) onSelect(sorted[idx - 1]); }} disabled={idx <= 0}
+          className="flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold border-none cursor-pointer disabled:opacity-30 disabled:cursor-default transition-colors hover:bg-accent bg-transparent text-foreground">
+          ← Anterior
+        </button>
+        <span className="flex-1 text-center text-[11px] text-muted-foreground">{idx + 1} de {sorted.length}</span>
+        <button onClick={() => { if (idx < sorted.length - 1) onSelect(sorted[idx + 1]); }} disabled={idx >= sorted.length - 1}
+          className="flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold border-none cursor-pointer disabled:opacity-30 disabled:cursor-default transition-colors hover:bg-accent bg-transparent text-foreground">
+          Próximo →
+        </button>
+        <button onClick={onClose} className="px-2 py-1 rounded text-xs font-semibold border-none cursor-pointer hover:bg-accent bg-transparent text-muted-foreground ml-1">✕</button>
+      </div>
+
       {/* Preview image */}
-      <div className="relative bg-muted flex items-center justify-center min-h-[200px] max-h-[320px] overflow-hidden">
+      <div className="relative bg-muted flex items-center justify-center min-h-[180px] max-h-[280px] overflow-hidden">
         {creative.asset.thumbnail ? (
           <img src={creative.asset.thumbnail} alt={creative.adName} className="w-full h-full object-contain" />
         ) : (
           <div className="text-muted-foreground text-sm">Sem preview</div>
         )}
-        <button onClick={onClose} className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/50 text-white flex items-center justify-center hover:bg-black/70 transition-colors border-none cursor-pointer text-sm">✕</button>
       </div>
 
       {/* Creative info */}
-      <div className="p-4 space-y-3">
+      <div className="p-3 space-y-2.5">
         <div>
           <h4 className="text-sm font-bold leading-snug">{creative.adName}</h4>
           <div className="text-[11px] text-muted-foreground mt-0.5">{creative.campaignName} · {creative.goalLabel}</div>
         </div>
 
-        {/* Key metrics per goal */}
-        <div className="flex flex-wrap gap-2 text-xs">
-          <span className="px-2 py-1 rounded-md bg-muted font-semibold">{money(creative.metrics.spend, currency)}</span>
-          <span className="px-2 py-1 rounded-md bg-muted font-semibold">{num(creative.metrics.impressions)} impr.</span>
-          {creative.metrics.linkCtr != null && <span className="px-2 py-1 rounded-md bg-muted font-semibold">CTR {creative.metrics.linkCtr.toFixed(2)}%</span>}
-          {creative.metrics.cpm != null && <span className="px-2 py-1 rounded-md bg-muted font-semibold">CPM {money(creative.metrics.cpm, currency)}</span>}
-          {isVideo && v.avgWatchTimeSeconds != null && <span className="px-2 py-1 rounded-md bg-muted font-semibold">{v.avgWatchTimeSeconds.toFixed(1)}s médio</span>}
-          {creative.metrics.roas != null && creative.goal === "sales" && <span className="px-2 py-1 rounded-md bg-emerald-500/10 text-emerald-500 font-semibold">ROAS {creative.metrics.roas.toFixed(2)}x</span>}
-          {creative.metrics.costPerConversion != null && <span className="px-2 py-1 rounded-md bg-muted font-semibold">CPA {money(creative.metrics.costPerConversion, currency)}</span>}
-          {creative.metrics.conversions > 0 && <span className="px-2 py-1 rounded-md bg-muted font-semibold">{num(creative.metrics.conversions)} conv.</span>}
+        {/* Colored metrics row — following heatmap palette */}
+        <div className="flex flex-wrap gap-1.5 text-[11px]">
+          <span className={cn("px-2 py-1 rounded-md font-semibold", heatBg(creative.metrics.spend, (cr) => cr.metrics.spend), heat(creative.metrics.spend, (cr) => cr.metrics.spend))}>{m(creative.metrics.spend)}</span>
+          <span className={cn("px-2 py-1 rounded-md font-semibold", heatBg(creative.metrics.impressions, (cr) => cr.metrics.impressions), heat(creative.metrics.impressions, (cr) => cr.metrics.impressions))}>{num(creative.metrics.impressions)} impr.</span>
+          {creative.metrics.linkCtr != null && <span className={cn("px-2 py-1 rounded-md font-semibold", heatBg(creative.metrics.linkCtr, (cr) => cr.metrics.linkCtr), heat(creative.metrics.linkCtr, (cr) => cr.metrics.linkCtr))}>CTR {creative.metrics.linkCtr.toFixed(2)}%</span>}
+          {creative.metrics.cpm != null && <span className={cn("px-2 py-1 rounded-md font-semibold", heatBg(creative.metrics.cpm, (cr) => cr.metrics.cpm), heat(creative.metrics.cpm, (cr) => cr.metrics.cpm))}>CPM {m(creative.metrics.cpm)}</span>}
+          {isVideo && v.avgWatchTimeSeconds != null && <span className="px-2 py-1 rounded-md bg-muted font-semibold">{v.avgWatchTimeSeconds.toFixed(1)}s</span>}
+          {creative.metrics.roas != null && <span className={cn("px-2 py-1 rounded-md font-semibold", heatBg(creative.metrics.roas, (cr) => cr.metrics.roas), heat(creative.metrics.roas, (cr) => cr.metrics.roas))}>ROAS {creative.metrics.roas.toFixed(2)}x</span>}
+          {creative.metrics.costPerConversion != null && <span className={cn("px-2 py-1 rounded-md font-semibold", heatBg(creative.metrics.costPerConversion, (cr) => cr.metrics.costPerConversion), heat(creative.metrics.costPerConversion, (cr) => cr.metrics.costPerConversion))}>CPA {m(creative.metrics.costPerConversion)}</span>}
+          {creative.metrics.conversions > 0 && <span className={cn("px-2 py-1 rounded-md font-semibold", heatBg(creative.metrics.conversions, (cr) => cr.metrics.conversions), heat(creative.metrics.conversions, (cr) => cr.metrics.conversions))}>{num(creative.metrics.conversions)} conv.</span>}
         </div>
 
-        {/* Retention funnel (only for video) */}
+        {/* Retention funnel */}
         {isVideo && retentionSteps.length > 0 && (
           <div>
-            <h5 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Funil de retenção</h5>
-            <div className="space-y-1.5">
+            <h5 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Funil de retenção</h5>
+            <div className="space-y-1">
               {retentionSteps.map((s) => (
                 <div key={s.label} className="flex items-center gap-2">
-                  <span className="text-[11px] text-muted-foreground w-28 text-right shrink-0">{s.label}</span>
-                  <div className="flex-1 h-4 rounded bg-muted overflow-hidden">
+                  <span className="text-[10px] text-muted-foreground w-24 text-right shrink-0">{s.label}</span>
+                  <div className="flex-1 h-3.5 rounded bg-muted overflow-hidden">
                     <div className="h-full rounded bg-gradient-to-r from-cyan-500 to-blue-500 transition-all" style={{ width: s.val != null ? `${Math.min(s.val, 100)}%` : "0%" }} />
                   </div>
-                  <span className="text-xs font-bold w-14 text-right tabular-nums">{s.val != null ? `${s.val.toFixed(1)}%` : "—"}</span>
+                  <span className={cn("text-[11px] font-bold w-14 text-right tabular-nums", heat(s.val, (cr) => cr.metrics.video.hookRate))}>{s.val != null ? `${s.val.toFixed(1)}%` : "—"}</span>
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* Sample status */}
-        <div className="text-[10px] text-muted-foreground">
-          Amostra: {creative.sample.label} · {creative.sample.reason}
-        </div>
+        <div className="text-[10px] text-muted-foreground">Amostra: {creative.sample.label} · {creative.sample.reason}</div>
       </div>
     </div>
   );
