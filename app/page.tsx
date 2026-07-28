@@ -260,6 +260,18 @@ export default function Dashboard() {
     if (requested?.status !== "ACTIVE") setOnlyActive(false);
     if (requested?.hidden) setShowHidden(true);
     setExpanded(requestedAccount);
+    // Âncora: espera o DOM renderizar e leva até a linha expandida.
+    const anchorId = `account-${requestedAccount}`;
+    const scroll = () => {
+      const el = document.getElementById(anchorId);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      } else {
+        // DOM ainda não montou — tenta de novo no próximo frame.
+        requestAnimationFrame(scroll);
+      }
+    };
+    requestAnimationFrame(scroll);
   }, [accounts]);
 
   useEffect(() => { load(); }, []);
