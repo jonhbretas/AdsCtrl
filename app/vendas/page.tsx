@@ -109,33 +109,33 @@ export default function VendasPage() {
               const ch = `${linha.client_id}::${mesVigente}`;
               const roas = m.revenue != null && m.spend > 0 ? m.revenue / m.spend : null;
               return (
-                <div key={linha.client_id} className="grid grid-cols-[1.4fr_150px_110px_auto_auto] gap-3 items-end pb-3 border-b border-border/50 last:pb-0 last:border-b-0">
-                  <div className="min-w-0">
+                <div key={linha.client_id} className="flex flex-wrap items-end gap-x-4 gap-y-2 pb-3 border-b border-border/50 last:pb-0 last:border-b-0">
+                  <div className="min-w-0 flex-[2_1_200px]">
                     <div className="text-sm font-semibold">{linha.name}{linha.group && <SeloGrupo grupo={linha.group} />}</div>
                     <div className="text-[11px] text-muted-foreground">investido {new Intl.NumberFormat("pt-BR", { style: "currency", currency: linha.currency }).format(m.spend)}{m.inProgress && " · mês em curso"}</div>
                   </div>
-                  <label className="grid gap-1 min-w-0"><span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Vendas (R$)</span>
+                  <label className="grid gap-0.5 min-w-0 flex-[1_0_120px]"><span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Vendas (R$)</span>
                     <input inputMode="decimal" placeholder="—" value={rascunho[`${ch}::r`] ?? paraTexto(m.revenue, emFoco === `${ch}::r`)}
                       onFocus={() => setEmFoco(`${ch}::r`)}
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRascunho((p) => ({ ...p, [`${ch}::r`]: e.target.value }))}
                       onBlur={(e: React.FocusEvent<HTMLInputElement>) => { setEmFoco(null); setRascunho((p) => { const n = { ...p }; delete n[`${ch}::r`]; return n; }); const t = e.target.value; const novo = paraNumero(t); if (novo !== m.revenue) salvar(linha.client_id, mesVigente, "revenue", t); }}
-                      className="h-9 rounded-lg border border-input bg-transparent px-3 text-sm text-right" />
+                      className="w-full h-9 rounded-lg border border-input bg-transparent px-3 text-sm text-right" />
                   </label>
-                  <label className="grid gap-1 min-w-0"><span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Vendas (qtd)</span>
+                  <label className="grid gap-0.5 min-w-0 flex-[0_1_100px]"><span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Vendas (qtd)</span>
                     <input inputMode="numeric" placeholder="—" value={rascunho[`${ch}::o`] ?? (m.orders != null ? String(m.orders) : "")}
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRascunho((p) => ({ ...p, [`${ch}::o`]: e.target.value }))}
                       onBlur={(e: React.FocusEvent<HTMLInputElement>) => { setRascunho((p) => { const n = { ...p }; delete n[`${ch}::o`]; return n; }); const novo = paraNumero(e.target.value); if (novo !== m.orders) salvar(linha.client_id, mesVigente, "orders", e.target.value); }}
-                      className="h-9 rounded-lg border border-input bg-transparent px-3 text-sm text-right" />
+                      className="w-full h-9 rounded-lg border border-input bg-transparent px-3 text-sm text-right" />
                   </label>
-                  <div className="text-right min-w-[108px]">
+                  <div className="text-right min-w-[100px]">
                     <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Retorno</div>
                     <div className={cn("text-base font-bold", roas == null ? "text-muted-foreground" : roas >= 1 ? "text-emerald-500" : "text-red-500")}>{roas == null ? "—" : `${roas.toFixed(2)}x`}</div>
-                    <div className="text-[10px] text-muted-foreground leading-relaxed mt-0.5">
+                    <div className="text-[10px] text-muted-foreground leading-relaxed">
                       {ticketMedio(m.revenue, m.orders) != null && <div title="Ticket médio">ticket {new Intl.NumberFormat("pt-BR", { style: "currency", currency: linha.currency }).format(ticketMedio(m.revenue, m.orders)!)}</div>}
                       {custoPorVenda(m.spend, m.orders) != null && <div title="Custo por venda">custo/venda {new Intl.NumberFormat("pt-BR", { style: "currency", currency: linha.currency }).format(custoPorVenda(m.spend, m.orders)!)}</div>}
                     </div>
                   </div>
-                  <div className="w-14 text-right text-[11px] text-muted-foreground">{salvando === ch ? "salvando…" : ""}</div>
+                  <div className="w-12 text-right text-[11px] text-muted-foreground shrink-0">{salvando === ch ? "salvando…" : ""}</div>
                 </div>
               );
             })}
@@ -163,8 +163,8 @@ export default function VendasPage() {
                       const roas = m.revenue != null && m.spend > 0 ? m.revenue / m.spend : null;
                       const semDado = m.spend === 0 && m.revenue == null;
                       return (
-                        <td key={m.month} className={cn("p-2 align-top", semDado && "bg-muted/10")}>
-                          <div className="grid gap-1 justify-items-end">
+                        <td key={m.month} className={cn("p-2.5 align-top", semDado && "bg-muted/10")}>
+                          <div className="grid gap-1.5 justify-items-end">
                             <span className="text-[10px] text-muted-foreground tabular-nums">{m.spend > 0 ? new Intl.NumberFormat("pt-BR", { style: "currency", currency: linha.currency }).format(m.spend) : "—"}</span>
                             <input inputMode="decimal" placeholder="valor" value={rascunho[`${ch}::r`] ?? paraTexto(m.revenue, emFoco === `${ch}::r`)}
                               onFocus={() => setEmFoco(`${ch}::r`)}
