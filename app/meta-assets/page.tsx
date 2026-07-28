@@ -9,7 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input, Select, Notice, PageHeader, WideScreenHint, Field } from "@/components/ui";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { RefreshCw, AlertTriangle, CheckCircle2, XCircle, HelpCircle, ExternalLink, Search, ChevronDown, ChevronUp } from "lucide-react";
+import { RefreshCw, AlertTriangle, CheckCircle2, XCircle, HelpCircle, ExternalLink, Search, ChevronDown, ChevronUp, Copy, Check } from "lucide-react";
 
 type Connection = { index: number; user_id: string | null; name: string; status: "ok" | "partial" | "error"; error: string | null; account_count: number; business_count: number; };
 type Business = { id: string; name: string; verification_status?: string; created_time?: string; connection_indexes: number[]; };
@@ -33,6 +33,7 @@ export default function MetaAssetsPage() {
 
   const accountById = useMemo(() => new Map(accountsFromCatalog(catalog).map((a) => [a.account_id, a])), [catalog]);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [sections, setSections] = useState({ connections: false, businesses: false, accounts: true });
 
   const rows = useMemo(() => {
@@ -42,6 +43,11 @@ export default function MetaAssetsPage() {
       return compareSortValues(v(a), v(b), sort.direction) || compareSortValues(a.name, b.name, "asc");
     });
   }, [data, sort]);
+
+  async function copy(value: string, key: string) {
+    try { await navigator.clipboard.writeText(value); setCopiedKey(key); setTimeout(() => setCopiedKey(null), 1800); }
+    catch { window.prompt("Copie:", value); }
+  }
 
   return (
     <div className="p-4 md:p-6 md:ml-56 pb-20 md:pb-6 space-y-4 animate-fade-in">
@@ -134,7 +140,7 @@ export default function MetaAssetsPage() {
                           ))}
                         </div>
                       </div>
-                      {open && (
+                        {open && (
                         <div className="px-4 py-3 border-b border-border/30 bg-muted/10 space-y-2">
                           <div className="flex flex-wrap gap-4 text-xs">
                             <div><span className="text-muted-foreground">Moeda:</span> {a.currency}</div>
@@ -147,6 +153,44 @@ export default function MetaAssetsPage() {
                             <div><span className="text-muted-foreground">Catálogo:</span> {a.catalog.synced ? "sincronizado" : "não sincronizado"} · {a.catalog.status || "—"}</div>
                             <div><span className="text-muted-foreground">Permissões:</span> {a.permissions.join(", ") || "—"}</div>
                           </div>
+                          {/* Acesso rápido */}
+                          {(() => {
+                            const bareId = a.account_id.replace(/^act_/, "");
+                            const busId = a.business?.id;
+                            const busParam = busId ? `&business_id=${encodeURIComponent(busId)}` : "";
+                            const accLinks = [
+                              { label: "Ads Manager", url: `https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=${encodeURIComponent(bareId)}`, accent: false },
+                              { label: "Saldo / pagamento", url: `https://business.facebook.com/billing_hub/payment_settings?asset_id=${encodeURIComponent(bareId)}${busParam}&placement=standalone`, accent: true },
+                              { label: "Faturas", url: `https://business.facebook.com/billing_hub/accounts/details?asset_id=${encodeURIComponent(bareId)}${busParam}&placement=standalone`, accent: false },
+                              { label: "Conta e acessos", url: `https://business.facebook.com/settings/ad-accounts/${encodeURIComponent(bareId)}${busId ? `?business_id=${encodeURIComponent(busId)}` : ""}`, accent: false },
+                              { label: "Business Manager", url: busId ? `https://business.facebook.com/settings?business_id=${encodeURIComponent(busId)}` : "https://business.facebook.com/settings", accent: false },
+                            ];
+                            const billingUrl = accLinks[1].url;
+                            return (
+                              <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-border/30">
+                                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mr-1">Acesso rápido · {a.business?.name || "Conta"}</span>
+                                {accLinks.map((link) => (
+                                  <a key={link.label} href={link.url} target="_blank" rel="noreferrer"
+                                    className={cn(
+                                      "px-2 py-1 text-[10px] font-semibold rounded-md border transition-colors inline-flex items-center gap-1 no-underline",
+                                      link.accent
+                                        ? "bg-primary/10 border-primary/20 text-primary hover:bg-primary/20"
+                                        : "bg-muted/30 border-border/50 text-muted-foreground hover:text-foreground hover:bg-accent/50"
+                                    )}>
+                                    {link.label} <ExternalLink className="h-2.5 w-2.5" />
+                                  </a>
+                                ))}
+                                <button onClick={() => copy(billingUrl, `${bareId}-link`)}
+                                  className="px-2 py-1 text-[10px] font-semibold rounded-md border border-dashed border-primary/30 text-primary hover:bg-primary/10 transition-colors cursor-pointer bg-transparent">
+                                  {copiedKey === `${bareId}-link` ? <><Check className="h-2.5 w-2.5 inline" /> Copiado</> : <><Copy className="h-2.5 w-2.5 inline" /> Copiar link</>}
+                                </button>
+                                <button onClick={() => copy(bareId, `${bareId}-id`)}
+                                  className="px-2 py-1 text-[10px] rounded-md text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none">
+                                  {copiedKey === `${bareId}-id` ? "✓ ID" : `ID ${bareId}`}
+                                </button>
+                              </div>
+                            );
+                          })()}
                         </div>
                       )}
                     </div>
