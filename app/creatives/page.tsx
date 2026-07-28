@@ -183,6 +183,11 @@ export default function CreativeLab() {
 
       {lab && (
         <>
+          {(!lab.creatives || lab.creatives.length === 0) && (
+            <Notice tone="warn">
+              API retornou dados da conta, mas nenhum criativo foi encontrado no período. Pode ser necessário rodar uma coleta primeiro ou a conta não tem anúncios neste período.
+            </Notice>
+          )}
           {/* Summary KPIs */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <SummaryKpi label="Anúncios analisados" value={String((lab.creatives || []).length)} />
