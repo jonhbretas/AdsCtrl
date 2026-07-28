@@ -102,8 +102,9 @@ export default function CreativesPage() {
       let ld;
       try { ld = JSON.parse(text); } catch { throw new Error(`Resposta inválida da API: ${text.slice(0, 200)}`); }
       if (!lr.ok || ld.error) throw new Error(ld.error || `HTTP ${lr.status}`);
-      if (!ld.creatives && !ld.account_id) throw new Error(`API retornou formato inesperado: ${JSON.stringify(ld).slice(0, 200)}`);
-      setLab(ld);
+      const acct = ld.accounts?.[0];
+      if (!acct) throw new Error(`Nenhum retorno da API para esta conta.`);
+      setLab(acct);
       if (rr && rr.ok) { const rd = await rr.json(); setRejected(rd.ads || []); }
     } catch (e: any) { setError(e?.message); } finally { setLoading(false); }
   }
