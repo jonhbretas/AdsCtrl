@@ -41,6 +41,29 @@ const RESULT_PRIORITY = [
   "video_view",
 ];
 
+// Status da CONTA de anúncios, como a Meta reporta (ver mapAccountStatus em
+// lib/meta.ts). Aparecia cru na tela — "● UNSETTLED" não diz a ninguém que a
+// fatura está em aberto. `tone` decide a cor do chip: só o que exige ação sai
+// em vermelho, senão tudo vira alarme e nada mais é lido.
+export type AccountStatusTone = "ok" | "warn" | "bad";
+
+const ACCOUNT_STATUS_LABEL: Record<string, { label: string; tone: AccountStatusTone }> = {
+  ACTIVE: { label: "ativa", tone: "ok" },
+  DISABLED: { label: "desativada", tone: "bad" },
+  UNSETTLED: { label: "fatura em aberto", tone: "bad" },
+  PENDING_RISK_REVIEW: { label: "em análise de risco", tone: "warn" },
+  PENDING_SETTLEMENT: { label: "aguardando pagamento", tone: "warn" },
+  IN_GRACE_PERIOD: { label: "em carência", tone: "warn" },
+  PENDING_CLOSURE: { label: "encerramento pedido", tone: "warn" },
+  CLOSED: { label: "encerrada", tone: "bad" },
+  UNKNOWN: { label: "status desconhecido", tone: "warn" },
+};
+
+export function accountStatusInfo(status: string | null | undefined): { label: string; tone: AccountStatusTone } {
+  if (!status) return ACCOUNT_STATUS_LABEL.UNKNOWN;
+  return ACCOUNT_STATUS_LABEL[status] || { label: status.toLowerCase().replace(/_/g, " "), tone: "warn" };
+}
+
 export function pickPrimaryResult(available: string[]): string | null {
   for (const p of RESULT_PRIORITY) if (available.includes(p)) return p;
   return available[0] ?? null;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   RefreshCw,
@@ -38,7 +38,7 @@ import {
   SortState,
   usePersistentSort,
 } from "@/components/SortableHeader";
-import { money, num, delta, RESULT_FAMILIES, RESULT_FAMILY_BY_SLUG } from "@/lib/format";
+import { money, num, delta, accountStatusInfo, RESULT_FAMILIES, RESULT_FAMILY_BY_SLUG } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -813,8 +813,25 @@ export default function Dashboard() {
                           <div className="flex items-center gap-1.5 mt-0.5">
                             {g && <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium" style={{ backgroundColor: g.color + "20", color: g.color }}>{g.name}</span>}
                             {linkedMeta && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-sky-500/10 text-sky-600 dark:text-sky-400 font-medium">Cliente</span>}
-                            {a.status !== "ACTIVE" && <span className="text-[10px] text-destructive font-medium">● {a.status}</span>}
-                            {a.hidden && <span className="text-[10px] text-muted-foreground">oculta</span>}
+                            {/* Mesmo formato dos chips ao lado (grupo, Cliente):
+                                pílula com fundo, em português. Antes era
+                                "● UNSETTLED" em texto solto vermelho — destoava
+                                da linha e não dizia o que havia de errado. */}
+                            {a.status !== "ACTIVE" && (() => {
+                              const s = accountStatusInfo(a.status);
+                              return (
+                                <span
+                                  title={`status na plataforma: ${a.status}`}
+                                  className={cn(
+                                    "text-[10px] px-1.5 py-0.5 rounded-full font-medium",
+                                    s.tone === "bad" ? "bg-red-500/10 text-red-600 dark:text-red-400" : "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                                  )}
+                                >
+                                  {s.label}
+                                </span>
+                              );
+                            })()}
+                            {a.hidden && <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-muted text-muted-foreground">oculta</span>}
                           </div>
                         </div>
                       </div>
@@ -887,28 +904,31 @@ export default function Dashboard() {
                             status={a.status} balance={a.balance} currency={a.currency} />
                         </CollapsibleSection>
 
-                        {a.platform === "meta" && linkedGoogle.length > 0 && (
-                          <div className="space-y-3">
-                            {linkedGoogle.map((google) => {
-                              const gm = accMetrics(google);
-                              return (
-                                <div key={google.account_id}>
-                                  <CollapsibleSection
-                                    icon={<GoogleIcon />}
-                                    title={`Google Ads (${google.name})`}
-                                    meta={money(gm.spend, google.currency)}
-                                    subtitle={`${num(gm.results.conversoes || gm.result || 0)} conversões`}
-                                  >
-                                    <OperationalLinks accountId={google.account_id} accountName={google.name} platform="google" balance={null} currency={google.currency} compact />
-                                    <AccountChanges accountId={google.account_id} platform="google" since={range.since} until={range.until} compact />
-                                    <AccountDetail accountId={google.account_id} platform="google" since={range.since} until={range.until}
-                                      status={google.status} balance={null} currency={google.currency} />
-                                  </CollapsibleSection>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
+                        {/* A conta Google vinculada segue exatamente a mesma
+                            ordem da Meta acima — acesso rápido, últimas edições
+                            e só então o bloco recolhível. Antes os dois primeiros
+                            ficavam escondidos dentro do recolhível só do lado do
+                            Google, e as duas plataformas não se liam igual.
+                            Fragment em vez de <div> para o space-y-4 do pai valer
+                            entre todos os blocos, sem um gap diferente aqui. */}
+                        {a.platform === "meta" && linkedGoogle.map((google) => {
+                          const gm = accMetrics(google);
+                          return (
+                            <Fragment key={google.account_id}>
+                              <OperationalLinks accountId={google.account_id} accountName={google.name} platform="google" balance={null} currency={google.currency} />
+                              <AccountChanges accountId={google.account_id} platform="google" since={range.since} until={range.until} />
+                              <CollapsibleSection
+                                icon={<GoogleIcon />}
+                                title={`Google Ads (${google.name})`}
+                                subtitle="campanhas, termos de busca, segmentações"
+                                meta={money(gm.spend, google.currency)}
+                              >
+                                <AccountDetail accountId={google.account_id} platform="google" since={range.since} until={range.until}
+                                  status={google.status} balance={null} currency={google.currency} />
+                              </CollapsibleSection>
+                            </Fragment>
+                          );
+                        })}
                       </div>
                     )}
                   </div>

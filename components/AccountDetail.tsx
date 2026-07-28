@@ -24,7 +24,7 @@ import {
 } from "recharts";
 import {
   money, moneyShort, num, pct, dayLabel, weekdayLabel, resultLabel,
-  pickPrimaryResult, orderedResults, pickVal, delta, roas,
+  pickPrimaryResult, orderedResults, pickVal, delta, roas, accountStatusInfo,
   PURCHASE_KEYS, ATC_KEYS, CHECKOUT_KEYS, LINKCLICK_KEYS,
   RESULT_FAMILY_BY_SLUG,
 } from "@/lib/format";
@@ -141,6 +141,24 @@ function selectionLabel(selection: string): string {
 const ACCENT = "#3987e5";
 const ACCENT2 = "#f59e0b";
 const TEAL = "#2bb3a3";
+
+// Duas medidas e nada mais. Antes cada bloco escolhia a sua (12, 16 ou 24) e o
+// mesmo componente, servindo Meta e Google, produzia ritmos diferentes nas duas
+// plataformas — que é o que se nota quando se abre um cliente e depois o outro.
+const GAP = 12;          // entre cards de uma mesma grade
+const SECTION_GAP = 20;  // entre blocos
+
+// Botão de ação na linha da tabela (Orçamento, Duplicar). Borda e fundo
+// próprios: sem eles o rótulo se perdia entre as colunas de número.
+const rowActionRest: React.CSSProperties = { background: "#fff", borderColor: "#d7dee8", color: "#334155" };
+const rowActionHover: React.CSSProperties = { background: "#f1f5f9", borderColor: ACCENT, color: ACCENT };
+const rowActionStyle: React.CSSProperties = {
+  display: "inline-flex", alignItems: "center", gap: 5,
+  padding: "5px 10px", borderRadius: 8,
+  border: "1px solid #d7dee8", background: "#fff", color: "#334155",
+  fontSize: 11.5, fontWeight: 600, lineHeight: 1.2, cursor: "pointer",
+  whiteSpace: "nowrap", transition: "background .15s, border-color .15s, color .15s",
+};
 
 type MetricKey = "spend" | "impressions" | "clicks" | "ctr" | "cpm" | "results" | "cpr";
 type DetailSortKey =
@@ -407,15 +425,19 @@ export default function AccountDetail({
 
   return (
     <div style={{ padding: "8px 4px 24px", background: "#fafafa" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: SECTION_GAP, flexWrap: "wrap" }}>
         <strong style={{ fontSize: 15 }}>{platformLabel}</strong>
-        <span style={{ fontSize: 12, color: "#aaa" }}>vs. período anterior ({data.prevRange.since} → {data.prevRange.until})</span>
+        {/* A prop `status` chegava aqui e não era mostrada em lugar nenhum:
+            dava para ler número de conta desativada sem nenhum aviso no bloco.
+            Conta saudável não precisa de selo — só o que exige ação aparece. */}
+        {platform === "meta" && status && status !== "ACTIVE" && <AccountStatusChip status={status} />}
+        <span style={{ fontSize: 12, color: "#8a919b" }}>vs. período anterior ({data.prevRange.since} → {data.prevRange.until})</span>
         <span style={{ flex: 1 }} />
         <a href={`/report/${accountId}?since=${since}&until=${until}`} target="_blank" rel="noreferrer"
-           style={{ fontSize: 12, color: ACCENT, textDecoration: "none", border: `1px solid ${ACCENT}33`, borderRadius: 8, padding: "5px 10px" }}>
+           style={{ fontSize: 12, color: ACCENT, textDecoration: "none", border: `1px solid ${ACCENT}55`, background: `${ACCENT}0d`, borderRadius: 8, padding: "5px 10px", fontWeight: 600 }}>
           ⤓ Relatório / PDF
         </a>
-        <label style={{ fontSize: 12, color: "#888" }}>Resultado:</label>
+        <label style={{ fontSize: 12, color: "#8a919b" }}>Resultado:</label>
         <select value={result ?? ""} onChange={(e) => setResult(e.target.value)}
                 style={{ padding: "5px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13 }}>
           <optgroup label="Resultado do negócio">
@@ -438,7 +460,7 @@ export default function AccountDetail({
       </div>
 
       {/* KPIs PRINCIPAIS com deltas */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12, marginBottom: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: GAP, marginBottom: GAP }}>
         <KpiCard label="INVESTIMENTO" value={formatMoney(k.spend)} cur={k.spend} prev={p.spend} neutral />
         <KpiCard label="ALCANCE" value={num(k.reach)} cur={k.reach} prev={p.reach} sub={`Freq. ${freq.toFixed(2)}x`} />
         <KpiCard label={selectionLabel(result || "").toUpperCase()} value={num(primaryRes)} cur={primaryRes} prev={prevPrimaryRes} />
@@ -452,7 +474,7 @@ export default function AccountDetail({
       </div>
 
       {/* Métricas secundárias */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 8, marginBottom: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 8, marginBottom: SECTION_GAP }}>
         <MiniKpi label="Impressões" value={num(k.impressions)} cur={k.impressions} prev={p.impressions} />
         <MiniKpi label="Cliques" value={num(k.clicks)} cur={k.clicks} prev={p.clicks} />
         <MiniKpi label="CTR" value={k.impressions > 0 ? pct(k.ctr) : "—"} cur={k.impressions > 0 ? k.ctr : undefined} prev={p.impressions > 0 ? p.ctr : undefined} />
@@ -465,7 +487,7 @@ export default function AccountDetail({
       {hasEcom && (
         <>
           <SectionTitle>E-commerce</SectionTitle>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: GAP, marginBottom: SECTION_GAP }}>
             <KpiCard label="ROAS" value={k.spend > 0 ? `${roas(pValue, k.spend).toFixed(2)}x` : "—"} cur={k.spend > 0 ? roas(pValue, k.spend) : undefined} prev={p.spend > 0 ? roas(prevPValue, p.spend) : undefined} />
             <KpiCard label="COMPRAS" value={num(purchases)} cur={purchases} prev={prevPurchases} />
             <KpiCard label="VALOR DE COMPRA" value={formatMoney(pValue)} cur={pValue} prev={prevPValue} />
@@ -478,7 +500,7 @@ export default function AccountDetail({
       {hasFunnel && (
         <>
           <SectionTitle>Funil de conversão</SectionTitle>
-          <div style={{ background: "#fff", border: "1px solid #eee", borderRadius: 12, padding: 16, marginBottom: 24 }}>
+          <div style={{ background: "#fff", border: "1px solid #eee", borderRadius: 12, padding: 16, marginBottom: SECTION_GAP }}>
             <div style={{ display: "grid", gap: 8 }}>
               {funnel.map((s, i) => {
                 const top = funnel[0].v || 1;
@@ -505,6 +527,7 @@ export default function AccountDetail({
 
       {/* GRÁFICO DIÁRIO */}
       <SectionTitle>Detalhamento de investimento</SectionTitle>
+      <div style={{ marginBottom: SECTION_GAP }}>
       <ChartCard height={260}>
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={data.daily.map((d) => ({ ...d, label: dayLabel(d.date) }))} margin={{ top: 10, right: 8, left: 8, bottom: 0 }}>
@@ -518,6 +541,7 @@ export default function AccountDetail({
           </ComposedChart>
         </ResponsiveContainer>
       </ChartCard>
+      </div>
 
       {/* TABELA CAMPANHAS/CONJUNTOS/ANÚNCIOS */}
       <SectionTitle>Tabela de campanhas</SectionTitle>
@@ -537,7 +561,7 @@ export default function AccountDetail({
           {!changeNote.bad && " A alteração aparece em Últimas edições."}
         </div>
       )}
-      <div style={{ border: "1px solid #eee", borderRadius: 12, background: "#fff", overflow: "hidden", marginBottom: 24 }}>
+      <div style={{ border: "1px solid #eee", borderRadius: 12, background: "#fff", overflow: "hidden", marginBottom: SECTION_GAP }}>
         <div style={{ display: "flex", gap: 4, padding: 10, borderBottom: "1px solid #f0f0f0" }}>
           {(["campaigns", "adsets", "ads"] as const).map((t) => (
             <button key={t} onClick={() => setTab(t)}
@@ -566,7 +590,7 @@ export default function AccountDetail({
                 {/* Duplicar existe só para campanha: conjunto solto sem a
                     campanha mãe não tem para onde ir na outra conta. */}
                 {platform === "meta" && tab === "campaigns" && (
-                  <th style={{ padding: "10px 14px", textAlign: "right", fontWeight: 500, width: 108 }}>Ação</th>
+                  <th style={{ padding: "10px 14px", textAlign: "right", fontWeight: 500, width: 210 }}>Ações</th>
                 )}
               </tr>
             </thead>
@@ -612,13 +636,29 @@ export default function AccountDetail({
                     <Td>{rv > 0 && r.spend > 0 ? `${(rv / r.spend).toFixed(2)}x` : "—"}</Td>
                     {platform === "meta" && tab === "campaigns" && (
                       <td style={{ padding: "10px 14px", textAlign: "right", whiteSpace: "nowrap" }}>
-                        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-                          <button className="ec-btn" data-variant="ghost" data-size="sm"
+                        {/* Eram dois "ec-btn" fantasma: texto solto no fim da
+                            linha, sem borda nem fundo, indistinguível das
+                            células de número ao lado. Ação que mexe em conta de
+                            anúncio precisa parecer ação. */}
+                        <div style={{ display: "flex", gap: 6, alignItems: "center", justifyContent: "flex-end" }}>
+                          <button
                             onClick={() => { setBudgetModal({ id: r.id, name: r.name }); setBudgetPct("30"); setBudgetDir("up"); }}
-                            title="Ajustar orçamento da campanha">Orçamento</button>
-                          <button className="ec-btn" data-variant="secondary" data-size="sm"
+                            title="Ajustar orçamento da campanha"
+                            style={rowActionStyle}
+                            onMouseEnter={(e) => Object.assign(e.currentTarget.style, rowActionHover)}
+                            onMouseLeave={(e) => Object.assign(e.currentTarget.style, rowActionRest)}
+                          >
+                            <span aria-hidden="true">↕</span> Orçamento
+                          </button>
+                          <button
                             onClick={() => setDuplicating({ id: r.id, name: r.name })}
-                            title="Copiar campanha e conjuntos para outra conta de anúncios">⧉ Duplicar</button>
+                            title="Copiar campanha e conjuntos para outra conta de anúncios"
+                            style={rowActionStyle}
+                            onMouseEnter={(e) => Object.assign(e.currentTarget.style, rowActionHover)}
+                            onMouseLeave={(e) => Object.assign(e.currentTarget.style, rowActionRest)}
+                          >
+                            <span aria-hidden="true">⧉</span> Duplicar
+                          </button>
                         </div>
                       </td>
                     )}
@@ -642,25 +682,14 @@ export default function AccountDetail({
       {/* TERMOS DE BUSCA (Google, campanhas de Pesquisa) */}
       {platform === "google" && <SearchTerms terms={data.searchTerms} currency={currency} accountId={accountId} />}
 
-      {/* VISÃO GERAL — gasto diário + alcance + cliques */}
-      <SectionTitle>Funil de performance</SectionTitle>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 24 }}>
-        <ChartCard height={220} title="Investimento diário">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={data.daily.map((d) => ({ label: dayLabel(d.date), spend: d.spend }))} margin={{ top: 4, right: 8, left: 8, bottom: 0 }}>
-              <defs>
-                <linearGradient id="spendGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#06b6d4" stopOpacity={0.3} /><stop offset="100%" stopColor="#06b6d4" stopOpacity={0} /></linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-              <XAxis dataKey="label" tick={{ fontSize: 10, fill: "#94a3b8" }} tickLine={false} axisLine={false} />
-              <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} tickLine={false} axisLine={false} width={48} tickFormatter={(v) => formatMoneyShort(v)} />
-              <Tooltip formatter={(v: any) => formatMoney(Number(v))} contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0" }} />
-              <Area type="monotone" dataKey="spend" name="Investimento" stroke="#06b6d4" strokeWidth={2} fill="url(#spendGrad)" dot={false} />
-            </AreaChart>
-          </ResponsiveContainer>
-        </ChartCard>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 24 }}>
+      {/* EVOLUÇÃO DIÁRIA — alcance e cliques.
+          "Investimento diário" saiu daqui: era uma área com o mesmo dado do
+          gráfico de Detalhamento de investimento logo acima, e vinha sozinha
+          numa grade de duas colunas — meio card e meia coluna vazia ao lado.
+          Não era falha de dado, era layout. Agora a grade só existe onde há
+          dois gráficos, e é auto-fit para não abrir buraco em tela estreita. */}
+      <SectionTitle>Evolução diária</SectionTitle>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: GAP, marginBottom: SECTION_GAP }}>
         <ChartCard height={200} title="Alcance diário">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={data.daily.map((d) => ({ label: dayLabel(d.date), reach: d.reach }))} margin={{ top: 4, right: 8, left: 8, bottom: 0 }}>
@@ -702,7 +731,7 @@ export default function AccountDetail({
               {(Object.keys(METRIC_LABELS) as MetricKey[]).map((m) => <option key={m} value={m}>{METRIC_LABELS[m]}</option>)}
             </select>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 340px), 1fr))", gap: 12, marginBottom: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 340px), 1fr))", gap: GAP, marginBottom: SECTION_GAP }}>
             {segments.withData.map((segment) => {
               const rows = segment.rows.filter((r) => metricOf(r, demoMetric) > 0);
               const data = rows.map((r) => ({ name: r.key, primary: metricOf(r, demoMetric), secondary: (r as any).reach || (r as any).impressions || 0 }));
@@ -782,6 +811,7 @@ export default function AccountDetail({
 
       {/* POR HORA — impressões e alcance lado a lado */}
       {data.breakdowns.hour.some((h) => (h as any).impressions > 0) && (
+        <div style={{ marginBottom: SECTION_GAP }}>
         <ChartCard height={220} title="Impressões × Alcance por hora">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={data.breakdowns.hour.map((h) => ({ label: `${h.key}h`, impressions: (h as any).impressions || 0, reach: (h as any).reach || 0 }))} margin={{ top: 6, right: 8, left: 8, bottom: 0 }}>
@@ -795,6 +825,7 @@ export default function AccountDetail({
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
+        </div>
       )}
 
       {/* Preview popup para thumbnail de anúncio */}
@@ -901,9 +932,31 @@ function SectionTitle({ children, noMargin }: { children: React.ReactNode; noMar
   return <div style={{ fontSize: 12, fontWeight: 700, color: "#888", letterSpacing: 0.6, textTransform: "uppercase", margin: noMargin ? 0 : "8px 0 12px" }}>{children}</div>;
 }
 
+// Mesmo chip da linha da visão geral, para o status se ler igual antes e
+// depois de abrir o cliente.
+function AccountStatusChip({ status }: { status: string }) {
+  const info = accountStatusInfo(status);
+  const palette = info.tone === "bad"
+    ? { bg: "#fef2f2", border: "#fecaca", fg: "#b91c1c" }
+    : { bg: "#fffbeb", border: "#fde68a", fg: "#b45309" };
+  return (
+    <span
+      title={`status na plataforma: ${status}`}
+      style={{
+        fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999,
+        background: palette.bg, border: `1px solid ${palette.border}`, color: palette.fg,
+      }}
+    >
+      {info.label}
+    </span>
+  );
+}
+
+// Sem margem própria: dentro de uma grade ela somava com o gap e abria um vão
+// diferente do resto. Quem posiciona é o bloco de fora.
 function ChartCard({ children, height, title }: { children: React.ReactNode; height: number; title?: string }) {
   return (
-    <div style={{ background: "#fff", border: "1px solid #eee", borderRadius: 12, padding: 12, marginBottom: 24 }}>
+    <div style={{ background: "#fff", border: "1px solid #eee", borderRadius: 12, padding: 12 }}>
       {title && <div style={{ fontSize: 12, color: "#999", marginBottom: 8 }}>{title}</div>}
       <div style={{ height }}>{children}</div>
     </div>
@@ -1174,14 +1227,14 @@ function SearchTerms({ terms, currency, accountId }: { terms?: SearchTerm[]; cur
       )}
 
       {list.length === 0 ? (
-        <div className="ec-card ec-card--padded" style={{ marginBottom: 24 }}>
+        <div className="ec-card ec-card--padded" style={{ marginBottom: SECTION_GAP }}>
           <div className="ec-inline-empty" style={{ minHeight: 0 }}>
             Nenhum termo de busca no período. O Google só expõe o que a pessoa digitou em campanhas de
             <strong> Pesquisa</strong> — em Performance Max, Display e Vídeo essa lista vem vazia mesmo com entrega.
           </div>
         </div>
       ) : (
-        <div className="ec-card ec-scroll-x" style={{ marginBottom: 24 }}>
+        <div className="ec-card ec-scroll-x" style={{ marginBottom: SECTION_GAP }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 720 }}>
             <thead>
               <tr style={{ color: "var(--text-muted)", textAlign: "right" }}>
