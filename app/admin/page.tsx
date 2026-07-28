@@ -1,1197 +1,200 @@
 "use client";
 
-// app/admin/page.tsx
-// Administração de grupos: criar/editar/excluir grupos e atribuir contas a grupos.
-
 import { useEffect, useMemo, useState } from "react";
-import {
-  compareSortValues,
-  SortButton,
-  SortState,
-  usePersistentSort,
-} from "@/components/SortableHeader";
+import Link from "next/link";
+import { compareSortValues, SortButton, SortState, usePersistentSort } from "@/components/SortableHeader";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input, Select, Collapsible, Notice, PageHeader, WideScreenHint, Field } from "@/components/ui";
+import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 import { RESULT_FAMILY_BY_SLUG } from "@/lib/format";
-import { Badge, Collapsible, Notice, PageHeader, Skeleton, SkeletonCard, WideScreenHint } from "@/components/ui";
+import { ArrowLeft, RefreshCw, AlertTriangle, Plus, X, Check, ChevronDown, ChevronUp } from "lucide-react";
 
-interface Group {
-  id: string;
-  name: string;
-  color: string;
-}
-interface Account {
-  account_id: string;
-  name: string;
-  status: string;
-  group_id: string | null;
-  platform: "meta" | "google";
-  hidden?: boolean;
-  linked_meta_account_id?: string | null;
-}
-interface ClientRecord {
-  id: string;
-  name: string;
-  status: "active" | "paused" | "archived";
-  objective: string | null;
-  result_family: string | null;
-  /** Marca exibida ao cliente (relatório, painel, e-mail). Nulo = Assertivus. */
-  brand_name?: string | null;
-  primary_kpi: string | null;
-  target_value: number | null;
-  monthly_budget: number | null;
-  monthly_conversion_goal: number | null;
-  currency: string;
-  timezone: string;
-  budget_start_day: number;
-  report_email?: string | null;
-  report_enabled?: boolean;
-  report_last_sent_at?: string | null;
-  /** Entra na tela de Vendas, onde o valor real é informado mês a mês. */
-  track_sales?: boolean;
-  accounts: Account[];
-}
-type ClientAdminSortKey =
-  | "name"
-  | "objective"
-  | "budget"
-  | "result"
-  | "kpi"
-  | "target"
-  | "cycle";
+interface Group { id: string; name: string; color: string; }
+interface Account { account_id: string; name: string; status: string; group_id: string | null; platform: "meta" | "google"; hidden?: boolean; linked_meta_account_id?: string | null; }
+interface ClientRecord { id: string; name: string; status: "active" | "paused" | "archived"; objective: string | null; result_family: string | null; brand_name?: string | null; primary_kpi: string | null; target_value: number | null; monthly_budget: number | null; monthly_conversion_goal: number | null; currency: string; timezone: string; budget_start_day: number; report_email?: string | null; report_enabled?: boolean; report_last_sent_at?: string | null; track_sales?: boolean; accounts: Account[]; }
+type ClientAdminSortKey = "name" | "objective" | "budget" | "result" | "kpi" | "target" | "cycle";
 type GroupSortKey = "name" | "accounts";
-type AccountAdminSortKey =
-  | "platform"
-  | "name"
-  | "status"
-  | "client"
-  | "group"
-  | "visibility";
-const CLIENT_ADMIN_SORT_KEYS: readonly ClientAdminSortKey[] = [
-  "name",
-  "objective",
-  "budget",
-  "result",
-  "kpi",
-  "target",
-  "cycle",
-];
+type AccountAdminSortKey = "platform" | "name" | "status" | "client" | "group" | "visibility";
+const CLIENT_ADMIN_SORT_KEYS: readonly ClientAdminSortKey[] = ["name", "objective", "budget", "result", "kpi", "target", "cycle"];
 const GROUP_SORT_KEYS: readonly GroupSortKey[] = ["name", "accounts"];
-const ACCOUNT_ADMIN_SORT_KEYS: readonly AccountAdminSortKey[] = [
-  "platform",
-  "name",
-  "status",
-  "client",
-  "group",
-  "visibility",
-];
-const MONETARY_CLIENT_KPIS = new Set([
-  "cpa",
-  "cpl",
-  "cpc",
-  "cpm",
-  "cost_per_result",
-  "revenue",
-  "custom",
-]);
-
+const ACCOUNT_ADMIN_SORT_KEYS: readonly AccountAdminSortKey[] = ["platform", "name", "status", "client", "group", "visibility"];
+const MONETARY_CLIENT_KPIS = new Set(["cpa", "cpl", "cpc", "cpm", "cost_per_result", "revenue", "custom"]);
 const PALETTE = ["#3987e5", "#16a34a", "#db2777", "#f59e0b", "#7c3aed", "#0891b2", "#dc2626", "#4b5563"];
+const CLIENT_GRID = "minmax(160px,1.2fr) 120px 130px 130px 120px 130px 80px";
+const compactInput: React.CSSProperties = { width: "100%", height: 30, fontSize: 12, borderRadius: 8, border: "1px solid var(--color-border)", background: "transparent", padding: "0 8px" };
 
 export default function Admin() {
   const [groups, setGroups] = useState<Group[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [clients, setClients] = useState<ClientRecord[]>([]);
   const [clientsUnavailable, setClientsUnavailable] = useState<string | null>(null);
-  // Aparece no cabeçalho da seção recolhida: é o número que diz se vale abrir.
-  const collectingCount = accounts.filter((account) => !account.hidden).length;
+  const collectingCount = accounts.filter((a) => !a.hidden).length;
   const [loading, setLoading] = useState(true);
   const [loadRevision, setLoadRevision] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
   const [newName, setNewName] = useState("");
   const [newColor, setNewColor] = useState(PALETTE[0]);
-  const [clientSort, setClientSort] = usePersistentSort<ClientAdminSortKey>(
-    "adsctrl:sort:admin-clients",
-    { key: "name", direction: "asc" },
-    CLIENT_ADMIN_SORT_KEYS
-  );
-  const [groupSort, setGroupSort] = usePersistentSort<GroupSortKey>(
-    "adsctrl:sort:admin-groups",
-    { key: "name", direction: "asc" },
-    GROUP_SORT_KEYS
-  );
-  const [accountSort, setAccountSort] = usePersistentSort<AccountAdminSortKey>(
-    "adsctrl:sort:admin-accounts",
-    { key: "name", direction: "asc" },
-    ACCOUNT_ADMIN_SORT_KEYS
-  );
+  const [clientSort, setClientSort] = usePersistentSort<ClientAdminSortKey>("adsctrl:sort:admin-clients", { key: "name", direction: "asc" }, CLIENT_ADMIN_SORT_KEYS);
+  const [groupSort, setGroupSort] = usePersistentSort<GroupSortKey>("adsctrl:sort:admin-groups", { key: "name", direction: "asc" }, GROUP_SORT_KEYS);
+  const [accountSort, setAccountSort] = usePersistentSort<AccountAdminSortKey>("adsctrl:sort:admin-accounts", { key: "name", direction: "asc" }, ACCOUNT_ADMIN_SORT_KEYS);
 
-  async function load() {
-    setError(null);
-    try {
-      const [r, clientsResponse] = await Promise.all([
-        fetch("/api/accounts"),
-        fetch("/api/clients?status=active"),
-      ]);
-      const text = await r.text();
-      const d = text ? JSON.parse(text) : {};
-      if (!r.ok || d.error) throw new Error(d.error || `Falha ao carregar (HTTP ${r.status}).`);
-      setAccounts(d.accounts || []);
-      setGroups(d.groups || []);
-      const clientText = await clientsResponse.text();
-      const clientData = clientText ? JSON.parse(clientText) : {};
-      if (clientsResponse.ok && !clientData.error) {
-        setClients(clientData.clients || []);
-        setClientsUnavailable(null);
-      } else {
-        setClients([]);
-        setClientsUnavailable(clientData.error || "Execute a migração de clientes.");
-      }
-    } catch (e: any) {
-      setError(e?.message ?? "Erro ao carregar.");
-    } finally {
-      setLoadRevision((revision) => revision + 1);
-      setLoading(false);
-    }
-  }
+  async function load() { setError(null); try { const [r, cr] = await Promise.all([fetch("/api/accounts"), fetch("/api/clients?status=active")]); const d = JSON.parse(await r.text()); if (!r.ok || d.error) throw new Error(d.error || "Falha."); setAccounts(d.accounts || []); setGroups(d.groups || []); const cd = JSON.parse(await cr.text()); if (cr.ok && !cd.error) { setClients(cd.clients || []); setClientsUnavailable(null); } else { setClients([]); setClientsUnavailable(cd.error || "Migração necessária."); } } catch (e: any) { setError(e?.message); } finally { setLoadRevision((r) => r + 1); setLoading(false); } }
+  async function refreshClients() { try { const r = await fetch("/api/clients?status=active", { cache: "no-store" }); const d = JSON.parse(await r.text()); if (!r.ok || d.error) throw new Error(d.error || "Falha."); setClients(d.clients || []); setClientsUnavailable(null); } catch (e: any) { setError(e?.message); } }
+  useEffect(() => { load(); }, []);
 
-  async function refreshClients() {
-    try {
-      const response = await fetch("/api/clients?status=active", {
-        cache: "no-store",
-      });
-      const text = await response.text();
-      const payload = text ? JSON.parse(text) : {};
-      if (!response.ok || payload.error) {
-        throw new Error(payload.error || `Falha (HTTP ${response.status}).`);
-      }
-      setClients(payload.clients || []);
-      setClientsUnavailable(null);
-    } catch (cause: any) {
-      setError(
-        `A conta foi atualizada, mas a lista de clientes não pôde ser sincronizada: ${
-          cause?.message || "tente atualizar a página"
-        }.`
-      );
-    }
-  }
+  const countByGroup = useMemo(() => { const m: Record<string, number> = {}; for (const a of accounts) if (a.group_id) m[a.group_id] = (m[a.group_id] || 0) + 1; return m; }, [accounts]);
+  const metaAccounts = useMemo(() => accounts.filter((a) => a.platform === "meta" && !a.hidden && a.status === "ACTIVE").sort((a, b) => a.name.localeCompare(b.name)), [accounts]);
+  const metaGoogleAccounts = useMemo(() => accounts.filter((a) => a.platform === "meta" && !a.hidden).sort((a, b) => a.name.localeCompare(b.name)), [accounts]);
+  const googleAccounts = useMemo(() => accounts.filter((a) => a.platform === "google").sort((a, b) => a.name.localeCompare(b.name)), [accounts]);
 
-  useEffect(() => {
-    load();
-  }, []);
-
-  const countByGroup = useMemo(() => {
-    const m: Record<string, number> = {};
-    for (const a of accounts) if (a.group_id) m[a.group_id] = (m[a.group_id] || 0) + 1;
-    return m;
-  }, [accounts]);
-  const metaAccounts = useMemo(
-    () => accounts
-      .filter((a) => a.platform === "meta" && !a.hidden && a.status === "ACTIVE")
-      .sort((a, b) => a.name.localeCompare(b.name)),
-    [accounts]
-  );
   const sortedClients = useMemo(() => {
-    const objectiveLabel: Record<string, string> = {
-      leads: "Leads",
-      sales: "Vendas",
-      traffic: "Tráfego",
-      engagement: "Engajamento",
-      awareness: "Reconhecimento",
-      app: "Aplicativo",
-      other: "Outro",
-    };
-    const resultLabel: Record<string, string> = {
-      conversoes: "Conversões",
-      vendas: "Vendas",
-      leads: "Leads",
-      mensagens: "Mensagens",
-      cadastros: "Cadastros",
-      cliques: "Cliques",
-      lpv: "LPV",
-      engajamento: "Engajamento",
-    };
-    const kpiLabel: Record<string, string> = {
-      cpa: "CPA",
-      cpl: "CPL",
-      roas: "ROAS",
-      revenue: "Receita",
-      conversions: "Conversões",
-      ctr: "CTR",
-      cpc: "CPC",
-      cpm: "CPM",
-      custom: "Custo / resultado personalizado",
-    };
-    const value = (client: ClientRecord) => {
-      switch (clientSort.key) {
-        case "name": return client.name;
-        case "objective":
-          return client.objective
-            ? objectiveLabel[client.objective] || client.objective
-            : null;
-        case "budget": return client.monthly_budget;
-        case "result":
-          return client.result_family
-            ? resultLabel[client.result_family] || client.result_family
-            : null;
-        case "kpi":
-          return client.primary_kpi
-            ? kpiLabel[client.primary_kpi] || client.primary_kpi
-            : null;
-        case "target": return client.target_value;
-        case "cycle": return client.budget_start_day;
-      }
-    };
-    return [...clients].sort((left, right) => {
-      const leftValue = value(left);
-      const rightValue = value(right);
-      if (
-        clientSort.key === "budget" ||
-        clientSort.key === "target"
-      ) {
-        const leftMissing =
-          leftValue == null ||
-          (typeof leftValue === "number" && Number.isNaN(leftValue));
-        const rightMissing =
-          rightValue == null ||
-          (typeof rightValue === "number" && Number.isNaN(rightValue));
-        if (leftMissing !== rightMissing) return leftMissing ? 1 : -1;
-      }
-      if (
-        clientSort.key === "budget" &&
-        left.currency !== right.currency
-      ) {
-        return compareSortValues(left.currency, right.currency, "asc");
-      }
-      if (
-        clientSort.key === "target" &&
-        left.primary_kpi !== right.primary_kpi
-      ) {
-        return compareSortValues(
-          left.primary_kpi,
-          right.primary_kpi,
-          "asc"
-        );
-      }
-      if (
-        clientSort.key === "target" &&
-        MONETARY_CLIENT_KPIS.has(left.primary_kpi || "") &&
-        left.currency !== right.currency
-      ) {
-        return compareSortValues(left.currency, right.currency, "asc");
-      }
-      return (
-        compareSortValues(
-          leftValue,
-          rightValue,
-          clientSort.direction
-        ) || compareSortValues(left.name, right.name, "asc")
-      );
-    });
+    const objLabel: Record<string, string> = { leads: "Leads", sales: "Vendas", traffic: "Tráfego", engagement: "Engajamento", awareness: "Reconhecimento", app: "Aplicativo", other: "Outro" };
+    const resLabel: Record<string, string> = { conversoes: "Conversões", vendas: "Vendas", leads: "Leads", mensagens: "Mensagens", cadastros: "Cadastros", cliques: "Cliques", lpv: "LPV", engajamento: "Engajamento" };
+    const kpiL: Record<string, string> = { cpa: "CPA", cpl: "CPL", roas: "ROAS", revenue: "Receita", conversions: "Conversões", ctr: "CTR", cpc: "CPC", cpm: "CPM", custom: "Custo / resultado" };
+    const val = (c: ClientRecord) => { switch (clientSort.key) { case "name": return c.name; case "objective": return c.objective ? objLabel[c.objective] || c.objective : null; case "budget": return c.monthly_budget; case "result": return c.result_family ? resLabel[c.result_family] || c.result_family : null; case "kpi": return c.primary_kpi ? kpiL[c.primary_kpi] || c.primary_kpi : null; case "target": return c.target_value; case "cycle": return c.budget_start_day; } };
+    return [...clients].sort((a, b) => { const av = val(a), bv = val(b); if (clientSort.key === "budget" || clientSort.key === "target") { const am = av == null || (typeof av === "number" && Number.isNaN(av)); const bm = bv == null || (typeof bv === "number" && Number.isNaN(bv)); if (am !== bm) return am ? 1 : -1; if (clientSort.key === "budget" && a.currency !== b.currency) return compareSortValues(a.currency, b.currency, "asc"); if (clientSort.key === "target" && a.primary_kpi !== b.primary_kpi) return compareSortValues(a.primary_kpi, b.primary_kpi, "asc"); if (clientSort.key === "target" && MONETARY_CLIENT_KPIS.has(a.primary_kpi || "") && a.currency !== b.currency) return compareSortValues(a.currency, b.currency, "asc"); } return compareSortValues(av, bv, clientSort.direction) || compareSortValues(a.name, b.name, "asc"); });
   }, [clients, clientSort]);
-  const sortedGroups = useMemo(() => {
-    const value = (group: Group) =>
-      groupSort.key === "name"
-        ? group.name
-        : countByGroup[group.id] || 0;
-    return [...groups].sort((left, right) =>
-      compareSortValues(value(left), value(right), groupSort.direction) ||
-      compareSortValues(left.name, right.name, "asc")
-    );
-  }, [groups, countByGroup, groupSort]);
-  const sortedAccounts = useMemo(() => {
-    const groupName = (account: Account) =>
-      groups.find((group) => group.id === account.group_id)?.name || null;
-    const clientName = (account: Account) =>
-      account.platform === "google"
-        ? accounts.find(
-            (candidate) =>
-              candidate.account_id === account.linked_meta_account_id
-          )?.name || null
-        : "Conta principal";
-    const value = (account: Account) => {
-      switch (accountSort.key) {
-        case "platform": return account.platform;
-        case "name": return account.name;
-        case "status":
-          return `${account.status === "ACTIVE" ? "0" : "1"}-${account.status}`;
-        case "client": return clientName(account);
-        case "group": return groupName(account);
-        case "visibility": return account.hidden ? 1 : 0;
-      }
-    };
-    return [...accounts].sort((left, right) =>
-      compareSortValues(
-        value(left),
-        value(right),
-        accountSort.direction
-      ) || compareSortValues(left.name, right.name, "asc")
-    );
-  }, [accounts, groups, accountSort]);
+  const sortedGroups = useMemo(() => { const v = (g: Group) => groupSort.key === "name" ? g.name : countByGroup[g.id] || 0; return [...groups].sort((a, b) => compareSortValues(v(a), v(b), groupSort.direction) || compareSortValues(a.name, b.name, "asc")); }, [groups, groupSort, countByGroup]);
+  const sortedAccounts = useMemo(() => { const clientById = new Map(clients.map((c) => [c.id, c])); const v = (a: Account) => { switch (accountSort.key) { case "platform": return a.platform; case "name": return a.name; case "status": return a.status; case "client": return clientById.get(a.group_id || "")?.name || ""; case "group": return groups.find((g) => g.id === a.group_id)?.name || ""; case "visibility": return a.hidden ? 1 : 0; } }; return [...accounts].sort((a, b) => compareSortValues(v(a), v(b), accountSort.direction) || compareSortValues(a.name, b.name, "asc")); }, [accounts, accountSort, clients, groups]);
 
-  async function api(url: string, opts: RequestInit): Promise<any> {
-    setBusy(true);
-    setError(null);
-    try {
-      const r = await fetch(url, { headers: { "Content-Type": "application/json" }, ...opts });
-      const text = await r.text();
-      const d = text ? JSON.parse(text) : {};
-      if (!r.ok || d.error) throw new Error(d.error || `Falha (HTTP ${r.status}).`);
-      return d;
-    } finally {
-      setBusy(false);
-    }
-  }
+  async function api(url: string, opts: { method: string; body?: string }) { const r = await fetch(url, opts); const d = await r.json(); if (!r.ok || d.error) throw new Error(d.error || "Falha."); return d; }
+  async function createGroup() { if (!newName.trim()) return; setBusy(true); try { await api("/api/groups", { method: "POST", body: JSON.stringify({ name: newName.trim(), color: newColor }) }); await load(); setNewName(""); } catch (e: any) { setError(e?.message); } finally { setBusy(false); } }
+  async function removeGroup(id: string) { setBusy(true); try { await api(`/api/groups?id=${encodeURIComponent(id)}`, { method: "DELETE" }); await load(); } catch (e: any) { setError(e?.message); } finally { setBusy(false); } }
+  async function renameGroup(id: string, name: string) { try { await api("/api/groups", { method: "PATCH", body: JSON.stringify({ id, name }) }); await load(); } catch (e: any) { setError(e?.message); } }
+  async function setGroup(accountId: string, groupId: string | null) { setAccounts((prev) => prev.map((a) => a.account_id === accountId ? { ...a, group_id: groupId } : a)); try { await api("/api/accounts/group", { method: "POST", body: JSON.stringify({ account_id: accountId, group_id: groupId }) }); } catch (e: any) { setError(e?.message); await load(); } }
+  async function toggleHidden(accountId: string, hidden: boolean) { setAccounts((prev) => prev.map((a) => a.account_id === accountId ? { ...a, hidden } : a)); try { await api("/api/accounts/hidden", { method: "POST", body: JSON.stringify({ account_id: accountId, hidden }) }); } catch (e: any) { setError(e?.message); await load(); } }
+  async function linkGoogle(googleId: string, metaId: string) { setAccounts((prev) => prev.map((a) => a.account_id === googleId ? { ...a, linked_meta_account_id: metaId || null } : a)); try { await api("/api/accounts/link", { method: "POST", body: JSON.stringify({ google_account_id: googleId, meta_account_id: metaId || null }) }); await refreshClients(); } catch (e: any) { setError(e?.message); await load(); } }
+  async function sync(platform: "meta" | "google") { try { const r = await api("/api/accounts/sync", { method: "POST", body: JSON.stringify({ platform }) }); await load(); setError(r.added ? `${r.added} conta(s) nova(s).` : `Sincronização ${platform} concluída.`); } catch (e: any) { setError(e?.message); } }
+  async function updateClient(id: string, patch: Partial<ClientRecord>) { setClients((prev) => prev.map((c) => c.id === id ? { ...c, ...patch } : c)); try { const r = await api(`/api/clients/${id}`, { method: "PATCH", body: JSON.stringify(patch) }); const confirmed = Object.keys(patch).reduce((n, k) => { const f = k as keyof ClientRecord; (n as any)[f] = r.client?.[f] ?? patch[f]; return n; }, {} as Partial<ClientRecord>); setClients((prev) => prev.map((c) => c.id === id ? { ...c, ...confirmed } : c)); } catch (e: any) { await load(); setError(e?.message); } }
+  function updateClientField(client: ClientRecord, field: string, value: any) { const patch: any = {}; patch[field] = value; updateClient(client.id, patch); }
+  const [busy, setBusy] = useState(false);
 
-  async function createGroup() {
-    const name = newName.trim();
-    if (!name) return;
-    try {
-      await api("/api/groups", { method: "POST", body: JSON.stringify({ name, color: newColor }) });
-      setNewName("");
-      await load();
-    } catch (e: any) {
-      setError(e?.message);
-    }
-  }
-
-  async function updateGroup(id: string, patch: Partial<Group>) {
-    try {
-      await api("/api/groups", { method: "PATCH", body: JSON.stringify({ id, ...patch }) });
-      await load();
-    } catch (e: any) {
-      await load();
-      setError(e?.message);
-    }
-  }
-
-  async function deleteGroup(id: string, name: string) {
-    if (!confirm(`Excluir o grupo "${name}"? As contas ficarão sem grupo.`)) return;
-    try {
-      await api(`/api/groups?id=${encodeURIComponent(id)}`, { method: "DELETE" });
-      await load();
-    } catch (e: any) {
-      setError(e?.message);
-    }
-  }
-
-  async function assignAccount(account_id: string, group_id: string) {
-    // otimista: atualiza local antes do refetch
-    setAccounts((prev) =>
-      prev.map((a) => (a.account_id === account_id ? { ...a, group_id: group_id || null } : a))
-    );
-    try {
-      await api("/api/accounts/group", {
-        method: "POST",
-        body: JSON.stringify({ account_id, group_id: group_id || null }),
-      });
-    } catch (e: any) {
-      setError(e?.message);
-      await load(); // reverte em caso de erro
-    }
-  }
-
-  async function toggleAccount(account_id: string, hidden: boolean) {
-    setAccounts((prev) => prev.map((a) => a.account_id === account_id ? { ...a, hidden } : a));
-    try {
-      await api("/api/accounts/hidden", {
-        method: "POST",
-        body: JSON.stringify({ account_id, hidden }),
-      });
-      await refreshClients();
-    } catch (e: any) {
-      setError(e?.message);
-      await load();
-    }
-  }
-
-  async function linkGoogle(google_account_id: string, meta_account_id: string) {
-    const linked = meta_account_id || null;
-    setAccounts((prev) => prev.map((a) =>
-      a.account_id === google_account_id ? { ...a, linked_meta_account_id: linked } : a
-    ));
-    try {
-      await api("/api/accounts/link", {
-        method: "POST",
-        body: JSON.stringify({ google_account_id, meta_account_id: linked }),
-      });
-      await refreshClients();
-    } catch (e: any) {
-      setError(e?.message);
-      await load();
-    }
-  }
-
-  async function sync(platform: "meta" | "google") {
-    try {
-      const result = await api("/api/accounts/sync", {
-        method: "POST",
-        body: JSON.stringify({ platform }),
-      });
-      await load();
-      setError(result.added
-        ? `${result.added} conta(s) nova(s) encontrada(s). Ative abaixo as que deseja coletar.`
-        : `Sincronização ${platform === "meta" ? "Meta" : "Google"} concluída sem contas novas.`);
-    } catch (e: any) {
-      setError(e?.message);
-    }
-  }
-
-  async function updateClient(id: string, patch: Partial<ClientRecord>) {
-    setClients((prev) => prev.map((client) => client.id === id ? { ...client, ...patch } : client));
-    try {
-      const result = await api(`/api/clients/${id}`, {
-        method: "PATCH",
-        body: JSON.stringify(patch),
-      });
-      const confirmed = Object.keys(patch).reduce((next, key) => {
-        const field = key as keyof ClientRecord;
-        (next as any)[field] = result.client?.[field] ?? patch[field];
-        return next;
-      }, {} as Partial<ClientRecord>);
-      setClients((prev) =>
-        prev.map((client) =>
-          client.id === id ? { ...client, ...confirmed } : client
-        )
-      );
-    } catch (e: any) {
-      await load();
-      setError(e?.message);
-    }
-  }
-
-  if (loading) {
-    return (
-      <div className="ec-page ec-touchzone" style={{ maxWidth: 1100 }}>
-        <div style={{ display: "grid", gap: "var(--sp-3)", maxWidth: 420, marginBottom: "var(--sp-5)" }}>
-          <Skeleton h={28} w="50%" />
-          <Skeleton h={14} w="78%" />
-        </div>
-        <SkeletonCard lines={5} />
-      </div>
-    );
-  }
+  if (loading) return <div className="p-4 md:p-6 md:ml-56 pb-20 md:pb-6 space-y-4"><Skeleton className="h-8 w-48" /><Skeleton className="h-14 rounded-lg" /><Skeleton className="h-32 rounded-lg" /></div>;
 
   return (
-    <div className="ec-page ec-touchzone" style={{ maxWidth: 1100 }}>
-      <PageHeader
-        title="Configurações"
-        subtitle={`Metas, orçamento e envio semanal. ${accounts.length} contas no catálogo.`}
-        actions={
-          <a href="/" className="ec-btn" data-variant="ghost" data-size="sm">
-            ← Voltar ao overview
-          </a>
-        }
-      />
+    <div className="p-4 md:p-6 md:ml-56 pb-20 md:pb-6 space-y-4 animate-fade-in">
+      <PageHeader title="Configurações" subtitle={`${accounts.length} contas no catálogo.`} actions={<Link href="/"><Button variant="ghost" size="sm"><ArrowLeft className="h-3.5 w-3.5 mr-1" /> Voltar</Button></Link>} />
 
-      <WideScreenHint>
-        A tabela de metas por cliente é larga e rola para o lado. Ajustes rápidos
-        funcionam bem aqui; configurar tudo de uma vez é mais confortável no computador.
-      </WideScreenHint>
+      <WideScreenHint>A tabela de metas é larga; no computador fica mais confortável.</WideScreenHint>
 
-      {error && (
-        <div style={{ marginBottom: "var(--sp-4)" }}>
-          <Notice tone="danger" onDismiss={() => setError(null)}>{error}</Notice>
-        </div>
-      )}
+      {error && <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-red-500/20 bg-red-500/10 text-sm text-red-500"><AlertTriangle className="h-4 w-4 shrink-0" />{error}<button onClick={() => setError(null)} className="ml-auto bg-transparent border-none cursor-pointer text-xs font-semibold hover:underline">✕</button></div>}
 
-      {/* Cinco assuntos independentes numa página de 8.000px: cada um vira uma
-          linha, e só o que se vai mexer é montado. Recolhido não é só mais
-          curto — o corpo nem entra no DOM, então 27 formulários de cliente e
-          37 linhas de conta deixam de ser renderizados a cada visita. */}
-      <div className="ec-stack">
-      <Collapsible
-        id="clients"
-        storageKey="admin:clients"
-        summary={
-          <SectionHead
-            icon="◎"
-            title="Metas e orçamento por cliente"
-            hint="Objetivo, orçamento, KPI e ciclo. Alimenta o pacing e os alertas do Hoje."
-            meta={`${clients.length} cliente${clients.length === 1 ? "" : "s"}`}
-          />
-        }
-      >
-        {clientsUnavailable ? (
-          <Notice tone="warn">Fundação de clientes ainda não aplicada: {clientsUnavailable}</Notice>
-        ) : (
-          <div className="ec-scroll-x">
-            <div style={{ minWidth: 940, display: "grid", gap: 9 }}>
-              <div className="ec-thead" style={{ gridTemplateColumns: CLIENT_GRID, gap: 9, borderRadius: "var(--r-sm)", border: "1px solid var(--border)" }}>
-                <SortButton column="name" sort={clientSort} onSort={setClientSort} align="left">Cliente / canais</SortButton>
-                <SortButton column="objective" sort={clientSort} onSort={setClientSort} align="left">Objetivo</SortButton>
-                <SortButton column="budget" sort={clientSort} onSort={setClientSort} align="left" initialDirection="desc">Orçamento</SortButton>
-                <SortButton column="result" sort={clientSort} onSort={setClientSort} align="left">Resultado</SortButton>
-                <SortButton column="kpi" sort={clientSort} onSort={setClientSort} align="left">KPI</SortButton>
-                <SortButton column="target" sort={clientSort} onSort={setClientSort} align="left" initialDirection="desc">Meta</SortButton>
-                <SortButton column="cycle" sort={clientSort} onSort={setClientSort} align="left">Ciclo</SortButton>
-              </div>
-            {sortedClients.map((client) => (
-              <div key={client.id} style={{ border: "1px solid #e9e9e6", borderRadius: 12, background: "#fff" }}>
-                <div style={{ display: "grid", gridTemplateColumns: CLIENT_GRID, gap: 9, alignItems: "end", padding: "12px 14px" }}>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 650, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{client.name}</div>
-                  <div style={{ display: "flex", gap: 5, marginTop: 5 }}>
-                    {(client.accounts || []).map((account) => (
-                      <span key={account.account_id} title={account.name} style={{ fontSize: 9, fontWeight: 750, textTransform: "uppercase", padding: "2px 6px", borderRadius: 6, color: account.platform === "google" ? "#2f6fcd" : "#176cd2", background: "#edf3fd" }}>{account.platform}</span>
-                    ))}
-                  </div>
+      <div className="space-y-4">
+        {/* Clients Section */}
+        <Collapsible id="clients" storageKey="admin:clients"
+          summary={<SectionHead icon="◎" title="Metas e orçamento por cliente" hint="Objetivo, orçamento, KPI e ciclo." meta={`${clients.length} cliente${clients.length === 1 ? "" : "s"}`} />}>
+          {clientsUnavailable ? <Notice tone="warn">{clientsUnavailable}</Notice> : (
+            <div className="overflow-x-auto">
+              <div className="min-w-[940px] space-y-2">
+                <div className="grid gap-2 px-3 py-2 rounded-lg border border-border/50 bg-muted/30 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider items-center" style={{ gridTemplateColumns: CLIENT_GRID }}>
+                  <SortButton column="name" sort={clientSort} onSort={setClientSort} align="left">Cliente</SortButton>
+                  <SortButton column="objective" sort={clientSort} onSort={setClientSort} align="left">Objetivo</SortButton>
+                  <SortButton column="budget" sort={clientSort} onSort={setClientSort} align="left" initialDirection="desc">Orçamento</SortButton>
+                  <SortButton column="result" sort={clientSort} onSort={setClientSort} align="left">Resultado</SortButton>
+                  <SortButton column="kpi" sort={clientSort} onSort={setClientSort} align="left">KPI</SortButton>
+                  <SortButton column="target" sort={clientSort} onSort={setClientSort} align="left" initialDirection="desc">Meta</SortButton>
+                  <SortButton column="cycle" sort={clientSort} onSort={setClientSort} align="left">Ciclo</SortButton>
                 </div>
-                <Field label="Objetivo">
-                  <select value={client.objective || ""} onChange={(e) => updateClient(client.id, { objective: e.target.value || null })} style={compactInput}>
-                    <option value="">— selecionar —</option>
-                    <option value="leads">Leads</option>
-                    <option value="sales">Vendas</option>
-                    <option value="traffic">Tráfego</option>
-                    <option value="engagement">Engajamento</option>
-                    <option value="awareness">Reconhecimento</option>
-                    <option value="app">Aplicativo</option>
-                    <option value="other">Outro</option>
-                  </select>
-                </Field>
-                <Field label={`Orçamento mensal · ${client.currency || "BRL"}`}>
-                  <input key={`${client.id}-budget-${loadRevision}-${client.monthly_budget ?? ""}`} type="number" min="0" step="10" defaultValue={client.monthly_budget ?? ""} placeholder={`${client.currency || "BRL"} 0`} onBlur={(e) => updateClient(client.id, { monthly_budget: e.target.value ? Number(e.target.value) : null })} style={compactInput} />
-                </Field>
-                <Field label="Resultado do relatório">
-                  <select value={client.result_family || ""} onChange={(e) => updateClient(client.id, { result_family: e.target.value || null })} style={compactInput}>
-                    <option value="">Automático (decide pelo volume)</option>
-                    <option value="conversoes">Conversões</option>
-                    <option value="vendas">Vendas</option>
-                    <option value="leads">Leads</option>
-                    <option value="mensagens">Mensagens</option>
-                    <option value="cadastros">Cadastros</option>
-                    <option value="cliques">Cliques</option>
-                    <option value="lpv">LPV</option>
-                    <option value="engajamento">Engajamento</option>
-                  </select>
-                </Field>
-                <Field label="KPI principal">
-                  <select
-                    value={client.primary_kpi || ""}
-                    onChange={(e) =>
-                      updateClient(client.id, {
-                        primary_kpi: e.target.value || null,
-                        target_value: null,
-                      })
-                    }
-                    title="Ao trocar o tipo de KPI, a meta anterior é limpa para evitar reinterpretar moeda como percentual ou ROAS."
-                    style={compactInput}
-                  >
-                    <option value="">— selecionar —</option>
-                    <option value="cpl">CPL</option>
-                    <option value="cpa">CPA</option>
-                    <option value="roas">ROAS</option>
-                    <option value="revenue">Receita</option>
-                    <option value="conversions">Conversões</option>
-                    <option value="ctr">CTR</option>
-                    <option value="cpc">CPC</option>
-                    <option value="cpm">CPM</option>
-                    <option value="custom">Custo / resultado personalizado</option>
-                  </select>
-                </Field>
-                <Field
-                  label={`Meta do KPI${
-                    MONETARY_CLIENT_KPIS.has(
-                      client.primary_kpi?.toLowerCase() || ""
-                    )
-                      ? ` · ${client.currency || "BRL"}`
-                      : client.primary_kpi?.toLowerCase() === "ctr"
-                        ? " · %"
-                        : client.primary_kpi?.toLowerCase() === "roas"
-                          ? " · x"
-                          : ""
-                  }`}
-                >
-                  <input
-                    key={`${client.id}-target-${loadRevision}-${client.target_value ?? ""}`}
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    defaultValue={client.target_value ?? ""}
-                    placeholder={
-                      MONETARY_CLIENT_KPIS.has(
-                        client.primary_kpi?.toLowerCase() || ""
-                      )
-                        ? `${client.currency || "BRL"} 0,00`
-                        : client.primary_kpi?.toLowerCase() === "ctr"
-                          ? "0,00%"
-                          : client.primary_kpi?.toLowerCase() === "roas"
-                            ? "0,00x"
-                            : "0,00"
-                    }
-                    onBlur={(e) => updateClient(client.id, { target_value: e.target.value ? Number(e.target.value) : null })}
-                    style={compactInput}
-                  />
-                </Field>
-                <Field label="Início do ciclo">
-                  <select value={client.budget_start_day || 1} onChange={(e) => updateClient(client.id, { budget_start_day: Number(e.target.value) })} style={compactInput}>
-                    {Array.from({ length: 28 }, (_, index) => index + 1).map((day) => (
-                      <option key={day} value={day}>Dia {day}</option>
-                    ))}
-                  </select>
-                </Field>
-                </div>
-                <ReportDelivery
-                  client={client}
-                  loadRevision={loadRevision}
-                  onUpdate={updateClient}
-                  onError={setError}
-                />
+                {sortedClients.map((client) => {
+                  const los = (client.primary_kpi || "").toLowerCase();
+                  return (
+                    <div key={client.id} className="grid gap-2 p-3 rounded-lg border border-border/50 bg-card items-end" style={{ gridTemplateColumns: CLIENT_GRID }}>
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold truncate">{client.name}</div>
+                        <div className="flex gap-1 mt-1.5 flex-wrap">{(client.accounts || []).map((a) => <span key={a.account_id} className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded uppercase", a.platform === "google" ? "bg-sky-500/10 text-sky-600" : "bg-blue-500/10 text-blue-600")}>{a.platform}</span>)}</div>
+                      </div>
+                      <Field label="Objetivo"><select value={client.objective || ""} onChange={(e) => updateClientField(client, "objective", e.target.value || null)} style={compactInput}><option value="">—</option><option value="leads">Leads</option><option value="sales">Vendas</option><option value="traffic">Tráfego</option><option value="engagement">Engajamento</option><option value="awareness">Reconhecimento</option><option value="app">Aplicativo</option><option value="other">Outro</option></select></Field>
+                      <Field label={`Orçamento · ${client.currency}`}><input key={`${client.id}-b-${loadRevision}`} type="number" min="0" step="10" defaultValue={client.monthly_budget ?? ""} placeholder="0" onBlur={(e) => updateClientField(client, "monthly_budget", e.target.value ? Number(e.target.value) : null)} style={compactInput} /></Field>
+                      <Field label="Resultado"><select value={client.result_family || ""} onChange={(e) => updateClientField(client, "result_family", e.target.value || null)} style={compactInput}><option value="">Automático</option><option value="conversoes">Conversões</option><option value="vendas">Vendas</option><option value="leads">Leads</option><option value="mensagens">Mensagens</option><option value="cadastros">Cadastros</option><option value="cliques">Cliques</option><option value="lpv">LPV</option><option value="engajamento">Engajamento</option></select></Field>
+                      <Field label="KPI"><select value={client.primary_kpi || ""} onChange={(e) => updateClient(client.id, { primary_kpi: e.target.value || null, target_value: null })} style={compactInput}><option value="">—</option><option value="cpl">CPL</option><option value="cpa">CPA</option><option value="roas">ROAS</option><option value="revenue">Receita</option><option value="conversions">Conversões</option><option value="ctr">CTR</option><option value="cpc">CPC</option><option value="cpm">CPM</option><option value="custom">Custo / resultado</option></select></Field>
+                      <Field label={`Meta${MONETARY_CLIENT_KPIS.has(los) ? ` · ${client.currency}` : los === "ctr" ? " · %" : los === "roas" ? " · x" : ""}`}><input key={`${client.id}-t-${loadRevision}`} type="number" min="0" step="any" defaultValue={client.target_value ?? ""} placeholder="—" onBlur={(e) => updateClientField(client, "target_value", e.target.value ? Number(e.target.value) : null)} style={compactInput} /></Field>
+                      <Field label="Dia início"><select value={client.budget_start_day} onChange={(e) => updateClientField(client, "budget_start_day", Number(e.target.value))} style={compactInput}>{Array.from({ length: 28 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}º</option>)}</select></Field>
+                    </div>
+                  );
+                })}
               </div>
-            ))}
-            {!clients.length && <div style={{ color: "#999", fontSize: 13 }}>Nenhum cliente ativo.</div>}
+            </div>
+          )}
+        </Collapsible>
+
+        {/* Groups Section */}
+        <Collapsible id="groups" storageKey="admin:groups" summary={<SectionHead icon="◈" title="Grupos" hint="Agrupam contas e clientes." meta={`${groups.length} grupo${groups.length === 1 ? "" : "s"}`} />}>
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <Input value={newName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewName(e.target.value)} placeholder="Nome do grupo" className="flex-[1_1_200px]" />
+              <div className="flex gap-1">{[...PALETTE, ...PALETTE].slice(0, 8).map((c) => <button key={c} onClick={() => setNewColor(c)} className={cn("w-6 h-6 rounded-full border-2 transition-all cursor-pointer", newColor === c ? "border-foreground scale-110" : "border-transparent")} style={{ backgroundColor: c }} />)}</div>
+              <Button onClick={createGroup} disabled={busy || !newName.trim()} size="sm"><Plus className="h-3.5 w-3.5 mr-1" /> Criar grupo</Button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs min-w-[500px]">
+                <thead><tr className="border-b border-border text-muted-foreground uppercase tracking-wider"><th className="text-left p-2 font-semibold"><SortButton column="name" sort={groupSort} onSort={setGroupSort} align="left">Grupo</SortButton></th><th className="text-right p-2 font-semibold"><SortButton column="accounts" sort={groupSort} onSort={setGroupSort} initialDirection="desc">Contas</SortButton></th><th className="p-2 w-16" /></tr></thead>
+                <tbody>{sortedGroups.map((g) => (
+                  <tr key={g.id} className="border-b border-border/30"><td className="p-2"><span className="inline-flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: g.color }} /><input defaultValue={g.name} onBlur={(e) => { if (e.target.value.trim() && e.target.value.trim() !== g.name) renameGroup(g.id, e.target.value.trim()); }} className="text-xs font-semibold bg-transparent border-none outline-none focus:ring-1 focus:ring-ring rounded px-1" /></span></td><td className="p-2 text-right text-muted-foreground">{countByGroup[g.id] || 0}</td><td className="p-2 text-right"><Button variant="ghost" size="sm" onClick={() => removeGroup(g.id)} disabled={busy} className="h-7 text-xs text-muted-foreground hover:text-destructive"><X className="h-3 w-3" /></Button></td></tr>
+                ))}</tbody>
+              </table>
             </div>
           </div>
-        )}
-      </Collapsible>
+        </Collapsible>
 
-      <Collapsible
-        storageKey="admin:sync"
-        summary={
-          <SectionHead
-            icon="⇅"
-            title="Sincronizar plataformas"
-            hint="Contas novas entram desativadas. Nenhuma métrica é consultada até você ativá-las."
-          />
-        }
-      >
-        <div style={{ display: "flex", gap: 8 }}>
-          <button disabled={busy} onClick={() => sync("meta")} style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid #d8e6fb", background: "#f5f9ff", color: "#1877f2", cursor: "pointer" }}>
-            Sincronizar Meta
-          </button>
-          <button disabled={busy} onClick={() => sync("google")} style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid #eee", background: "#fff", color: "#4285f4", cursor: "pointer" }}>
-            Sincronizar Google
-          </button>
-        </div>
-      </Collapsible>
-
-      {/* CRIAR GRUPO */}
-      <Collapsible
-        storageKey="admin:new-group"
-        summary={
-          <SectionHead
-            icon="＋"
-            title="Novo grupo"
-            hint="Cria um grupo para filtrar o overview por cliente ou carteira."
-          />
-        }
-      >
-        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          <input
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && createGroup()}
-            placeholder="Nome do grupo (ex: Cliente X)"
-            style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #ddd", fontSize: 14, minWidth: 260 }}
-          />
-          <div style={{ display: "flex", gap: 6 }}>
-            {PALETTE.map((c) => (
-              <button
-                key={c}
-                onClick={() => setNewColor(c)}
-                aria-label={`cor ${c}`}
-                style={{
-                  width: 24,
-                  height: 24,
-                  borderRadius: "50%",
-                  background: c,
-                  border: newColor === c ? "2px solid #111" : "2px solid transparent",
-                  cursor: "pointer",
-                }}
-              />
-            ))}
+        {/* Accounts Section */}
+        <Collapsible id="accounts" storageKey="admin:accounts" defaultOpen summary={<SectionHead icon="◫" title="Contas" hint="Ativar/ocultar, vincular Google a Meta e definir grupo." meta={`${collectingCount} ativa${collectingCount === 1 ? "" : "s"} de ${accounts.length}`} />}>
+          <div className="flex flex-wrap items-center gap-2 mb-3">
+            <span className="text-xs text-muted-foreground">Sincronizar:</span>
+            <Button variant="secondary" size="sm" onClick={() => sync("meta")}><RefreshCw className="h-3 w-3 mr-1" /> Meta</Button>
+            <Button variant="secondary" size="sm" onClick={() => sync("google")}><RefreshCw className="h-3 w-3 mr-1" /> Google</Button>
           </div>
-          <button
-            onClick={createGroup}
-            disabled={busy || !newName.trim()}
-            style={{
-              padding: "8px 16px",
-              borderRadius: 8,
-              border: "none",
-              background: newName.trim() ? "#111" : "#ccc",
-              color: "#fff",
-              fontSize: 14,
-              cursor: newName.trim() ? "pointer" : "default",
-            }}
-          >
-            Criar
-          </button>
-        </div>
-      </Collapsible>
-
-      {/* LISTA DE GRUPOS */}
-      <Collapsible
-        storageKey="admin:groups"
-        summary={
-          <SectionHead
-            icon="◇"
-            title="Grupos"
-            hint="Renomear, recolorir ou excluir."
-            meta={`${groups.length} grupo${groups.length === 1 ? "" : "s"}`}
-          />
-        }
-      >
-        {groups.length === 0 ? (
-          <p style={{ color: "#888", fontSize: 14 }}>Nenhum grupo ainda. Crie o primeiro em “Novo grupo”.</p>
-        ) : (
-          <div style={{ border: "1px solid #eee", borderRadius: 12, overflowX: "auto" }}>
-            <div style={{ minWidth: 500 }}>
-              <div style={{ display: "grid", gridTemplateColumns: GROUP_GRID, alignItems: "center", gap: 12, padding: "9px 16px", color: "#888", background: "#fafaf9", borderBottom: "1px solid #eee", fontSize: 10, fontWeight: 750, textTransform: "uppercase", letterSpacing: 0.25 }}>
-              <span>Cor</span>
-              <SortButton column="name" sort={groupSort} onSort={setGroupSort} align="left">Grupo</SortButton>
-              <SortButton column="accounts" sort={groupSort} onSort={setGroupSort} initialDirection="desc">Contas</SortButton>
-              <span style={{ textAlign: "right" }}>Ação</span>
+          <div className="overflow-x-auto">
+            <div className="min-w-[800px] space-y-1">
+              <div className="grid gap-2 px-3 py-2 rounded-lg border border-border/50 bg-muted/30 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider items-center" style={{ gridTemplateColumns: "70px 1.5fr 90px 1fr 1fr 90px 80px" }}>
+                <SortButton column="platform" sort={accountSort} onSort={setAccountSort} align="left">Plat.</SortButton>
+                <SortButton column="name" sort={accountSort} onSort={setAccountSort} align="left">Nome</SortButton>
+                <SortButton column="status" sort={accountSort} onSort={setAccountSort} align="left">Status</SortButton>
+                <SortButton column="client" sort={accountSort} onSort={setAccountSort} align="left">Cliente</SortButton>
+                <SortButton column="group" sort={accountSort} onSort={setAccountSort} align="left">Grupo</SortButton>
+                <SortButton column="visibility" sort={accountSort} onSort={setAccountSort} align="center">Visível</SortButton>
+                <span>Vincular Google</span>
               </div>
-              {sortedGroups.map((g) => (
-                <div
-                  key={g.id}
-                  style={{
-                    padding: "12px 16px",
-                    borderTop: "1px solid #f0f0f0",
-                    display: "grid",
-                    gridTemplateColumns: GROUP_GRID,
-                    alignItems: "center",
-                    gap: 12,
-                  }}
-                >
-                  <input
-                    type="color"
-                    value={g.color}
-                    onChange={(e) => updateGroup(g.id, { color: e.target.value })}
-                    style={{ width: 28, height: 28, border: "none", background: "none", cursor: "pointer", padding: 0 }}
-                  />
-                  <input
-                    key={`${g.id}-name-${loadRevision}-${g.name}`}
-                    defaultValue={g.name}
-                    onBlur={(e) => {
-                      const v = e.target.value.trim();
-                      if (v && v !== g.name) updateGroup(g.id, { name: v });
-                    }}
-                    style={{ width: "100%", boxSizing: "border-box", padding: "6px 10px", borderRadius: 6, border: "1px solid #eee", fontSize: 14 }}
-                  />
-                  <span style={{ fontSize: 13, color: "#888", textAlign: "right" }}>
-                    {countByGroup[g.id] || 0} conta(s)
-                  </span>
-                  <button
-                    onClick={() => deleteGroup(g.id, g.name)}
-                    disabled={busy}
-                    style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid #f0d0d0", background: "#fff", color: "#a32d2d", fontSize: 13, cursor: "pointer" }}
-                  >
-                    Excluir
-                  </button>
+              {sortedAccounts.map((a) => (
+                <div key={a.account_id} className="grid gap-2 px-3 py-2 rounded-lg border border-border/30 bg-card text-xs items-center" style={{ gridTemplateColumns: "70px 1.5fr 90px 1fr 1fr 90px 80px" }}>
+                  <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded text-center", a.platform === "google" ? "bg-sky-500/10 text-sky-600" : "bg-blue-500/10 text-blue-600")}>{a.platform}</span>
+                  <span className="font-medium truncate" title={a.name}>{a.name}</span>
+                  <span className={cn("text-[10px] font-semibold", a.status === "ACTIVE" ? "text-emerald-500" : "text-muted-foreground")}>{a.status}</span>
+                  <span className="text-muted-foreground truncate">{a.group_id ? groups.find((g) => g.id === a.group_id)?.name || "—" : "—"}</span>
+                  <select value={a.group_id || ""} onChange={(e) => setGroup(a.account_id, e.target.value || null)} className="text-xs rounded border border-input bg-transparent px-1 py-1" style={{ fontSize: 11 }}>
+                    <option value="">sem grupo</option>{groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+                  </select>
+                  <div className="flex justify-center">
+                    <button onClick={() => toggleHidden(a.account_id, !a.hidden)} className={cn("px-2 py-0.5 rounded text-[10px] font-semibold border-none cursor-pointer transition-colors", a.hidden ? "bg-muted text-muted-foreground hover:text-foreground" : "bg-primary/10 text-primary hover:bg-primary/20")}>{a.hidden ? "oculto" : "ativo"}</button>
+                  </div>
+                  <div className="flex justify-end">
+                    {a.platform === "google" ? (
+                      <select value={a.linked_meta_account_id || ""} onChange={(e) => linkGoogle(a.account_id, e.target.value)} className="text-[10px] rounded border border-input bg-transparent px-1 py-1 max-w-[120px]" title="Vincular a uma conta Meta">
+                        <option value="">—</option>{metaAccounts.map((m) => <option key={m.account_id} value={m.account_id}>{m.name}</option>)}
+                      </select>
+                    ) : <span className="text-[10px] text-muted-foreground">{a.platform}</span>}
+                  </div>
                 </div>
               ))}
             </div>
           </div>
-        )}
-      </Collapsible>
-
-      {/* ATRIBUIR CONTAS */}
-      <Collapsible
-        storageKey="admin:accounts"
-        summary={
-          <SectionHead
-            icon="▤"
-            title="Contas: coleta, cliente e grupo"
-            hint="Ativa = aparece no dashboard e tem dados coletados. Oculta = não gera chamadas à API."
-            meta={`${accounts.length} contas · ${collectingCount} coletando`}
-          />
-        }
-      >
-        <div style={{ border: "1px solid #eee", borderRadius: 12, overflowX: "auto" }}>
-          <div style={{ minWidth: 1020 }}>
-            <div style={{ display: "grid", gridTemplateColumns: ACCOUNT_GRID, alignItems: "center", gap: 12, padding: "9px 16px", color: "#888", background: "#fafaf9", borderBottom: "1px solid #eee", fontSize: 10, fontWeight: 750, textTransform: "uppercase", letterSpacing: 0.25 }}>
-              <SortButton column="platform" sort={accountSort} onSort={setAccountSort} align="left">Plataforma</SortButton>
-              <SortButton column="name" sort={accountSort} onSort={setAccountSort} align="left">Conta</SortButton>
-              <SortButton column="status" sort={accountSort} onSort={setAccountSort} align="left">Status</SortButton>
-              <SortButton column="client" sort={accountSort} onSort={setAccountSort} align="left">Cliente Meta</SortButton>
-              <SortButton column="group" sort={accountSort} onSort={setAccountSort} align="left">Grupo</SortButton>
-              <SortButton column="visibility" sort={accountSort} onSort={setAccountSort}>Coleta</SortButton>
-            </div>
-          {sortedAccounts.map((a) => (
-              <div
-                key={a.account_id}
-                style={{
-                  padding: "10px 16px",
-                  borderTop: "1px solid #f0f0f0",
-                  display: "grid",
-                  gridTemplateColumns: ACCOUNT_GRID,
-                  alignItems: "center",
-                  gap: 12,
-                }}
-              >
-                <span style={{ fontSize: 11, fontWeight: 700, color: a.platform === "google" ? "#4285f4" : "#1877f2", textTransform: "uppercase" }}>
-                  {a.platform}
-                </span>
-                <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 14 }} title={a.name}>{a.name}</span>
-                <span style={{ fontSize: 11, color: a.status === "ACTIVE" ? "#27874e" : "#a32d2d" }}>
-                  ● {a.status}
-                </span>
-                {a.platform === "google" ? (
-                  <select
-                    value={a.linked_meta_account_id || ""}
-                    onChange={(e) => linkGoogle(a.account_id, e.target.value)}
-                    title="Conta Meta que representa este cliente"
-                    style={{ width: "100%", boxSizing: "border-box", padding: "6px 10px", borderRadius: 6, border: "1px solid #cfdcf1", fontSize: 13, color: "#315b91" }}
-                  >
-                    <option value="">— vincular ao cliente Meta —</option>
-                    {metaAccounts.map((meta) => (
-                      <option key={meta.account_id} value={meta.account_id}>{meta.name}</option>
-                    ))}
-                  </select>
-                ) : (
-                  <span style={{ color: "#999", fontSize: 12 }}>Conta principal</span>
-                )}
-                <select
-                  value={a.group_id || ""}
-                  onChange={(e) => assignAccount(a.account_id, e.target.value)}
-                  style={{ width: "100%", boxSizing: "border-box", padding: "6px 10px", borderRadius: 6, border: "1px solid #ddd", fontSize: 14 }}
-                >
-                  <option value="">— sem grupo —</option>
-                  {groups.map((g) => (
-                    <option key={g.id} value={g.id}>
-                      {g.name}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  onClick={() => toggleAccount(a.account_id, !a.hidden)}
-                  disabled={busy}
-                  style={{
-                    width: "100%", padding: "6px 10px", borderRadius: 7,
-                    border: a.hidden ? "1px solid #ddd" : "1px solid #b7e0c4",
-                    background: a.hidden ? "#f7f7f7" : "#effaf2",
-                    color: a.hidden ? "#777" : "#167a37", fontSize: 12, cursor: "pointer",
-                  }}
-                >
-                  {a.hidden ? "Ativar" : "✓ Ativa"}
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      </Collapsible>
-
-      <Collapsible
-        storageKey="admin:reminders"
-        summary={
-          <SectionHead
-            icon="✉"
-            title="Lembrete de pendências por e-mail"
-            hint="Sai junto da coleta diária, para mim, com o que está atrasado ou vence hoje."
-            meta="interno"
-          />
-        }
-      >
-        <TaskReminders onError={setError} />
-      </Collapsible>
+        </Collapsible>
       </div>
     </div>
   );
 }
 
-// Lembrete interno de pendências. O envio automático acontece no fim da coleta
-// diária (app/api/collect/route.ts) — aqui só se confere e se dispara na mão,
-// que é o que faz falta quando se mexe no texto ou se quer testar o Resend.
-function TaskReminders({ onError }: { onError: (message: string) => void }) {
-  const [busy, setBusy] = useState<"preview" | "send" | null>(null);
-  const [result, setResult] = useState<string | null>(null);
-  const [tone, setTone] = useState<"ok" | "warn" | "brand">("brand");
-
-  async function call(kind: "preview" | "send") {
-    setBusy(kind);
-    setResult(null);
-    try {
-      const response = await fetch(
-        kind === "preview" ? "/api/tasks/digest?preview=1" : "/api/tasks/digest",
-        { method: kind === "preview" ? "GET" : "POST", cache: "no-store" }
-      );
-      const payload = await response.json();
-      if (!response.ok || payload.error) throw new Error(payload.error || "Falha no lembrete.");
-      const resumo = `${payload.late_tasks} atrasada(s) · ${payload.today_tasks} para hoje · ${payload.projects} projeto(s) no prazo final`;
-      if (kind === "preview") {
-        setTone(payload.would_send ? "brand" : "ok");
-        setResult(
-          payload.would_send
-            ? `Sairia para ${payload.recipient}: “${payload.subject}” — ${resumo}.`
-            : `Nada sairia agora (${resumo}). O lembrete só é enviado quando há pendência.`
-        );
-        return;
-      }
-      setTone(payload.status === "sent" ? "ok" : "warn");
-      setResult(
-        payload.status === "sent"
-          ? `Enviado para ${payload.recipient} — ${resumo}.`
-          : `Não enviado: ${payload.reason || payload.status}.`
-      );
-    } catch (e: any) {
-      onError(e?.message ?? "Falha ao acionar o lembrete.");
-    } finally {
-      setBusy(null);
-    }
-  }
-
+function SectionHead({ icon, title, hint, meta }: { icon: string; title: string; hint: string; meta: string }) {
   return (
-    <div style={{ display: "grid", gap: 11 }}>
-      <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.6, color: "#5c6470" }}>
-        Todo dia, junto da coleta, sai um e-mail com as tarefas atrasadas ou que vencem hoje e com
-        os projetos no prazo final. Tarefa aberta por alerta (saldo, pagamento, status da conta,
-        criativo reprovado) nasce com prazo de hoje, então entra no mesmo e-mail — com link direto
-        para a tela onde o problema se resolve. Quando não há nada pendente, nada é enviado: e-mail
-        diário que não exige ação deixa de ser lido.
-      </p>
-      <p style={{ margin: 0, fontSize: 11.5, color: "#8a919b" }}>
-        Destinatário: <code>TASK_ALERT_EMAIL</code> (padrão jonathanbretas@gmail.com) · remetente:{" "}
-        <code>REPORT_FROM_EMAIL</code>, o mesmo do relatório semanal.
-      </p>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <button
-          onClick={() => call("preview")}
-          disabled={busy !== null}
-          style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid #d7dee8", background: "#fff", fontSize: 13, cursor: "pointer" }}
-        >
-          {busy === "preview" ? "Conferindo…" : "Ver o que sairia agora"}
-        </button>
-        <button
-          onClick={() => call("send")}
-          disabled={busy !== null}
-          style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid #102d4f", background: "#102d4f", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
-        >
-          {busy === "send" ? "Enviando…" : "Enviar agora"}
-        </button>
+    <div className="flex items-center gap-3 flex-1 min-w-0">
+      <span className="text-base">{icon}</span>
+      <div className="min-w-0">
+        <span className="text-sm font-semibold">{title}</span>
+        <span className="text-xs text-muted-foreground ml-2">{hint}</span>
       </div>
-      {result && <Notice tone={tone} onDismiss={() => setResult(null)}>{result}</Notice>}
+      <span className="ml-auto text-xs font-semibold text-muted-foreground shrink-0">{meta}</span>
     </div>
   );
 }
-
-// Faixa de envio semanal por cliente. O envio real só liga aqui, cliente a
-// cliente — e o teste manda para REPORT_TEST_EMAIL, nunca para o cliente.
-function ReportDelivery({
-  client,
-  loadRevision,
-  onUpdate,
-  onError,
-}: {
-  client: ClientRecord;
-  loadRevision: number;
-  onUpdate: (id: string, patch: Partial<ClientRecord>) => void;
-  onError: (message: string) => void;
-}) {
-  const [sending, setSending] = useState(false);
-  const [feedback, setFeedback] = useState<string | null>(null);
-  const hasEmail = Boolean((client.report_email || "").trim());
-
-  // Link permanente do painel do cliente. Só é gerado quando pedido: é um
-  // acesso sem senha e não deve ficar espalhado pela tela à toa.
-  async function copyDashboardLink() {
-    try {
-      const response = await fetch(`/api/clients/${client.id}/dashboard-link`);
-      const payload = await response.json();
-      if (!response.ok || payload.error) throw new Error(payload.error || "Falha ao gerar o link.");
-      try {
-        await navigator.clipboard.writeText(payload.url);
-        setFeedback("Link do painel copiado.");
-      } catch {
-        window.prompt("Link do painel deste cliente:", payload.url);
-      }
-    } catch (e: any) {
-      onError(e?.message || "Falha ao gerar o link do painel.");
-    } finally {
-      window.setTimeout(() => setFeedback(null), 8000);
-    }
-  }
-
-  async function sendTest() {
-    setSending(true);
-    setFeedback(null);
-    try {
-      const response = await fetch(`/api/reports/send?client=${encodeURIComponent(client.id)}&dry=1`, {
-        method: "POST",
-      });
-      const payload = await response.json();
-      if (!response.ok || payload.error) throw new Error(payload.error || `Falha (HTTP ${response.status}).`);
-      const result = payload.results?.[0];
-      setFeedback(
-        result?.status === "sent"
-          ? `Teste enviado para ${result.recipient}.`
-          : `Não enviado: ${result?.reason || "sem retorno"}.`
-      );
-    } catch (e: any) {
-      onError(e?.message || "Falha ao enviar o teste.");
-    } finally {
-      setSending(false);
-      window.setTimeout(() => setFeedback(null), 8000);
-    }
-  }
-
-  return (
-    <div style={{ borderTop: "1px solid #f0f0ee", padding: "10px 14px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", background: "#fcfcfb", borderRadius: "0 0 12px 12px" }}>
-      <span style={{ fontSize: 10, fontWeight: 750, textTransform: "uppercase", letterSpacing: 0.25, color: "#888" }}>
-        Relatório semanal
-      </span>
-      <input
-        key={`${client.id}-report-email-${loadRevision}`}
-        type="email"
-        defaultValue={client.report_email ?? ""}
-        placeholder="e-mail do cliente"
-        onBlur={(e) => {
-          const value = e.target.value.trim();
-          if (value === (client.report_email ?? "")) return;
-          onUpdate(client.id, { report_email: value || null, ...(value ? {} : { report_enabled: false }) });
-        }}
-        style={{ ...compactInput, width: 240 }}
-      />
-      {/* Marca que o cliente vê. Vazio = Assertivus, que é o padrão da entrega;
-          o painel interno segue Ectolab de qualquer forma. */}
-      <input
-        key={`${client.id}-brand-${loadRevision}`}
-        defaultValue={client.brand_name ?? ""}
-        placeholder="marca no relatório (Assertivus)"
-        title="Nome que assina o relatório, o painel e o e-mail deste cliente. Vazio usa Assertivus."
-        onBlur={(e) => {
-          const value = e.target.value.trim();
-          if (value === (client.brand_name ?? "")) return;
-          onUpdate(client.id, { brand_name: value || null });
-        }}
-        style={{ ...compactInput, width: 210 }}
-      />
-      <label
-        title={hasEmail ? "Enviar toda segunda-feira" : "Cadastre o e-mail antes de ativar"}
-        style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: hasEmail ? "#333" : "#aaa" }}
-      >
-        <input
-          type="checkbox"
-          checked={Boolean(client.report_enabled)}
-          disabled={!hasEmail}
-          onChange={(e) => onUpdate(client.id, { report_enabled: e.target.checked })}
-        />
-        Enviar toda segunda
-      </label>
-      {/* Vendas reais: a plataforma reporta conversão, não venda. Em campanha
-          de mensagem o pedido fecha no WhatsApp e nunca volta. Marcar aqui
-          coloca o cliente na tela de Vendas para o valor ser informado. */}
-      <label
-        title="Coloca este cliente na tela de Vendas, para você informar o valor vendido em cada mês"
-        style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#333" }}
-      >
-        <input
-          type="checkbox"
-          checked={Boolean(client.track_sales)}
-          onChange={(e) => onUpdate(client.id, { track_sales: e.target.checked })}
-        />
-        Acompanhar vendas reais
-      </label>
-      <button
-        onClick={sendTest}
-        disabled={sending}
-        title="Gera o relatório da semana passada e manda para o endereço de teste"
-        style={{
-          padding: "6px 11px",
-          borderRadius: 8,
-          border: "1px dashed #b9d5fb",
-          background: "#fff",
-          color: "#1768ca",
-          fontSize: 11,
-          fontWeight: 650,
-          cursor: sending ? "default" : "pointer",
-        }}
-      >
-        {sending ? "Enviando…" : "Enviar teste para mim"}
-      </button>
-      <button
-        onClick={copyDashboardLink}
-        title="Link permanente do painel deste cliente — ele vê as métricas quando quiser, sem login"
-        style={{
-          padding: "6px 11px",
-          borderRadius: 8,
-          border: "1px dashed #cfd3da",
-          background: "#fff",
-          color: "#5c6373",
-          fontSize: 11,
-          fontWeight: 650,
-          cursor: "pointer",
-        }}
-      >
-        Copiar link do painel
-      </button>
-      <FocusChip family={client.result_family} />
-      {feedback && <span style={{ fontSize: 11, color: "#2b7143" }}>{feedback}</span>}
-      {client.report_last_sent_at && (
-        <span style={{ fontSize: 10.5, color: "#aaa" }}>
-          último envio: {new Date(client.report_last_sent_at).toLocaleDateString("pt-BR")}
-        </span>
-      )}
-    </div>
-  );
-}
-
-// Fica ao lado do envio semanal de propósito: é o momento em que o relatório
-// vira e-mail do cliente. Em "Automático" o relatório escolhe o resultado pelo
-// volume, e uma conta de conversas com leads avulsos do pixel acaba medida por
-// leads — o aviso existe para essa troca não passar em branco.
-function FocusChip({ family }: { family: string | null }) {
-  const known = family ? RESULT_FAMILY_BY_SLUG[family] : null;
-  if (known) {
-    return <Badge tone="ok">foco: {known.label}</Badge>;
-  }
-  return (
-    <Badge tone="warn" title="Defina o Resultado do relatório nos dados do cliente para o relatório medir o que importa">
-      foco automático
-    </Badge>
-  );
-}
-
-// Cabeçalho de seção recolhida. O número à direita é o que decide se vale
-// abrir: "37 contas · 20 coletando" responde a pergunta sem expandir nada.
-function SectionHead({
-  icon,
-  title,
-  hint,
-  meta,
-}: {
-  icon: string;
-  title: string;
-  hint?: string;
-  meta?: string;
-}) {
-  return (
-    <>
-      <span className="ec-collapse__icon" aria-hidden="true">{icon}</span>
-      <span style={{ display: "grid", gap: 1, minWidth: 0, flex: 1 }}>
-        <span className="ec-collapse__title">{title}</span>
-        {hint && <span className="ec-collapse__hint">{hint}</span>}
-      </span>
-      {meta && <span className="ec-collapse__meta">{meta}</span>}
-    </>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="ec-field">
-      <span className="ec-field__label">{label}</span>
-      {children}
-    </label>
-  );
-}
-
-// Campo compacto desta tela, agora apontando para os tokens: uma troca aqui
-// alcança as dezenas de inputs e selects do formulário de clientes.
-const compactInput: React.CSSProperties = {
-  boxSizing: "border-box",
-  width: "100%",
-  height: 34,
-  padding: "0 9px",
-  border: "1px solid var(--border-strong)",
-  borderRadius: "var(--r-sm)",
-  background: "var(--surface)",
-  color: "var(--text-strong)",
-  fontFamily: "var(--font-text)",
-  fontSize: 12,
-};
-
-const CLIENT_GRID =
-  "minmax(160px,1.2fr) 110px 135px 130px 120px 100px 86px";
-const GROUP_GRID = "40px minmax(180px,1fr) 110px 84px";
-const ACCOUNT_GRID =
-  "76px minmax(180px,1fr) 120px 230px 190px 92px";

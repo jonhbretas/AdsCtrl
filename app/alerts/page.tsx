@@ -1,67 +1,21 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import {
-  compareSortValues,
-  SortButton,
-  SortState,
-  usePersistentSort,
-} from "@/components/SortableHeader";
-import {
-  Badge,
-  Button,
-  EmptyState,
-  Input,
-  Notice,
-  PageHeader,
-  Segmented,
-  Select,
-  Skeleton,
-} from "@/components/ui";
+import { compareSortValues, SortButton, SortState, usePersistentSort } from "@/components/SortableHeader";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui";
+import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
+import { Search, RefreshCw, AlertTriangle, CheckCircle2, RotateCcw } from "lucide-react";
 
 type AlertLevel = "critical" | "warning" | "info";
-type AlertItem = {
-  id: number;
-  account_id: string;
-  account_name: string;
-  level: AlertLevel;
-  type: string;
-  title: string;
-  detail: string;
-  group?: { name: string; color: string } | null;
-  acknowledged: boolean;
-  acknowledged_at: string | null;
-  resolved: boolean;
-  resolved_at: string | null;
-  first_seen_at: string | null;
-  last_seen_at: string | null;
-};
+type AlertItem = { id: number; account_id: string; account_name: string; level: AlertLevel; type: string; title: string; detail: string; group?: { name: string; color: string } | null; acknowledged: boolean; acknowledged_at: string | null; resolved: boolean; resolved_at: string | null; first_seen_at: string | null; last_seen_at: string | null; };
 type AlertSortKey = "level" | "account" | "alert" | "updated";
-const ALERT_SORT_KEYS: readonly AlertSortKey[] = [
-  "level",
-  "account",
-  "alert",
-  "updated",
-];
-
-// A cor de cada nível vem do token (via Badge), não de literal aqui.
-const LEVEL: Record<AlertLevel, { label: string; tone: "danger" | "warn" | "brand" }> = {
-  critical: { label: "Crítico", tone: "danger" },
-  warning: { label: "Atenção", tone: "warn" },
-  info: { label: "Informativo", tone: "brand" },
-};
-
-// O tipo cru (snake_case que vem do banco) vira rótulo legível na tabela.
-const TYPE_LABEL: Record<string, string> = {
-  account_disabled: "status da conta",
-  payment_issue: "pagamento",
-  low_balance: "saldo baixo",
-  spend_drop: "queda de gasto",
-  spend_spike: "pico de gasto",
-  rejected_creative: "criativo reprovado",
-  creative_issue: "erro de veiculação",
-  no_spend: "sem gasto",
-};
+const ALERT_SORT_KEYS: readonly AlertSortKey[] = ["level", "account", "alert", "updated"];
+const LEVEL: Record<AlertLevel, { label: string; variant: "destructive" | "warning" | "info" }> = { critical: { label: "Crítico", variant: "destructive" }, warning: { label: "Atenção", variant: "warning" }, info: { label: "Informativo", variant: "info" } };
+const TYPE_LABEL: Record<string, string> = { account_disabled: "status", payment_issue: "pagamento", low_balance: "saldo baixo", spend_drop: "queda de gasto", spend_spike: "pico de gasto", rejected_creative: "criativo reprovado", creative_issue: "erro de veiculação", no_spend: "sem gasto" };
 
 export default function AlertsPage() {
   const [active, setActive] = useState<AlertItem[]>([]);
@@ -72,245 +26,68 @@ export default function AlertsPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [sort, setSort] = usePersistentSort<AlertSortKey>(
-    "adsctrl:sort:alerts",
-    { key: "level", direction: "asc" },
-    ALERT_SORT_KEYS
-  );
+  const [sort, setSort] = usePersistentSort<AlertSortKey>("adsctrl:sort:alerts", { key: "level", direction: "asc" }, ALERT_SORT_KEYS);
 
-  async function load() {
-    setLoading(true);
-    setError(null);
-    try {
-      const [activeResponse, historyResponse] = await Promise.all([
-        fetch("/api/alerts?scope=active", { cache: "no-store" }),
-        fetch("/api/alerts?scope=history", { cache: "no-store" }),
-      ]);
-      const [activePayload, historyPayload] = await Promise.all([
-        activeResponse.json(),
-        historyResponse.json(),
-      ]);
-      if (!activeResponse.ok) throw new Error(activePayload.error || "Falha ao carregar alertas ativos.");
-      if (!historyResponse.ok) throw new Error(historyPayload.error || "Falha ao carregar o histórico.");
-      setActive(activePayload.alerts || []);
-      setHistory(historyPayload.alerts || []);
-    } catch (cause: any) {
-      setError(cause?.message || "Falha ao carregar a central de alertas.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
+  async function load() { setLoading(true); setError(null); try { const [ar, hr] = await Promise.all([fetch("/api/alerts?scope=active", { cache: "no-store" }), fetch("/api/alerts?scope=history", { cache: "no-store" })]); const [ap, hp] = await Promise.all([ar.json(), hr.json()]); if (!ar.ok) throw new Error(ap.error || "Falha."); if (!hr.ok) throw new Error(hp.error || "Falha."); setActive(ap.alerts || []); setHistory(hp.alerts || []); } catch (e: any) { setError(e?.message || "Falha ao carregar."); } finally { setLoading(false); } }
   useEffect(() => { load(); }, []);
 
-  async function acknowledge(item: AlertItem, acknowledged: boolean) {
-    setBusy(item.id);
-    setError(null);
-    try {
-      const response = await fetch("/api/alerts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: item.id, acknowledged }),
-      });
-      const payload = await response.json();
-      if (!response.ok || payload.error) throw new Error(payload.error || "Falha ao atualizar alerta.");
-      await load();
-    } catch (cause: any) {
-      setError(cause?.message || "Falha ao atualizar alerta.");
-    } finally {
-      setBusy(null);
-    }
-  }
+  async function setAck(id: number, acknowledged: boolean) { setBusy(id); try { const r = await fetch("/api/alerts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, acknowledged }) }); if (!r.ok) return; if (acknowledged) setActive((p) => p.filter((a) => a.id !== id)); else { setHistory((p) => p.filter((a) => a.id !== id)); await load(); } } finally { setBusy(null); } }
 
-  const source = tab === "active" ? active : history;
-  const rows = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    const filtered = source.filter((item) => {
-      if (level !== "all" && item.level !== level) return false;
-      if (!query) return true;
-      return `${item.account_name} ${item.title} ${item.detail} ${item.type}`.toLowerCase().includes(query);
-    });
-    const itemDate = (item: AlertItem) =>
-      tab === "active"
-        ? item.last_seen_at
-        : item.resolved_at || item.acknowledged_at || item.last_seen_at;
-    const value = (item: AlertItem) => {
-      switch (sort.key) {
-        case "level":
-          return { critical: 0, warning: 1, info: 2 }[item.level];
-        case "account": return item.account_name;
-        case "alert": return item.title;
-        case "updated":
-          return itemDate(item) ? new Date(itemDate(item)!).getTime() : null;
-      }
-    };
-    return filtered.sort((left, right) =>
-      compareSortValues(value(left), value(right), sort.direction) ||
-      (sort.key === "level"
-        ? compareSortValues(
-            itemDate(left) ? new Date(itemDate(left)!).getTime() : null,
-            itemDate(right) ? new Date(itemDate(right)!).getTime() : null,
-            "desc"
-          )
-        : 0) ||
-      compareSortValues(left.account_name, right.account_name, "asc")
-    );
-  }, [source, level, search, sort, tab]);
-
-  const critical = active.filter((item) => item.level === "critical").length;
-  const warning = active.filter((item) => item.level === "warning").length;
-  const info = active.filter((item) => item.level === "info").length;
+  const filtered = useMemo(() => {
+    const list = tab === "active" ? active : history;
+    return list.filter((a) => (level === "all" || a.level === level) && (!search.trim() || a.account_name.toLowerCase().includes(search.toLowerCase()) || a.title.toLowerCase().includes(search.toLowerCase()))).sort((a, b) => { const lv = (va: AlertItem) => { switch (sort.key) { case "level": return { critical: 0, warning: 1, info: 2 }[va.level]; case "account": return va.account_name; case "alert": return va.title; case "updated": return va.last_seen_at || va.first_seen_at || ""; } }; return compareSortValues(lv(a), lv(b), sort.direction); });
+  }, [active, history, tab, level, search, sort]);
 
   return (
-    <main className="ec-page" style={{ maxWidth: 1180 }}>
-      <PageHeader
-        title="Central de alertas"
-        subtitle="Problemas de entrega, status, orçamento e performance que exigem atenção."
-        actions={
-          <Button variant="secondary" size="sm" onClick={load} disabled={loading}>
-            {loading ? "Atualizando…" : "↻ Atualizar"}
-          </Button>
-        }
-      />
+    <div className="p-4 md:p-6 md:ml-56 pb-20 md:pb-6 space-y-4 animate-fade-in">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div><h1 className="text-2xl font-bold tracking-tight">Central de Alertas</h1><p className="text-sm text-muted-foreground mt-0.5">Saldo, pagamento, criativos reprovados e quedas de gasto.</p></div>
+        <Button variant="ghost" size="sm" onClick={load} disabled={loading}><RefreshCw className={cn("h-3.5 w-3.5 mr-1", loading && "animate-spin")} /> Atualizar</Button>
+      </div>
 
-      <section className="ec-kpis" aria-label="Resumo dos alertas">
-        <Summary label="Alertas ativos" value={active.length} />
-        <Summary label="Críticos" value={critical} tone="danger" />
-        <Summary label="Atenção" value={warning} tone="warn" />
-        <Summary label="Informativos" value={info} tone="brand" />
-      </section>
+      {error && <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-red-500/20 bg-red-500/10 text-sm text-red-500"><AlertTriangle className="h-4 w-4 shrink-0" />{error}</div>}
 
-      {error && (
-        <div style={{ marginBottom: "var(--sp-3)" }}>
-          <Notice tone="danger" onDismiss={() => setError(null)}>{error}</Notice>
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-muted/50 border border-border/50">
+          {(["active", "history"] as const).map((t) => <button key={t} onClick={() => setTab(t)} className={cn("px-3 py-1.5 text-xs font-medium rounded-md transition-colors border-none cursor-pointer", tab === t ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground bg-transparent")}>{t === "active" ? "Ativos" : "Histórico"}</button>)}
+        </div>
+        <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-muted/50 border border-border/50">
+          {(["all", "critical", "warning", "info"] as const).map((l) => <button key={l} onClick={() => setLevel(l)} className={cn("px-3 py-1.5 text-xs font-medium rounded-md transition-colors border-none cursor-pointer", level === l ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground bg-transparent")}>{l === "all" ? "Todos" : LEVEL[l]?.label || l}</button>)}
+        </div>
+        <div className="relative flex-1 min-w-[140px] max-w-[220px]">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <input value={search} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)} placeholder="Buscar…" className="w-full h-8 pl-8 pr-3 text-xs rounded-lg border border-border/50 bg-muted/30 focus:outline-none focus:ring-2 focus:ring-ring/30" />
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="space-y-2">{[1,2,3].map((i) => <Skeleton key={i} className="h-20 rounded-lg" />)}</div>
+      ) : filtered.length === 0 ? (
+        <Card><CardContent className="p-8 text-center text-sm text-muted-foreground">{tab === "active" ? "Nenhum alerta ativo." : "Nenhum histórico."}</CardContent></Card>
+      ) : (
+        <div className="space-y-2">
+          {filtered.map((a) => {
+            const colors = { critical: "border-l-red-500 bg-red-500/5", warning: "border-l-amber-500 bg-amber-500/5", info: "border-l-sky-500 bg-sky-500/5" };
+            return (
+              <div key={a.id} className={cn("border-l-2 rounded-lg p-4", colors[a.level])}>
+                <div className="flex items-center gap-2 mb-1">
+                  <Badge variant={LEVEL[a.level].variant} className="text-[10px]">{LEVEL[a.level].label}</Badge>
+                  {a.type && TYPE_LABEL[a.type] && <Badge variant="outline" className="text-[10px]">{TYPE_LABEL[a.type]}</Badge>}
+                  {a.resolved && <Badge variant="success" className="text-[10px] ml-auto"><CheckCircle2 className="h-3 w-3 mr-0.5" />Resolvido</Badge>}
+                </div>
+                <div className="text-sm font-semibold">{a.account_name}{a.group && <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full font-medium" style={{ backgroundColor: a.group.color + "20", color: a.group.color }}>{a.group.name}</span>}</div>
+                <div className="text-xs font-medium text-foreground/80 mt-0.5">{a.title}</div>
+                <div className="text-[11px] text-muted-foreground mt-0.5">{a.detail}</div>
+                <div className="flex items-center gap-3 mt-2 text-[11px] text-muted-foreground">
+                  <span>{new Date(a.last_seen_at || a.first_seen_at || "").toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
+                  {tab === "active" && !a.acknowledged && <button onClick={() => setAck(a.id, true)} disabled={busy === a.id} className="text-primary hover:underline bg-transparent border-none cursor-pointer font-semibold"><CheckCircle2 className="h-3 w-3 inline mr-0.5" />Ciente</button>}
+                  {tab === "history" && a.acknowledged && !a.resolved && <button onClick={() => setAck(a.id, false)} disabled={busy === a.id} className="text-primary hover:underline bg-transparent border-none cursor-pointer font-semibold"><RotateCcw className="h-3 w-3 inline mr-0.5" />Reabrir</button>}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
-
-      <section className="ec-card" style={{ overflow: "hidden" }}>
-        <div className="ec-tablebar">
-          <Segmented
-            label="Escopo"
-            value={tab}
-            onChange={setTab}
-            options={[
-              { value: "active", label: `Ativos (${active.length})` },
-              { value: "history", label: `Histórico (${history.length})` },
-            ]}
-          />
-          <Select
-            value={level}
-            onChange={(event) => setLevel(event.target.value as typeof level)}
-            aria-label="Severidade"
-            style={{ flex: "0 1 190px" }}
-          >
-            <option value="all">Todas as severidades</option>
-            <option value="critical">Críticos</option>
-            <option value="warning">Atenção</option>
-            <option value="info">Informativos</option>
-          </Select>
-          <Input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Buscar cliente ou alerta…"
-            aria-label="Buscar"
-            style={{ flex: "0 1 240px" }}
-          />
-          <span className="ec-tablebar__count">{rows.length} resultado(s)</span>
-        </div>
-
-        <div className="ec-scroll-x">
-          <div className="ec-thead" style={{ minWidth: 980, gridTemplateColumns: ALERT_GRID }}>
-            <SortButton column="level" sort={sort} onSort={setSort} align="left">Severidade</SortButton>
-            <SortButton column="account" sort={sort} onSort={setSort} align="left">Conta / tipo</SortButton>
-            <SortButton column="alert" sort={sort} onSort={setSort} align="left">Alerta</SortButton>
-            <SortButton column="updated" sort={sort} onSort={setSort} align="left" initialDirection="desc">Atualização</SortButton>
-            <span style={{ textAlign: "right" }}>Ação</span>
-          </div>
-
-          {loading ? (
-            <div style={{ padding: "var(--sp-4)", display: "grid", gap: "var(--sp-3)", minWidth: 980 }}>
-              {[0, 1, 2, 3].map((i) => (
-                <Skeleton key={i} h={48} radius={10} />
-              ))}
-            </div>
-          ) : rows.length === 0 ? (
-            <EmptyState
-              icon={tab === "active" ? "✓" : "—"}
-              title={tab === "active" ? "Nenhum alerta ativo" : "Nenhum alerta no histórico"}
-              hint={
-                tab === "active"
-                  ? "Com estes filtros, nada exige atenção agora. Saldo, pagamento, reprovação e queda de gasto são verificados na coleta diária."
-                  : "Alertas resolvidos ou marcados como ciente aparecem aqui."
-              }
-            />
-          ) : (
-            <div style={{ minWidth: 980 }}>
-              {rows.map((item) => {
-                const appearance = LEVEL[item.level] || LEVEL.info;
-                const date = tab === "active"
-                  ? item.last_seen_at
-                  : item.resolved_at || item.acknowledged_at || item.last_seen_at;
-                return (
-                <article
-                  key={item.id}
-                  className="ec-row"
-                  data-urgent={item.level === "critical" && tab === "active" ? "true" : undefined}
-                  style={{ gridTemplateColumns: ALERT_GRID }}
-                >
-                  <div>
-                    <Badge tone={appearance.tone}>{appearance.label}</Badge>
-                  </div>
-                  <div style={{ minWidth: 0 }}>
-                    <div className="ec-row__strong">
-                      {item.account_name}
-                      {item.group && (
-                        <span style={{ marginLeft: 6, fontSize: 10, padding: "0 6px", borderRadius: 8, background: item.group.color + "22", color: item.group.color, fontWeight: 600 }}>
-                          {item.group.name}
-                        </span>
-                      )}
-                    </div>
-                    <div className="ec-row__faint">{TYPE_LABEL[item.type] || item.type || "monitoramento"}</div>
-                  </div>
-                  <div style={{ minWidth: 0 }}>
-                    <div className="ec-row__title">{item.title}</div>
-                    <div className="ec-row__detail">{item.detail}</div>
-                  </div>
-                  <div className="ec-row__faint" style={{ fontVariantNumeric: "tabular-nums" }}>
-                    {date ? new Date(date).toLocaleString("pt-BR") : "—"}
-                  </div>
-                  <div style={{ textAlign: "right" }}>
-                    {tab === "active" ? (
-                      <Button variant="secondary" size="sm" disabled={busy === item.id} onClick={() => acknowledge(item, true)}>
-                        {busy === item.id ? "Salvando…" : "Marcar ciente"}
-                      </Button>
-                    ) : !item.resolved ? (
-                      <Button variant="ghost" size="sm" disabled={busy === item.id} onClick={() => acknowledge(item, false)}>
-                        {busy === item.id ? "Salvando…" : "Reabrir"}
-                      </Button>
-                    ) : (
-                      <Badge tone="ok">✓ Resolvido</Badge>
-                    )}
-                  </div>
-                </article>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </section>
-    </main>
-  );
-}
-
-// Contadores por severidade. Zero fica em cinza: só o que tem volume merece cor.
-function Summary({ label, value, tone }: { label: string; value: number; tone?: "danger" | "warn" | "brand" }) {
-  return (
-    <div className="ec-kpi">
-      <div className="ec-kpi__label">{label}</div>
-      <div className="ec-kpi__value" data-tone={value > 0 ? tone : undefined}>
-        {value}
-      </div>
     </div>
   );
 }
-const ALERT_GRID = "110px minmax(180px,.75fr) minmax(280px,1.5fr) 135px 150px";
