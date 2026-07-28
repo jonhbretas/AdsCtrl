@@ -33,6 +33,7 @@ export default function MetaAssetsPage() {
 
   const accountById = useMemo(() => new Map(accountsFromCatalog(catalog).map((a) => [a.account_id, a])), [catalog]);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [sections, setSections] = useState({ connections: false, businesses: false, accounts: true });
 
   const rows = useMemo(() => {
     if (!data) return [];
@@ -55,32 +56,42 @@ export default function MetaAssetsPage() {
       {loading ? <div className="space-y-2"><Skeleton className="h-24 rounded-lg" /><Skeleton className="h-32 rounded-lg" /><Skeleton className="h-48 rounded-lg" /></div> : data && (
         <div className="space-y-4">
           {/* Connections */}
-          <Card><CardContent className="p-4">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Conexões ({data.connections.length})</h3>
-            {data.connections.length === 0 ? <p className="text-sm text-muted-foreground">Nenhuma conexão encontrada.</p> : (
-              <div className="space-y-2">{data.connections.map((c) => (
-                <div key={c.index} className="flex items-center gap-3 p-2.5 rounded-lg border border-border/50">
-                  {c.status === "ok" ? <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" /> : c.status === "partial" ? <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" /> : <XCircle className="h-4 w-4 text-red-500 shrink-0" />}
-                  <div className="flex-1 min-w-0"><div className="text-sm font-semibold truncate">{c.name}</div>{c.user_id && <div className="text-[11px] text-muted-foreground">ID: {c.user_id}</div>}</div>
-                  <div className="text-xs text-muted-foreground text-right shrink-0">{c.account_count} contas · {c.business_count} negócios</div>
-                </div>
-              ))}</div>
-            )}
-          </CardContent></Card>
+          <Card>
+            <button onClick={() => setSections((s) => ({ ...s, connections: !s.connections }))} className="flex items-center justify-between w-full px-4 py-3 text-left bg-transparent border-none cursor-pointer">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Conexões ({data.connections.length})</h3>
+              {sections.connections ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
+            </button>
+            {sections.connections && <CardContent className="p-4 pt-2 border-t border-border/50">
+              {data.connections.length === 0 ? <p className="text-sm text-muted-foreground">Nenhuma conexão encontrada.</p> : (
+                <div className="space-y-2">{data.connections.map((c) => (
+                  <div key={c.index} className="flex items-center gap-3 p-2.5 rounded-lg border border-border/50">
+                    {c.status === "ok" ? <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" /> : c.status === "partial" ? <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" /> : <XCircle className="h-4 w-4 text-red-500 shrink-0" />}
+                    <div className="flex-1 min-w-0"><div className="text-sm font-semibold truncate">{c.name}</div>{c.user_id && <div className="text-[11px] text-muted-foreground">ID: {c.user_id}</div>}</div>
+                    <div className="text-xs text-muted-foreground text-right shrink-0">{c.account_count} contas · {c.business_count} negócios</div>
+                  </div>
+                ))}</div>
+              )}
+            </CardContent>}
+          </Card>
 
           {/* Businesses */}
-          <Card><CardContent className="p-4">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Negócios ({data.businesses.length})</h3>
-            {data.businesses.length === 0 ? <p className="text-sm text-muted-foreground">Nenhum negócio encontrado.</p> : (
-              <div className="space-y-2">{data.businesses.map((b) => (
-                <div key={b.id} className="flex items-center gap-3 p-2.5 rounded-lg border border-border/50">
-                  <div className="flex-1 min-w-0"><div className="text-sm font-semibold truncate">{b.name}</div><div className="text-[11px] text-muted-foreground">ID: {b.id}</div></div>
-                  <Badge variant={b.verification_status === "verified" ? "success" : "warning"} className="text-[10px]">{b.verification_status || "não verificado"}</Badge>
-                  <span className="text-xs text-muted-foreground">{b.created_time ? new Date(b.created_time).toLocaleDateString("pt-BR") : ""}</span>
-                </div>
-              ))}</div>
-            )}
-          </CardContent></Card>
+          <Card>
+            <button onClick={() => setSections((s) => ({ ...s, businesses: !s.businesses }))} className="flex items-center justify-between w-full px-4 py-3 text-left bg-transparent border-none cursor-pointer">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Negócios ({data.businesses.length})</h3>
+              {sections.businesses ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
+            </button>
+            {sections.businesses && <CardContent className="p-4 pt-2 border-t border-border/50">
+              {data.businesses.length === 0 ? <p className="text-sm text-muted-foreground">Nenhum negócio encontrado.</p> : (
+                <div className="space-y-2">{data.businesses.map((b) => (
+                  <div key={b.id} className="flex items-center gap-3 p-2.5 rounded-lg border border-border/50">
+                    <div className="flex-1 min-w-0"><div className="text-sm font-semibold truncate">{b.name}</div><div className="text-[11px] text-muted-foreground">ID: {b.id}</div></div>
+                    <Badge variant={b.verification_status === "verified" ? "success" : "warning"} className="text-[10px]">{b.verification_status || "não verificado"}</Badge>
+                    <span className="text-xs text-muted-foreground">{b.created_time ? new Date(b.created_time).toLocaleDateString("pt-BR") : ""}</span>
+                  </div>
+                ))}</div>
+              )}
+            </CardContent>}
+          </Card>
 
           {/* Accounts table */}
           <Card><CardContent className="p-0">

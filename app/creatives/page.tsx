@@ -98,7 +98,11 @@ export default function CreativesPage() {
     if (!accountId) return; setLoading(true); setError(null); setLab(null); setRejected(null); setRejectedError(null);
     try {
       const [lr, rr] = await Promise.all([fetch(`/api/creatives/meta?account_id=${encodeURIComponent(accountId)}&period=${period}`, { cache: "no-store" }), fetch(`/api/creatives/rejected?account_id=${encodeURIComponent(accountId)}`, { cache: "no-store" }).catch(() => null)]);
-      const ld = await lr.json(); if (!lr.ok || ld.error) throw new Error(ld.error || "Falha.");
+      const text = await lr.text();
+      let ld;
+      try { ld = JSON.parse(text); } catch { throw new Error(`Resposta inválida da API: ${text.slice(0, 200)}`); }
+      if (!lr.ok || ld.error) throw new Error(ld.error || `HTTP ${lr.status}`);
+      if (!ld.creatives && !ld.account_id) throw new Error(`API retornou formato inesperado: ${JSON.stringify(ld).slice(0, 200)}`);
       setLab(ld);
       if (rr && rr.ok) { const rd = await rr.json(); setRejected(rd.ads || []); }
     } catch (e: any) { setError(e?.message); } finally { setLoading(false); }

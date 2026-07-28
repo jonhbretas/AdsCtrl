@@ -22,6 +22,7 @@ export default function AlertsPage() {
   const [history, setHistory] = useState<AlertItem[]>([]);
   const [tab, setTab] = useState<"active" | "history">("active");
   const [level, setLevel] = useState<"all" | AlertLevel>("all");
+  const [groupFilter, setGroupFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<number | null>(null);
@@ -33,10 +34,16 @@ export default function AlertsPage() {
 
   async function setAck(id: number, acknowledged: boolean) { setBusy(id); try { const r = await fetch("/api/alerts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, acknowledged }) }); if (!r.ok) return; if (acknowledged) setActive((p) => p.filter((a) => a.id !== id)); else { setHistory((p) => p.filter((a) => a.id !== id)); await load(); } } finally { setBusy(null); } }
 
+  const allGroups = useMemo(() => {
+    const seen = new Map<string, { name: string; color: string }>();
+    for (const a of [...active, ...history]) { if (a.group) seen.set(a.group.name, a.group); }
+    return Array.from(seen.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [active, history]);
+
   const filtered = useMemo(() => {
     const list = tab === "active" ? active : history;
-    return list.filter((a) => (level === "all" || a.level === level) && (!search.trim() || a.account_name.toLowerCase().includes(search.toLowerCase()) || a.title.toLowerCase().includes(search.toLowerCase()))).sort((a, b) => { const lv = (va: AlertItem) => { switch (sort.key) { case "level": return { critical: 0, warning: 1, info: 2 }[va.level]; case "account": return va.account_name; case "alert": return va.title; case "updated": return va.last_seen_at || va.first_seen_at || ""; } }; return compareSortValues(lv(a), lv(b), sort.direction); });
-  }, [active, history, tab, level, search, sort]);
+    return list.filter((a) => (level === "all" || a.level === level) && (groupFilter === "all" || a.group?.name === groupFilter) && (!search.trim() || a.account_name.toLowerCase().includes(search.toLowerCase()) || a.title.toLowerCase().includes(search.toLowerCase()))).sort((a, b) => { const lv = (va: AlertItem) => { switch (sort.key) { case "level": return { critical: 0, warning: 1, info: 2 }[va.level]; case "account": return va.account_name; case "alert": return va.title; case "updated": return va.last_seen_at || va.first_seen_at || ""; } }; return compareSortValues(lv(a), lv(b), sort.direction); });
+  }, [active, history, tab, level, groupFilter, search, sort]);
 
   return (
     <div className="p-4 md:p-6 md:ml-56 pb-20 md:pb-6 space-y-4 animate-fade-in">
@@ -51,9 +58,15 @@ export default function AlertsPage() {
         <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-muted/50 border border-border/50">
           {(["active", "history"] as const).map((t) => <button key={t} onClick={() => setTab(t)} className={cn("px-3 py-1.5 text-xs font-medium rounded-md transition-colors border-none cursor-pointer", tab === t ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground bg-transparent")}>{t === "active" ? "Ativos" : "Histórico"}</button>)}
         </div>
-        <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-muted/50 border border-border/50">
-          {(["all", "critical", "warning", "info"] as const).map((l) => <button key={l} onClick={() => setLevel(l)} className={cn("px-3 py-1.5 text-xs font-medium rounded-md transition-colors border-none cursor-pointer", level === l ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground bg-transparent")}>{l === "all" ? "Todos" : LEVEL[l]?.label || l}</button>)}
-        </div>
+          <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-muted/50 border border-border/50">
+            {(["all", "critical", "warning", "info"] as const).map((l) => <button key={l} onClick={() => setLevel(l)} className={cn("px-3 py-1.5 text-xs font-medium rounded-md transition-colors border-none cursor-pointer", level === l ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground bg-transparent")}>{l === "all" ? "Todos" : LEVEL[l]?.label || l}</button>)}
+          </div>
+          {allGroups.length > 0 && (
+            <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-muted/50 border border-border/50">
+              <button onClick={() => setGroupFilter("all")} className={cn("px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors border-none cursor-pointer", groupFilter === "all" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground bg-transparent")}>Todos</button>
+              {allGroups.map((g) => <button key={g.name} onClick={() => setGroupFilter(g.name)} className={cn("px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors border-none cursor-pointer", groupFilter === g.name ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground bg-transparent")} style={groupFilter === g.name ? { color: g.color, backgroundColor: g.color + "15" } : {}}>{g.name}</button>)}
+            </div>
+          )}
         <div className="relative flex-1 min-w-[140px] max-w-[220px]">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <input value={search} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)} placeholder="Buscar…" className="w-full h-8 pl-8 pr-3 text-xs rounded-lg border border-border/50 bg-muted/30 focus:outline-none focus:ring-2 focus:ring-ring/30" />

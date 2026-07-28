@@ -321,7 +321,7 @@ function TaskCard({ task, owner, project, projects, busy, onMove, onProject, onO
       <div className="flex items-start gap-2">
         {task.source === "auto" && <Badge variant="info" className="text-[9px] px-1 py-0">AUTO</Badge>}
         <h3 className="text-sm font-semibold flex-1 min-w-0">
-          <button onClick={onOpen} className="text-left hover:text-primary transition-colors bg-transparent border-none cursor-pointer break-words">{task.title}</button>
+          <button onClick={onOpen} className="text-left hover:text-primary transition-colors bg-transparent border-none cursor-pointer break-words whitespace-normal leading-snug">{task.title}</button>
         </h3>
       </div>
       <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
