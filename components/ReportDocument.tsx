@@ -123,6 +123,7 @@ export default function ReportDocument({ data, compact = false, width }: { data:
                 <SplitBar parts={[...(metaOk ? [{ label: "Meta Ads", value: k!.spend, color: C.meta }] : []), ...google.map((g) => ({ label: `Google · ${g.name}`, value: g.detail?.kpis?.spend || 0, color: C.google }))]} total={totalSpend} format={(v) => m(v)} />
               </Card>
             )}
+            {metaOk && <InsightBox title="Resumo em linguagem simples" lines={generateInsights(meta!.kpis, meta!.prevKpis, cur, "Meta Ads", resolveFocus(data.result_family))} />}
           </Block>
         )}
 
@@ -363,4 +364,65 @@ function PrintStyles() {
       table { page-break-inside: auto; } tr { page-break-inside: avoid; }
     }
   `}</style>;
+}
+
+// Insights humanizados em linguagem de cliente leigo
+function generateInsights(kpis: Kpis, prevKpis: Kpis, currency: string, platform: string, focus?: Focus | null): string[] {
+  const lines: string[] = [];
+  const spend = kpis.spend || 0;
+  const prevSpend = prevKpis.spend || 0;
+  const m = (v: number) => money(v, currency);
+
+  if (spend > 0) lines.push(`Foram investidos ${m(spend)} em anúncios no ${platform} durante este período.`);
+
+  const impressions = kpis.impressions || 0;
+  if (impressions > 0) lines.push(`Os anúncios foram exibidos ${impressions.toLocaleString("pt-BR")} vezes, alcançando ${(kpis.reach || 0).toLocaleString("pt-BR")} pessoas diferentes.`);
+
+  const clicks = kpis.clicks || 0;
+  if (clicks > 0) lines.push(`Isso gerou ${clicks.toLocaleString("pt-BR")} cliques, com um custo médio de ${m(spend / clicks)} por clique.`);
+
+  if (focus) {
+    const fv = pickVal(kpis.results, focus.keys);
+    const pfv = prevKpis ? pickVal(prevKpis.results, focus.keys) : 0;
+    if (fv > 0 && spend > 0) {
+      const cpa = spend / fv;
+      if (pfv > 0 && prevSpend > 0) {
+        const prevCpa = prevSpend / pfv;
+        const diff = ((cpa - prevCpa) / prevCpa) * 100;
+        lines.push(`O custo por ${focus.label.toLowerCase()} foi de ${m(cpa)}, ${Math.abs(diff).toFixed(0)}% ${diff > 0 ? "maior" : "menor"} que no período anterior.`);
+      } else {
+        lines.push(`O custo por ${focus.label.toLowerCase()} foi de ${m(cpa)}.`);
+      }
+    }
+  }
+
+  const purchases = pickVal(kpis.results, PURCHASE_KEYS);
+  const purchaseVal = pickVal(kpis.values, PURCHASE_KEYS);
+  if (purchases > 0 && purchaseVal > 0 && spend > 0) {
+    const roas = purchaseVal / spend;
+    if (roas > 2) {
+      lines.push(`A cada R$1 investido, você recuperou R$${roas.toFixed(2)} em vendas — um retorno de ${roas.toFixed(0)}x sobre o investimento.`);
+    } else if (roas > 1) {
+      lines.push(`O retorno ficou em R$${roas.toFixed(2)} para cada R$1 investido — acima do ponto de equilíbrio.`);
+    } else if (roas > 0) {
+      lines.push(`O retorno ainda está abaixo de R$1 para cada R$1 investido, indicando que as campanhas precisam de ajustes para se tornarem rentáveis.`);
+    }
+  }
+
+  if (spend > prevSpend && prevSpend > 0) {
+    const pct = ((spend - prevSpend) / prevSpend) * 100;
+    lines.push(`O investimento ${pct > 0 ? "aumentou" : "caiu"} ${Math.abs(pct).toFixed(0)}% em relação ao período anterior.`);
+  }
+
+  return lines;
+}
+
+function InsightBox({ title, lines }: { title: string; lines: string[] }) {
+  if (!lines.length) return null;
+  return (
+    <div style={{ background: "#f0f9ff", border: "1px solid #bae6fd", borderRadius: 10, padding: "12px 14px", marginTop: 12 }}>
+      <div style={{ fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.5, color: "#0369a1", marginBottom: 6 }}>{title}</div>
+      {lines.map((l, i) => <p key={i} style={{ fontSize: 12, lineHeight: 1.6, color: C.ink, margin: "3px 0" }}>{l}</p>)}
+    </div>
+  );
 }

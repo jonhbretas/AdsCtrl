@@ -20,6 +20,8 @@ import {
   TrendingDown,
   Minus,
   Settings,
+  Wallet,
+  CheckSquare2,
 } from "lucide-react";
 
 type Priority = {
@@ -178,6 +180,56 @@ export default function TodayPage() {
           <Link href="/admin#clients"><Button variant="secondary" size="sm"><Settings className="h-3.5 w-3.5 mr-1" /> Metas</Button></Link>
         </div>
       </div>
+
+      {/* Daily Briefing — central de decisões consolidada */}
+      {data && (
+        <Card className="border-primary/20 bg-gradient-to-r from-primary/5 to-transparent">
+          <CardContent className="p-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-primary mb-3">Briefing do dia</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Prioridades */}
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <AlertTriangle className="h-3.5 w-3.5 text-red-500" />
+                  <span className="text-xs font-semibold">Ações urgentes</span>
+                  <Badge variant="destructive" className="text-[10px]">{critical}</Badge>
+                </div>
+                {data.priorities.filter((p) => p.level === "critical").slice(0, 2).map((p, i) => (
+                  <div key={i} className="text-[11px] text-muted-foreground truncate">· {p.client_name}: {p.title}</div>
+                ))}
+                {critical === 0 && <div className="text-[11px] text-emerald-500 font-medium">✓ Nenhuma ação crítica</div>}
+              </div>
+              {/* Pacing */}
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <Wallet className="h-3.5 w-3.5 text-amber-500" />
+                  <span className="text-xs font-semibold">Ritmo de budget</span>
+                  {data.clients.filter((c) => c.pacing.budget > 0 && (c.pacing.percentOfExpected ?? 0) > 115).length > 0 && <Badge variant="warning" className="text-[10px]">{data.clients.filter((c) => c.pacing.budget > 0 && (c.pacing.percentOfExpected ?? 0) > 115).length} acima</Badge>}
+                </div>
+                {data.clients.filter((c) => c.pacing.budget > 0 && (c.pacing.percentOfExpected ?? 0) > 115).slice(0, 2).map((c, i) => (
+                  <div key={i} className="text-[11px] text-muted-foreground truncate">· {c.name}: {(c.pacing.percentOfExpected ?? 0).toFixed(0)}% do ritmo</div>
+                ))}
+                {data.clients.filter((c) => c.pacing.budget > 0 && (c.pacing.percentOfExpected ?? 0) > 115).length === 0 && (
+                  <div className="text-[11px] text-emerald-500 font-medium">✓ Todos no ritmo</div>
+                )}
+              </div>
+              {/* Dados */}
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <CheckSquare2 className="h-3.5 w-3.5 text-primary" />
+                  <span className="text-xs font-semibold">Saúde dos dados</span>
+                  {data.clients.filter((c) => c.dataStatus === "stale").length > 0 && <Badge variant="warning" className="text-[10px]">{data.clients.filter((c) => c.dataStatus === "stale").length} atrasados</Badge>}
+                </div>
+                {data.clients.filter((c) => c.dataStatus === "stale").length > 0 ? (
+                  <div className="text-[11px] text-muted-foreground">{data.clients.filter((c) => c.dataStatus === "stale").length} cliente(s) com dados desatualizados — rode uma coleta</div>
+                ) : (
+                  <div className="text-[11px] text-emerald-500 font-medium">✓ Dados atualizados</div>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

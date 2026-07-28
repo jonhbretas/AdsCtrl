@@ -10,6 +10,7 @@ import { Input, Select, Collapsible, Notice, PageHeader, WideScreenHint, Field }
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { RESULT_FAMILY_BY_SLUG } from "@/lib/format";
+import { CampaignTemplateList } from "@/components/CampaignTemplates";
 import { ArrowLeft, RefreshCw, AlertTriangle, Plus, X, Check, ChevronDown, ChevronUp } from "lucide-react";
 
 interface Group { id: string; name: string; color: string; }
@@ -179,6 +180,9 @@ export default function Admin() {
                 </div>
               ))}
             </div>
+          </div>
+          <div className="mt-3 border-t border-border/50 pt-3 px-1">
+            <CampaignTemplateList />
           </div>
         </Collapsible>
       </div>
