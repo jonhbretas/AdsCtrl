@@ -54,9 +54,9 @@ export async function PATCH(req: Request, { params }: RouteContext) {
         { status: 503 }
       );
     }
-    if (error && /report_weekday|report_hour/.test(error.message || "")) {
+    if (error && /report_weekday/.test(error.message || "")) {
       return NextResponse.json(
-        { error: "Rode supabase-migration-report-schedule.sql no SQL Editor do Supabase para agendar o envio por cliente." },
+        { error: "Rode supabase-migration-report-schedule.sql no SQL Editor do Supabase para escolher o dia de envio por cliente." },
         { status: 503 }
       );
     }

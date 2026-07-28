@@ -16,7 +16,19 @@ export const SETTING_KEYS = [
   "report_reply_to",
   "report_test_email",
   "task_alert_email",
+  "report_hour",
 ] as const;
+
+// Horário único para todos os relatórios, na manhã do cliente. Um horário só
+// mantém o disparo previsível: o dia continua sendo escolha de cada cliente.
+export const REPORT_HOUR_CHOICES = [6, 7, 8, 9] as const;
+export const DEFAULT_REPORT_HOUR = 8;
+
+/** A hora gravada, já validada. Fora da lista ou vazia cai no padrão. */
+export function reportHourOf(settings: AppSettings): number {
+  const parsed = Number(settings.report_hour);
+  return (REPORT_HOUR_CHOICES as readonly number[]).includes(parsed) ? parsed : DEFAULT_REPORT_HOUR;
+}
 
 export type SettingKey = (typeof SETTING_KEYS)[number];
 export type AppSettings = Record<SettingKey, string>;
@@ -29,11 +41,13 @@ const ENV_BY_KEY: Record<SettingKey, string> = {
   report_reply_to: "REPORT_REPLY_TO",
   report_test_email: "REPORT_TEST_EMAIL",
   task_alert_email: "TASK_ALERT_EMAIL",
+  report_hour: "REPORT_HOUR",
 };
 
 const DEFAULTS: Partial<Record<SettingKey, string>> = {
   brand_name: "AdsCtrl",
   brand_description: "Cockpit de performance em mídia paga",
+  report_hour: String(DEFAULT_REPORT_HOUR),
 };
 
 // Um envio semanal percorre dezenas de clientes; sem cache seria uma consulta

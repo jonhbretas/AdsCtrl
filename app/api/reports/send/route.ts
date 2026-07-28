@@ -7,13 +7,16 @@
 //  - período já enviado não repete (report_sends é a fonte da verdade);
 //  - conta sem dados ou com erro de API é pulada, nunca vira e-mail vazio.
 //
-// Ex.: GET /api/reports/send?dry=1            (teste com todos os habilitados)
+// Ex.: GET /api/reports/send?dry=1                  (teste com os habilitados)
 //      GET /api/reports/send?client=<uuid>&dry=1
-//      GET /api/reports/send                  (envio real — o que o cron faz)
+//      GET /api/reports/send?client=<uuid>&force=1   (imediato, vai ao cliente)
+//      GET /api/reports/send                        (envio real — o cron)
 //
-// O cron passa de hora em hora; cada cliente tem dia e hora próprios
-// (report_weekday / report_hour, no fuso dele). Quem não bate a janela é
-// ignorado sem virar registro — ver isScheduledNow abaixo.
+// Agenda: o dia é de cada cliente (report_weekday, no fuso dele) e a hora é uma
+// só, da Config. Quem não bate a janela é ignorado sem virar registro — ver
+// isScheduledNow. force=1 é o pedido avulso do cliente: ignora a agenda, a
+// automação desligada e o "já enviado neste período", mas exige um cliente
+// específico para nunca virar um disparo em massa acidental.
 
 import { NextResponse } from "next/server";
 import { buildReport, lastFullWeek } from "@/lib/report-data";
@@ -21,7 +24,7 @@ import { renderReportEmail } from "@/lib/report-email";
 import { dashboardLink, reportLink, reportLinkConfigured } from "@/lib/report-token";
 import { looksLikeEmail, resendIssues, sendEmail } from "@/lib/resend";
 import { getServiceClient, supabaseEnvMissing } from "@/lib/supabase";
-import { getSettings } from "@/lib/settings";
+import { getSettings, reportHourOf } from "@/lib/settings";
 import { AUTH_COOKIE_NAME, constantTimeEqual, verifySessionToken } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -83,15 +86,15 @@ function hourlyCronEnabled(): boolean {
   return (process.env.REPORT_CRON_HOURLY || "").trim() === "1";
 }
 
+// O dia é de cada cliente; a hora é uma só, da Config, na manhã do cliente.
 // O registro em report_sends impede repetir se o cron disparar duas vezes
 // dentro da mesma janela.
-function isScheduledNow(client: any): boolean {
+function isScheduledNow(client: any, globalHour: number): boolean {
   const { weekday, hour } = localNow(client.timezone);
   const wanted = Number.isInteger(client.report_weekday) ? client.report_weekday : 1;
   if (weekday !== wanted) return false;
   if (!hourlyCronEnabled()) return true;
-  const wantedHour = Number.isInteger(client.report_hour) ? client.report_hour : 11;
-  return hour === wantedHour;
+  return hour === globalHour;
 }
 
 export async function GET(req: Request) {
@@ -120,7 +123,19 @@ async function handle(req: Request) {
     const params = new URL(req.url).searchParams;
     const dryRun = params.get("dry") === "1";
     const onlyClient = params.get("client");
-    const testAddress = (await getSettings()).report_test_email;
+    // Disparo imediato, quando o cliente pede o relatório fora da agenda.
+    // Exige um cliente específico: um "force" geral mandaria e-mail para todo
+    // mundo de uma vez, e isso não tem desfazer.
+    const force = params.get("force") === "1" && Boolean(onlyClient) && !dryRun;
+    if (params.get("force") === "1" && !onlyClient) {
+      return NextResponse.json(
+        { error: "O envio imediato precisa de um cliente específico." },
+        { status: 400 }
+      );
+    }
+    const settings = await getSettings();
+    const testAddress = settings.report_test_email;
+    const globalHour = reportHourOf(settings);
     if (dryRun && !looksLikeEmail(testAddress)) {
       return NextResponse.json(
         { error: "Defina o e-mail de teste em Config › E-mail para usar o modo de teste." },
@@ -133,7 +148,7 @@ async function handle(req: Request) {
     // a migração correspondente não rodou, o retry abaixo repete sem elas e o
     // envio segue com o comportamento antigo — segunda-feira, 11h.
     const BASE_COLUMNS = "id,name,timezone,report_email,report_enabled,source_meta_account_id,status";
-    const EXTRA_COLUMNS = "brand_name,report_weekday,report_hour";
+    const EXTRA_COLUMNS = "brand_name,report_weekday";
     let query = supabase
       .from("clients")
       .select(`${BASE_COLUMNS},${EXTRA_COLUMNS}`)
@@ -145,7 +160,7 @@ async function handle(req: Request) {
       query,
       supabase.from("client_ad_accounts").select("client_id,account_id,is_primary"),
     ]);
-    if (clientsError && /brand_name|report_weekday|report_hour/.test(clientsError.message || "")) {
+    if (clientsError && /brand_name|report_weekday/.test(clientsError.message || "")) {
       let retry = supabase.from("clients").select(BASE_COLUMNS).neq("status", "archived");
       retry = onlyClient ? retry.eq("id", onlyClient) : retry.eq("report_enabled", true);
       const again = await retry;
@@ -177,7 +192,7 @@ async function handle(req: Request) {
     let outOfWindow = 0;
 
     for (const client of clients || []) {
-      if (scheduledRun && !isScheduledNow(client)) {
+      if (scheduledRun && !isScheduledNow(client, globalHour)) {
         outOfWindow++;
         continue;
       }
@@ -199,7 +214,9 @@ async function handle(req: Request) {
         });
       };
 
-      if (!dryRun && !client.report_enabled) {
+      // Envio imediato é pedido do cliente: vale mesmo com a automação
+      // desligada. O que ele não dispensa é um destinatário válido.
+      if (!dryRun && !force && !client.report_enabled) {
         results.push({ client: client.name, status: "skipped", reason: "envio desativado para este cliente" });
         continue;
       }
@@ -208,8 +225,9 @@ async function handle(req: Request) {
         continue;
       }
 
-      // Já foi enviado para este período? Não manda de novo.
-      if (!dryRun) {
+      // Já foi enviado para este período? Não manda de novo — a não ser que
+      // seja reenvio pedido pelo cliente, que é justamente repetir.
+      if (!dryRun && !force) {
         const { data: previous } = await supabase
           .from("report_sends")
           .select("id")
@@ -256,7 +274,7 @@ async function handle(req: Request) {
           dashboardLink: dashboard,
           dryRun,
           // Marca do cliente quando configurada; a da Config por padrão.
-          brand: (client as any).brand_name || (await getSettings()).brand_name,
+          brand: (client as any).brand_name || settings.brand_name,
         });
         const sent = await sendEmail({
           to: recipient,

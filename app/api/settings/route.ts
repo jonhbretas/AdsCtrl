@@ -8,7 +8,7 @@
 // Chave de API não passa por aqui — segredo continua só no ambiente.
 
 import { NextResponse } from "next/server";
-import { getEnvDefaults, getSettings, getStoredSettings, saveSettings, SETTING_KEYS, type SettingKey } from "@/lib/settings";
+import { getEnvDefaults, getSettings, getStoredSettings, REPORT_HOUR_CHOICES, saveSettings, SETTING_KEYS, type SettingKey } from "@/lib/settings";
 import { looksLikeEmail } from "@/lib/resend";
 
 export const dynamic = "force-dynamic";
@@ -53,6 +53,12 @@ export async function PATCH(req: Request) {
       // Vazio significa "volta a herdar do ambiente", então não valida formato.
       if (value && EMAIL_KEYS.includes(key as SettingKey) && !looksLikeEmail(emailInsideAngleBrackets(value))) {
         return NextResponse.json({ error: `${key} precisa conter um e-mail válido.` }, { status: 400 });
+      }
+      if (value && key === "report_hour" && !(REPORT_HOUR_CHOICES as readonly number[]).includes(Number(value))) {
+        return NextResponse.json(
+          { error: `O horário de envio deve ser um destes: ${REPORT_HOUR_CHOICES.join(", ")}.` },
+          { status: 400 }
+        );
       }
       patch[key as SettingKey] = value || null;
     }

@@ -36,7 +36,7 @@ Em um projeto novo (ou existente) no Supabase, execute os arquivos SQL abaixo
 | 14 | `supabase-migration-report-cache.sql` | Cache do relatório público |
 | 15 | `supabase-migration-brand.sql` | Marca personalizada por cliente |
 | 16 | `supabase-migration-balance.sql` | Saldo vs fatura em aberto |
-| 17 | `supabase-migration-report-schedule.sql` | Dia e hora do relatório por cliente |
+| 17 | `supabase-migration-report-schedule.sql` | Dia do relatório por cliente |
 | 18 | `supabase-migration-settings.sql` | Configurações do sistema editáveis no painel |
 
 **Importante:** para um projeto novo, rode do 1 ao 18 sequencialmente.
@@ -144,9 +144,11 @@ components/
 - `/clientes` — metas, orçamento, objetivo, KPI, grupos e vínculo de contas
   Meta e Google.
 - `/relatorios` — entrega por cliente: e-mail de destino, marca do relatório,
-  dia e hora do envio, teste que vai só para você e link do painel do cliente.
+  dia do envio, teste que vai só para você, disparo imediato para o cliente e
+  link do painel.
 - `/admin` (Config) — sistema: nome do painel, endereços de e-mail do disparo,
-  estado das integrações (com teste ao vivo) e o lembrete interno de tarefas.
+  horário único de envio, estado das integrações (com teste ao vivo) e o
+  lembrete interno de tarefas.
 
 Na Config, campo vazio herda a variável de ambiente correspondente — a tela
 mostra qual valor viria do `.env`. Chaves de API continuam só no ambiente.
@@ -161,17 +163,25 @@ CPM, frequência, hook, hold, outbound CTR, CVR, CPA, ROAS, funil de retenção,
 quadrante e diagnósticos relativos à mediana da conta.
 
 ### Relatório semanal
-Envia para cada cliente com `report_enabled = true` no dia configurado em
-`/relatorios`, avaliado no fuso do próprio cliente (padrão: segunda). Período
-já enviado não repete e conta sem investimento é pulada. Use
-`/api/reports/send?dry=1` para testar — o teste vai para o e-mail de teste da
-Config, nunca para o cliente.
+Envia para cada cliente com `report_enabled = true` no **dia** configurado em
+`/relatorios`, avaliado no fuso do próprio cliente (padrão: segunda). O
+**horário** é um só para todos, escolhido em Config › Envio entre 6h, 7h, 8h e
+9h, e aplicado na manhã do fuso de cada cliente. Período já enviado não repete
+e conta sem investimento é pulada.
 
-O **horário** por cliente só é cobrado quando o cron passa de hora em hora, o
-que exige plano com cron horário na Vercel (o Hobby limita a uma execução
-diária). Para ligar: `vercel.json` em `0 * * * *` **e** `REPORT_CRON_HOURLY=1`
-no ambiente. Sem isso o cron semanal continua valendo e o horário fica só como
-referência na tela. O estado atual aparece em Config › Integrações.
+- `/api/reports/send?dry=1` — teste; vai para o e-mail de teste da Config,
+  nunca para o cliente.
+- `/api/reports/send?client=<uuid>&force=1` — **disparo imediato**, quando o
+  cliente pede o relatório fora da agenda. Vai direto para o e-mail dele,
+  ignora a automação desligada e o "já enviado neste período". Exige um cliente
+  específico, para nunca virar disparo em massa. Na tela é o botão "Enviar
+  agora ao cliente", com confirmação.
+
+O horário só é cobrado quando o cron passa de hora em hora, o que exige plano
+com cron horário na Vercel (o Hobby limita a uma execução diária). Para ligar:
+`vercel.json` em `0 * * * *` **e** `REPORT_CRON_HOURLY=1` no ambiente. Sem
+isso o cron semanal continua valendo, o dia é respeitado e o horário fica só
+como referência na tela. O estado atual aparece em Config › Integrações.
 
 ### Lembrete interno de tarefas
 Junto da coleta diária, um e-mail é enviado para o endereço de lembretes

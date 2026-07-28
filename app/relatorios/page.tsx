@@ -17,21 +17,20 @@ import { Notice, PageHeader, Field } from "@/components/ui";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { RESULT_FAMILY_BY_SLUG } from "@/lib/format";
-import { AlertTriangle, Users, Send, Link2, Check, ExternalLink, Search } from "lucide-react";
+import { AlertTriangle, Users, Send, Link2, Check, ExternalLink, Search, Zap } from "lucide-react";
 
 interface Account { account_id: string; name: string; platform: "meta" | "google"; }
 interface ClientRecord {
   id: string; name: string; status: string; timezone: string;
   result_family: string | null; brand_name?: string | null;
   report_email?: string | null; report_enabled?: boolean;
-  report_weekday?: number | null; report_hour?: number | null;
+  report_weekday?: number | null;
   report_last_sent_at?: string | null;
   accounts: Account[];
 }
 
 const WEEKDAYS = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
 const DEFAULT_WEEKDAY = 1;
-const DEFAULT_HOUR = 11;
 const compactInput: React.CSSProperties = { width: "100%", height: 32, fontSize: 12.5, borderRadius: 8, border: "1px solid var(--color-border)", background: "transparent", padding: "0 8px" };
 
 export default function RelatoriosPage() {
@@ -42,6 +41,8 @@ export default function RelatoriosPage() {
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [onlyEnabled, setOnlyEnabled] = useState(false);
+  // Horário é um só, da Config; aqui só se mostra qual é.
+  const [globalHour, setGlobalHour] = useState<number | null>(null);
 
   async function load() {
     setError(null);
@@ -58,7 +59,13 @@ export default function RelatoriosPage() {
       setLoading(false);
     }
   }
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    fetch("/api/settings", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => { if (!d.error) setGlobalHour(Number(d.effective?.report_hour) || 8); })
+      .catch(() => setGlobalHour(8));
+  }, []);
 
   async function updateClient(id: string, patch: Partial<ClientRecord>) {
     setClients((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
@@ -128,19 +135,23 @@ export default function RelatoriosPage() {
                 key={client.id}
                 client={client}
                 loadRevision={loadRevision}
+                globalHour={globalHour}
                 onUpdate={updateClient}
                 onError={setError}
+                onSent={load}
               />
             ))}
             {!visible.length && <div className="text-sm text-muted-foreground px-1">Nenhum cliente corresponde ao filtro.</div>}
           </div>
 
           <p className="text-xs text-muted-foreground leading-relaxed max-w-3xl">
-            O envio respeita o dia de cada cliente, no fuso dele. O horário só é cobrado quando o cron
-            roda de hora em hora — no cron semanal ele fica como referência; veja o estado atual em{" "}
-            <Link href="/admin" className="underline underline-offset-2">Config › Integrações</Link>.
-            Período já enviado não repete, e conta sem investimento no período é pulada em vez de virar
-            e-mail vazio. O remetente e o endereço de teste ficam em Config › E-mail.
+            O dia é de cada cliente; o horário é um só, definido em{" "}
+            <Link href="/admin" className="underline underline-offset-2">Config › Envio</Link>
+            {globalHour != null && ` (hoje ${String(globalHour).padStart(2, "0")}:00)`}, sempre na manhã do
+            fuso do cliente. O horário só é cobrado quando o cron roda de hora em hora — no cron semanal
+            ele fica como referência; o estado atual aparece em Config › Integrações. Período já enviado
+            não repete no automático, e conta sem investimento é pulada em vez de virar e-mail vazio.
+            O “Enviar agora” ignora essas travas de propósito: é o pedido avulso do cliente.
           </p>
         </>
       )}
@@ -149,19 +160,21 @@ export default function RelatoriosPage() {
 }
 
 function DeliveryCard({
-  client, loadRevision, onUpdate, onError,
+  client, loadRevision, globalHour, onUpdate, onError, onSent,
 }: {
   client: ClientRecord;
   loadRevision: number;
+  globalHour: number | null;
   onUpdate: (id: string, patch: Partial<ClientRecord>) => void;
   onError: (message: string) => void;
+  onSent: () => void;
 }) {
-  const [sending, setSending] = useState(false);
+  const [sending, setSending] = useState<"test" | "now" | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [dashboardUrl, setDashboardUrl] = useState<string | null>(null);
   const hasEmail = Boolean((client.report_email || "").trim());
   const weekday = client.report_weekday ?? DEFAULT_WEEKDAY;
-  const hour = client.report_hour ?? DEFAULT_HOUR;
+  const hourLabel = globalHour != null ? `${String(globalHour).padStart(2, "0")}:00` : "—";
 
   function flash(message: string) {
     setFeedback(message);
@@ -196,7 +209,7 @@ function DeliveryCard({
   }
 
   async function sendTest() {
-    setSending(true);
+    setSending("test");
     try {
       const r = await fetch(`/api/reports/send?client=${encodeURIComponent(client.id)}&dry=1`, { method: "POST" });
       const d = await r.json();
@@ -206,7 +219,32 @@ function DeliveryCard({
     } catch (e: any) {
       onError(e?.message || "Falha ao enviar o teste.");
     } finally {
-      setSending(false);
+      setSending(null);
+    }
+  }
+
+  // Disparo avulso, quando o cliente pede o relatório fora da agenda. Vai
+  // direto para o e-mail dele e não tem desfazer — daí a confirmação com o
+  // endereço escrito por extenso.
+  async function sendNow() {
+    const recipient = (client.report_email || "").trim();
+    if (!window.confirm(`Enviar agora o relatório da última semana fechada para ${recipient}?\n\nO e-mail vai direto para o cliente e não há como cancelar.`)) return;
+    setSending("now");
+    try {
+      const r = await fetch(`/api/reports/send?client=${encodeURIComponent(client.id)}&force=1`, { method: "POST" });
+      const d = await r.json();
+      if (!r.ok || d.error) throw new Error(d.error || `Falha (HTTP ${r.status}).`);
+      const result = d.results?.[0];
+      if (result?.status === "sent") {
+        flash(`Relatório enviado para ${result.recipient}.`);
+        onSent();
+      } else {
+        flash(`Não enviado: ${result?.reason || "sem retorno"}.`);
+      }
+    } catch (e: any) {
+      onError(e?.message || "Falha ao enviar o relatório.");
+    } finally {
+      setSending(null);
     }
   }
 
@@ -223,7 +261,7 @@ function DeliveryCard({
           </div>
           <div className="text-[11px] text-muted-foreground mt-1">
             {client.report_enabled
-              ? `Toda ${WEEKDAYS[weekday].toLowerCase()}, ${String(hour).padStart(2, "0")}:00 · fuso ${client.timezone || "America/Sao_Paulo"}`
+              ? `Toda ${WEEKDAYS[weekday].toLowerCase()}, ${hourLabel} · fuso ${client.timezone || "America/Sao_Paulo"}`
               : "Sem envio automático."}
             {client.report_last_sent_at && ` · último envio ${new Date(client.report_last_sent_at).toLocaleDateString("pt-BR")}`}
           </div>
@@ -274,16 +312,28 @@ function DeliveryCard({
             {WEEKDAYS.map((label, i) => <option key={i} value={i}>{label}</option>)}
           </select>
         </Field>
-        <Field label={`Horário · ${client.timezone || "America/Sao_Paulo"}`}>
-          <select value={hour} onChange={(e) => onUpdate(client.id, { report_hour: Number(e.target.value) })} style={compactInput}>
-            {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
-          </select>
+        {/* Horário não é por cliente: é um só, na Config. Mostrado aqui para
+            a agenda ficar legível sem trocar de tela. */}
+        <Field label="Horário (geral)">
+          <div className="h-8 flex items-center px-2 rounded-lg border border-dashed border-border text-xs text-muted-foreground">
+            {hourLabel} <span className="ml-1 opacity-70">· definido em Config</span>
+          </div>
         </Field>
       </div>
 
       <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-border/40">
-        <Button variant="secondary" size="sm" onClick={sendTest} disabled={sending} title="Gera o relatório da semana passada e manda para o endereço de teste da Config — nunca para o cliente">
-          <Send className="h-3.5 w-3.5 mr-1" /> {sending ? "Enviando…" : "Enviar teste para mim"}
+        <Button variant="secondary" size="sm" onClick={sendTest} disabled={sending !== null} title="Gera o relatório da semana passada e manda para o endereço de teste da Config — nunca para o cliente">
+          <Send className="h-3.5 w-3.5 mr-1" /> {sending === "test" ? "Enviando…" : "Enviar teste para mim"}
+        </Button>
+        <Button
+          size="sm"
+          onClick={sendNow}
+          disabled={sending !== null || !hasEmail}
+          title={hasEmail
+            ? "Envia agora o relatório da última semana fechada direto para o cliente, fora da agenda"
+            : "Cadastre o e-mail do cliente antes de enviar"}
+        >
+          <Zap className="h-3.5 w-3.5 mr-1" /> {sending === "now" ? "Enviando…" : "Enviar agora ao cliente"}
         </Button>
         <Button variant="ghost" size="sm" onClick={() => loadDashboardLink(true)} title="Link permanente do painel deste cliente — ele vê as métricas quando quiser, sem login">
           <Link2 className="h-3.5 w-3.5 mr-1" /> Copiar link do painel

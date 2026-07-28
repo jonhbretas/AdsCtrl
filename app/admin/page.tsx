@@ -18,7 +18,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { AlertTriangle, RefreshCw, Users, Mail, Save, Activity } from "lucide-react";
 
-type SettingKey = "brand_name" | "brand_description" | "report_from_email" | "report_reply_to" | "report_test_email" | "task_alert_email";
+type SettingKey = "brand_name" | "brand_description" | "report_from_email" | "report_reply_to" | "report_test_email" | "task_alert_email" | "report_hour";
+// Um horário só para todos os relatórios, cedo na manhã do cliente. Vinte e
+// quatro opções por cliente eram configuração demais para uma decisão que na
+// prática é sempre "antes de o dia começar".
+const REPORT_HOURS = [6, 7, 8, 9];
 interface SettingsPayload { stored: Partial<Record<SettingKey, string>>; env: Record<SettingKey, string>; effective: Record<SettingKey, string>; }
 interface Integration { key: string; label: string; state: "ok" | "warn" | "off" | "error"; detail: string; hint?: string; }
 
@@ -165,6 +169,29 @@ export default function ConfigPage() {
             A chave da API do Resend continua só no ambiente (<code>RESEND_API_KEY</code>) — segredo não entra
             em tabela que o painel lê.
           </p>
+        </Collapsible>
+
+        <Collapsible id="envio" storageKey="config:envio" defaultOpen
+          summary={<SectionHead icon="🕗" title="Envio" hint="Quando os relatórios saem." meta={`${String(Number(draft.report_hour || settings?.env.report_hour || 8)).padStart(2, "0")}:00`} />}>
+          <div className="space-y-3">
+            <div className="max-w-xs">
+              <Field label="Horário de envio">
+                <select
+                  value={String(Number(draft.report_hour || settings?.env.report_hour || 8))}
+                  onChange={(e) => setDraft((prev) => ({ ...prev, report_hour: e.target.value }))}
+                  className="w-full h-9 px-3 text-sm rounded-lg border border-border bg-transparent outline-none focus:ring-1 focus:ring-ring"
+                >
+                  {REPORT_HOURS.map((h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
+                </select>
+              </Field>
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-relaxed max-w-3xl">
+              Vale para todos os clientes, sempre no fuso de cada um — quem está em outro fuso recebe no
+              mesmo horário local, não no seu. O <strong>dia</strong> continua sendo escolha por cliente,
+              em <Link href="/relatorios" className="underline underline-offset-2">Relatórios</Link>.
+              O horário só é respeitado quando o cron roda de hora em hora; veja Integrações abaixo.
+            </p>
+          </div>
         </Collapsible>
 
         <Collapsible id="integrations" storageKey="config:integracoes" defaultOpen
