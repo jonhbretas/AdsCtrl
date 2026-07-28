@@ -79,6 +79,7 @@ export default function CreativesPage() {
   const [focusAds, setFocusAds] = useState<Set<string>>(new Set());
   const [rejected, setRejected] = useState<RejectedAd[] | null>(null);
   const [rejectedError, setRejectedError] = useState<string | null>(null);
+  const [selectedCreative, setSelectedCreative] = useState<Creative | null>(null);
 
   useEffect(() => {
     (async () => { try { const r = await fetch("/api/accounts"); const d = await r.json(); if (r.ok) setAccounts(d.accounts || []); } catch {} })();
@@ -166,9 +167,16 @@ export default function CreativesPage() {
 
           {lab.creatives && lab.creatives.length > 0 && (
             <>
-              {/* Video Funnel + Scatter */}
+              {/* Creative Preview + Scatter */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <VideoFunnel account={lab} />
+                {selectedCreative ? (
+                  <CreativePreview creative={selectedCreative} currency={lab.currency} onClose={() => setSelectedCreative(null)} />
+                ) : (
+                  <div className="rounded-lg border border-border/50 bg-card p-4">
+                    <PanelTitle title="Preview do criativo" subtitle="Clique em um anúncio da tabela para ver o preview e funil de retenção" />
+                    <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">Nenhum criativo selecionado</div>
+                  </div>
+                )}
                 <div className="rounded-lg border border-border/50 bg-card p-4">
                   <PanelTitle title="Quadrante criativo" subtitle="Hook × outbound CTR · bolha = investimento" />
                   <div className="h-[280px]">{scatter.length < 2 ? <Empty text="Poucos vídeos com amostra para o quadrante." /> : (
@@ -219,7 +227,7 @@ export default function CreativesPage() {
                   <span className="ml-auto">Leitura automática compara anúncios do mesmo objetivo.</span>
                 </div>
 
-                <CreativeTable creatives={sorted} benchmark={benchmark} account={lab} sort={sort} onSort={setSort} focusAds={focusAds} />
+                <CreativeTable creatives={sorted} benchmark={benchmark} account={lab} sort={sort} onSort={setSort} focusAds={focusAds} onSelect={setSelectedCreative} />
               </CardContent></Card>
             </>
           )}
@@ -278,32 +286,71 @@ function MetricGuide({ currency }: { currency: string }) {
   return null;
 }
 
-function VideoFunnel({ account }: { account: LabAccount }) {
-  const c = account.creatives || [];
-  const videos = c.filter((cr) => cr.metrics.video.isVideo && cr.sampleStatus !== "no_delivery" && cr.sampleStatus !== "insufficient");
-  const avgHook = videos.length ? videos.reduce((s, cr) => s + (cr.metrics.video.hookRate || 0), 0) / videos.length : null;
-  const avgHold = videos.length ? videos.reduce((s, cr) => s + (cr.metrics.video.holdRate || 0), 0) / videos.length : null;
-  const avg25 = videos.length ? videos.reduce((s, cr) => s + (cr.metrics.video.retention25 || 0), 0) / videos.length : null;
-  const avg50 = videos.length ? videos.reduce((s, cr) => s + (cr.metrics.video.retention50 || 0), 0) / videos.length : null;
-  const avg75 = videos.length ? videos.reduce((s, cr) => s + (cr.metrics.video.retention75 || 0), 0) / videos.length : null;
-  const avgComp = videos.length ? videos.reduce((s, cr) => s + (cr.metrics.video.completionRate || 0), 0) / videos.length : null;
-  const avgWatch = videos.length ? videos.reduce((s, cr) => s + (cr.metrics.video.avgWatchTimeSeconds || 0), 0) / videos.length : null;
+function CreativePreview({ creative, currency, onClose }: { creative: Creative; currency: string; onClose: () => void }) {
+  const v = creative.metrics.video;
+  const isVideo = v.isVideo;
+  const retentionSteps = isVideo ? [
+    { label: "Hook (3s)", val: v.hookRate },
+    { label: "Hold (ThruPlay)", val: v.holdRate },
+    { label: "Retenção 25%", val: v.retention25 },
+    { label: "Retenção 50%", val: v.retention50 },
+    { label: "Retenção 75%", val: v.retention75 },
+    { label: "Completude", val: v.completionRate },
+  ] : [];
 
   return (
-    <div className="rounded-lg border border-border/50 bg-card p-4">
-      <PanelTitle title="Funil de vídeo" subtitle={`Média de ${videos.length} vídeo${videos.length === 1 ? "" : "s"} com amostra`} />
-      <div className="space-y-1.5 mt-3">
-        {videos.length === 0 ? <p className="text-sm text-muted-foreground py-4">Nenhum vídeo com amostra no período.</p> : (
-          <>
-            <FunnelStep label="Hook" value={avgHook} />
-            <FunnelStep label="Hold" value={avgHold} />
-            <FunnelStep label="Retenção 25%" value={avg25} />
-            <FunnelStep label="Retenção 50%" value={avg50} />
-            <FunnelStep label="Retenção 75%" value={avg75} />
-            <FunnelStep label="Completude" value={avgComp} />
-            {avgWatch != null && <div className="text-[11px] text-muted-foreground mt-1">Tempo médio: {avgWatch.toFixed(1)}s</div>}
-          </>
+    <div className="rounded-lg border border-border/50 bg-card overflow-hidden">
+      {/* Preview image */}
+      <div className="relative bg-muted flex items-center justify-center min-h-[200px] max-h-[320px] overflow-hidden">
+        {creative.asset.thumbnail ? (
+          <img src={creative.asset.thumbnail} alt={creative.adName} className="w-full h-full object-contain" />
+        ) : (
+          <div className="text-muted-foreground text-sm">Sem preview</div>
         )}
+        <button onClick={onClose} className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/50 text-white flex items-center justify-center hover:bg-black/70 transition-colors border-none cursor-pointer text-sm">✕</button>
+      </div>
+
+      {/* Creative info */}
+      <div className="p-4 space-y-3">
+        <div>
+          <h4 className="text-sm font-bold leading-snug">{creative.adName}</h4>
+          <div className="text-[11px] text-muted-foreground mt-0.5">{creative.campaignName} · {creative.goalLabel}</div>
+        </div>
+
+        {/* Key metrics per goal */}
+        <div className="flex flex-wrap gap-2 text-xs">
+          <span className="px-2 py-1 rounded-md bg-muted font-semibold">{money(creative.metrics.spend, currency)}</span>
+          <span className="px-2 py-1 rounded-md bg-muted font-semibold">{num(creative.metrics.impressions)} impr.</span>
+          {creative.metrics.linkCtr != null && <span className="px-2 py-1 rounded-md bg-muted font-semibold">CTR {creative.metrics.linkCtr.toFixed(2)}%</span>}
+          {creative.metrics.cpm != null && <span className="px-2 py-1 rounded-md bg-muted font-semibold">CPM {money(creative.metrics.cpm, currency)}</span>}
+          {isVideo && v.avgWatchTimeSeconds != null && <span className="px-2 py-1 rounded-md bg-muted font-semibold">{v.avgWatchTimeSeconds.toFixed(1)}s médio</span>}
+          {creative.metrics.roas != null && creative.goal === "sales" && <span className="px-2 py-1 rounded-md bg-emerald-500/10 text-emerald-500 font-semibold">ROAS {creative.metrics.roas.toFixed(2)}x</span>}
+          {creative.metrics.costPerConversion != null && <span className="px-2 py-1 rounded-md bg-muted font-semibold">CPA {money(creative.metrics.costPerConversion, currency)}</span>}
+          {creative.metrics.conversions > 0 && <span className="px-2 py-1 rounded-md bg-muted font-semibold">{num(creative.metrics.conversions)} conv.</span>}
+        </div>
+
+        {/* Retention funnel (only for video) */}
+        {isVideo && retentionSteps.length > 0 && (
+          <div>
+            <h5 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Funil de retenção</h5>
+            <div className="space-y-1.5">
+              {retentionSteps.map((s) => (
+                <div key={s.label} className="flex items-center gap-2">
+                  <span className="text-[11px] text-muted-foreground w-28 text-right shrink-0">{s.label}</span>
+                  <div className="flex-1 h-4 rounded bg-muted overflow-hidden">
+                    <div className="h-full rounded bg-gradient-to-r from-cyan-500 to-blue-500 transition-all" style={{ width: s.val != null ? `${Math.min(s.val, 100)}%` : "0%" }} />
+                  </div>
+                  <span className="text-xs font-bold w-14 text-right tabular-nums">{s.val != null ? `${s.val.toFixed(1)}%` : "—"}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Sample status */}
+        <div className="text-[10px] text-muted-foreground">
+          Amostra: {creative.sample.label} · {creative.sample.reason}
+        </div>
       </div>
     </div>
   );
@@ -321,9 +368,10 @@ function FunnelStep({ label, value }: { label: string; value: number | null }) {
   );
 }
 
-function CreativeTable({ creatives, benchmark, account, sort, onSort, focusAds }: {
+function CreativeTable({ creatives, benchmark, account, sort, onSort, focusAds, onSelect }: {
   creatives: Creative[]; benchmark: ((goal: CreativeGoal, picker: (c: Creative) => number | null) => number | null) | null;
   account: LabAccount; sort: SortState<CreativeSortKey>; onSort: (s: SortState<CreativeSortKey>) => void; focusAds: Set<string>;
+  onSelect?: (c: Creative) => void;
 }) {
   const m = (v: number) => money(v, account.currency);
   return (
@@ -348,7 +396,7 @@ function CreativeTable({ creatives, benchmark, account, sort, onSort, focusAds }
         {creatives.map((c, i) => {
           const BM = benchmark ? (picker: (cr: Creative) => number | null) => benchmark(c.goal, picker) : null;
           return (
-            <div key={c.adId || i} className={cn("grid gap-2 px-4 py-2.5 border-b border-border/30 items-center text-xs hover:bg-accent/20 transition-colors", focusAds.has(c.adId) && "bg-amber-500/5")} style={{ gridTemplateColumns: "28px 2fr 80px 80px 100px 80px 70px 70px 80px 70px 80px 80px 80px 80px 1fr" }}>
+            <div key={c.adId || i} onClick={() => onSelect?.(c)} className={cn("grid gap-2 px-4 py-2.5 border-b border-border/30 items-center text-xs hover:bg-accent/20 transition-colors cursor-pointer", focusAds.has(c.adId) && "bg-amber-500/5")} style={{ gridTemplateColumns: "28px 2fr 80px 80px 100px 80px 70px 70px 80px 70px 80px 80px 80px 80px 1fr" }}>
               <div>{c.asset.thumbnail ? <img src={c.asset.thumbnail} alt="" className="w-7 h-7 rounded object-cover" /> : <div className="w-7 h-7 rounded bg-muted" />}</div>
               <div className="min-w-0"><div className="text-sm font-semibold truncate" title={c.adName}>{c.adName}</div><div className="text-[10px] text-muted-foreground truncate">{c.campaignName} · {c.adsetName}</div></div>
               <div className="text-right tabular-nums font-medium">{m(c.metrics.spend)}</div>
