@@ -126,7 +126,7 @@ export default function CreativesPage() {
     for (const c of creativesList) counts.set(c.goal, (counts.get(c.goal) || 0) + 1);
     return GOAL_ORDER.filter((g) => counts.has(g)).map((g) => ({ goal: g, label: FALLBACK_GOAL_LABELS[g], count: counts.get(g)! }));
   }, [lab, creativesList]);
-  const scatter = useMemo(() => creativesList.filter((c) => c.mediaType === "VIDEO" && c.metrics.video.hookRate != null && c.metrics.outboundCtr != null && c.metrics.spend > 0).map((c) => ({ hook: c.metrics.video.hookRate! * 100, ctr: c.metrics.outboundCtr! * 100, spend: c.metrics.spend, name: c.adName })), [creativesList]);
+  const scatter = useMemo(() => creativesList.filter((c) => c.mediaType === "VIDEO" && c.metrics.video.hookRate != null && c.metrics.outboundCtr != null && c.metrics.spend > 0).map((c) => ({ hook: c.metrics.video.hookRate!, ctr: c.metrics.outboundCtr!, spend: c.metrics.spend, name: c.adName })), [creativesList]);
 
   const sorted = useMemo(() => {
     const val = (c: Creative) => { switch (sort.key) { case "creative": return c.adName; case "spend": return c.metrics.spend; case "impressions": return c.metrics.impressions; case "frequency": return c.metrics.frequency ?? -1; case "cpm": return c.metrics.cpm ?? -1; case "hookRate": return c.metrics.video.hookRate ?? -1; case "holdRate": return c.metrics.video.holdRate ?? -1; case "actionCtr": return c.metrics.outboundCtr ?? c.metrics.linkCtr ?? -1; case "results": return c.metrics.conversions; case "lpvRate": return c.metrics.landingPageViewRate ?? -1; case "resultRate": return c.metrics.conversionRate ?? -1; case "costPerResult": return c.metrics.costPerConversion ?? -1; case "roas": return c.metrics.roas ?? -1; case "diagnosis": return c.primaryDiagnosis ? 0 : 1; } };
@@ -314,7 +314,7 @@ function FunnelStep({ label, value }: { label: string; value: number | null }) {
     <div className="flex items-center gap-2">
       <span className="text-[11px] text-muted-foreground w-24 text-right shrink-0">{label}</span>
       <div className="flex-1 h-4 rounded bg-muted overflow-hidden">
-        <div className="h-full rounded bg-primary transition-all" style={{ width: value != null ? `${Math.min(value * 100, 100)}%` : "0%" }} />
+                <div className="h-full rounded bg-primary transition-all" style={{ width: value != null ? `${Math.min(value, 100)}%` : "0%" }} />
       </div>
       <span className="text-xs font-semibold w-12 text-right tabular-nums">{value != null ? `${(value * 100).toFixed(1)}%` : "—"}</span>
     </div>
@@ -355,12 +355,12 @@ function CreativeTable({ creatives, benchmark, account, sort, onSort, focusAds }
               <div className="text-right tabular-nums">{num(c.metrics.impressions)}</div>
               <div className="text-right tabular-nums">{c.metrics.frequency?.toFixed(2) ?? "—"}</div>
               <div className="text-right tabular-nums">{c.metrics.cpm ? m(c.metrics.cpm) : "—"}</div>
-              <Heat value={c.metrics.video.hookRate} benchmark={BM ? BM((cr) => cr.metrics.video.hookRate) : null} sample={c.sampleStatus}>{c.metrics.video.hookRate != null ? `${(c.metrics.video.hookRate * 100).toFixed(1)}%` : "—"}</Heat>
-              <Heat value={c.metrics.video.holdRate} benchmark={BM ? BM((cr) => cr.metrics.video.holdRate) : null} sample={c.sampleStatus}>{c.metrics.video.holdRate != null ? `${(c.metrics.video.holdRate * 100).toFixed(1)}%` : "—"}</Heat>
-              <Heat value={c.metrics.outboundCtr} benchmark={BM ? BM((cr) => cr.metrics.outboundCtr) : null} sample={c.sampleStatus}>{c.metrics.outboundCtr != null ? `${(c.metrics.outboundCtr * 100).toFixed(2)}%` : c.metrics.linkCtr != null ? `${(c.metrics.linkCtr * 100).toFixed(2)}%` : "—"}</Heat>
+              <Heat value={c.metrics.video.hookRate} benchmark={BM ? BM((cr) => cr.metrics.video.hookRate) : null} sample={c.sampleStatus}>{c.metrics.video.hookRate != null ? `${c.metrics.video.hookRate.toFixed(1)}%` : "—"}</Heat>
+              <Heat value={c.metrics.video.holdRate} benchmark={BM ? BM((cr) => cr.metrics.video.holdRate) : null} sample={c.sampleStatus}>{c.metrics.video.holdRate != null ? `${c.metrics.video.holdRate.toFixed(1)}%` : "—"}</Heat>
+              <Heat value={c.metrics.outboundCtr} benchmark={BM ? BM((cr) => cr.metrics.outboundCtr) : null} sample={c.sampleStatus}>{c.metrics.outboundCtr != null ? `${c.metrics.outboundCtr.toFixed(2)}%` : c.metrics.linkCtr != null ? `${c.metrics.linkCtr.toFixed(2)}%` : "—"}</Heat>
               <div className="text-right tabular-nums font-medium">{num(c.metrics.conversions)}</div>
-              <Heat value={c.metrics.landingPageViewRate} benchmark={BM ? BM((cr) => cr.metrics.landingPageViewRate) : null} sample={c.sampleStatus}>{c.metrics.landingPageViewRate != null ? `${(c.metrics.landingPageViewRate * 100).toFixed(1)}%` : "—"}</Heat>
-              <Heat value={c.metrics.conversionRate} benchmark={BM ? BM((cr) => cr.metrics.conversionRate) : null} sample={c.sampleStatus} invert>{c.metrics.conversionRate != null ? `${(c.metrics.conversionRate * 100).toFixed(2)}%` : "—"}</Heat>
+              <Heat value={c.metrics.landingPageViewRate} benchmark={BM ? BM((cr) => cr.metrics.landingPageViewRate) : null} sample={c.sampleStatus}>{c.metrics.landingPageViewRate != null ? `${c.metrics.landingPageViewRate.toFixed(1)}%` : "—"}</Heat>
+              <Heat value={c.metrics.conversionRate} benchmark={BM ? BM((cr) => cr.metrics.conversionRate) : null} sample={c.sampleStatus} invert>{c.metrics.conversionRate != null ? `${c.metrics.conversionRate.toFixed(2)}%` : "—"}</Heat>
               <Heat value={c.metrics.costPerConversion} benchmark={BM ? BM((cr) => cr.metrics.costPerConversion) : null} sample={c.sampleStatus} invert>{c.metrics.costPerConversion != null ? m(c.metrics.costPerConversion) : "—"}</Heat>
               <Heat value={hasApplicableRoas(c) ? c.metrics.roas : null} benchmark={BM ? BM((cr) => cr.metrics.roas) : null} sample={c.sampleStatus}>{hasApplicableRoas(c) && c.metrics.roas != null ? `${c.metrics.roas.toFixed(2)}x` : "—"}</Heat>
               <Diagnosis diagnosis={c.primaryDiagnosis} sample={c.sample} />
