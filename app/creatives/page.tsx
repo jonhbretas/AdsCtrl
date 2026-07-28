@@ -424,16 +424,16 @@ function Empty({ text }: { text: string }) {
   return <p className="text-sm text-muted-foreground text-center py-8">{text}</p>;
 }
 
-// Métricas relevantes por objetivo — cada coluna só aparece se fizer sentido.
+// Métricas relevantes por objetivo — cada célula só mostra valor quando faz sentido.
 function isRelevant(goal: CreativeGoal, metric: string): boolean {
   switch (goal) {
     case "sales": return !["messageRate", "costPerMessage", "engagementRate"].includes(metric);
-    case "messages": return !["roas", "landingPageViewRate", "conversionRate", "costPerConversion", "hookRate", "holdRate"].includes(metric);
-    case "leads": return !["roas", "messageRate", "costPerMessage", "hookRate", "holdRate", "engagementRate"].includes(metric);
-    case "traffic": return !["roas", "conversionRate", "costPerConversion", "messageRate", "costPerMessage", "hookRate", "holdRate", "landingPageViewRate", "engagementRate"].includes(metric);
+    case "messages": return !["roas", "landingPageViewRate", "conversionRate", "costPerConversion"].includes(metric);
+    case "leads": return !["roas", "messageRate", "costPerMessage", "engagementRate"].includes(metric);
+    case "traffic": return !["roas", "conversionRate", "costPerConversion", "messageRate", "costPerMessage", "landingPageViewRate"].includes(metric);
     case "engagement": return !["roas", "conversionRate", "costPerConversion", "landingPageViewRate", "messageRate", "costPerMessage"].includes(metric);
-    case "awareness": return !["roas", "conversionRate", "costPerConversion", "landingPageViewRate", "messageRate", "costPerMessage", "hookRate", "holdRate", "outboundCtr"].includes(metric);
-    case "app": return !["roas", "landingPageViewRate", "hookRate", "holdRate", "messageRate", "costPerMessage", "engagementRate"].includes(metric);
+    case "awareness": return !["roas", "conversionRate", "costPerConversion", "landingPageViewRate", "messageRate", "costPerMessage", "outboundCtr"].includes(metric);
+    case "app": return !["roas", "landingPageViewRate", "messageRate", "costPerMessage", "engagementRate"].includes(metric);
     default: return true;
   }
 }
