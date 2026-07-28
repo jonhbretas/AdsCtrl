@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext } from "react";
-import { Bar, BarChart, CartesianGrid, ComposedChart, Line, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, ComposedChart, Line, Tooltip, XAxis, YAxis, Area, AreaChart, Pie, PieChart, Cell, Legend } from "recharts";
 import BrandMark from "@/components/BrandMark";
 import { money, moneyShort, num, pct, dayLabel, resultLabel, pickVal, delta, PURCHASE_KEYS, ATC_KEYS, CHECKOUT_KEYS, LINKCLICK_KEYS, RESULT_FAMILY_BY_SLUG } from "@/lib/format";
 

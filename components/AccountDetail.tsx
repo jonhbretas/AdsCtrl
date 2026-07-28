@@ -601,16 +601,42 @@ export default function AccountDetail({
                     <Td accent>{num(res)}</Td><Td>{res ? formatMoney(r.spend / res) : "—"}</Td>
                     <Td>{rv > 0 && r.spend > 0 ? `${(rv / r.spend).toFixed(2)}x` : "—"}</Td>
                     {platform === "meta" && tab === "campaigns" && (
-                      <td style={{ padding: "10px 14px", textAlign: "right" }}>
-                        <button
-                          className="ec-btn"
-                          data-variant="ghost"
-                          data-size="sm"
-                          onClick={() => setDuplicating({ id: r.id, name: r.name })}
-                          title="Copiar campanha e conjuntos para outra conta de anúncios"
-                        >
-                          ⧉ Duplicar
-                        </button>
+                      <td style={{ padding: "10px 14px", textAlign: "right", whiteSpace: "nowrap" }}>
+                        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                          <button className="ec-btn" data-variant="ghost" data-size="sm"
+                            onClick={async () => {
+                              try {
+                                const res = await fetch("/api/account/budget", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ account_id: accountId, level: "campaign", id: r.id, percentual: 0.7 }),
+                                });
+                                const d = await res.json();
+                                if (d.ok) alert(`Orçamento reduzido em ${d.percentual}% (${formatMoney(d.anterior)} → ${formatMoney(d.atual)})`);
+                                else alert(d.error || "Falha ao reduzir.");
+                              } catch {}
+                            }}
+                            title="Reduzir orçamento em 30%"
+                            style={{ color: "#ef4444", fontSize: 10 }}>-30%</button>
+                          <button className="ec-btn" data-variant="ghost" data-size="sm"
+                            onClick={async () => {
+                              try {
+                                const res = await fetch("/api/account/budget", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ account_id: accountId, level: "campaign", id: r.id, percentual: 1.3 }),
+                                });
+                                const d = await res.json();
+                                if (d.ok) alert(`Orçamento aumentado em ${d.percentual}% (${formatMoney(d.anterior)} → ${formatMoney(d.atual)})`);
+                                else alert(d.error || "Falha ao aumentar.");
+                              } catch {}
+                            }}
+                            title="Aumentar orçamento em 30%"
+                            style={{ color: "#22c55e", fontSize: 10 }}>+30%</button>
+                          <button className="ec-btn" data-variant="ghost" data-size="sm"
+                            onClick={() => setDuplicating({ id: r.id, name: r.name })}
+                            title="Copiar campanha e conjuntos para outra conta de anúncios">⧉</button>
+                        </div>
                       </td>
                     )}
                   </tr>
