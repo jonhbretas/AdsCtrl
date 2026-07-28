@@ -1,29 +1,22 @@
 "use client";
 
-// app/c/[token]/page.tsx
-// Painel do cliente: métricas ao vivo por período e a lista dos relatórios
-// semanais já enviados. Sem login e sem navegação — o link é a única porta,
-// e ele abre só este cliente.
-
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import { Download, ChevronRight, Calendar, RefreshCw } from "lucide-react";
 import ReportDocument, { ReportPayload } from "@/components/ReportDocument";
 import BrandMark from "@/components/BrandMark";
 import { ModeToggle, useReadingMode } from "@/components/ReadingMode";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 interface HistoryItem {
-  since: string;
-  until: string;
-  sent_at: string;
-  url: string;
+  since: string; until: string; sent_at: string; url: string;
 }
 interface DashboardPayload {
   client: { name: string };
-  period: string;
-  period_label: string;
+  period: string; period_label: string;
   range: { since: string; until: string };
-  cached: boolean;
-  fetched_at: string;
+  cached: boolean; fetched_at: string;
   report: ReportPayload;
   reports: HistoryItem[];
   error?: string;
@@ -36,10 +29,7 @@ const PERIODS: { key: string; label: string }[] = [
   { key: "mtd", label: "Mês atual" },
 ];
 
-const brDate = (iso: string) => {
-  const [y, m, d] = iso.split("-");
-  return `${d}/${m}/${y}`;
-};
+const brDate = (iso: string) => { const [y, m, d] = iso.split("-"); return `${d}/${m}/${y}`; };
 
 export default function ClientDashboardPage() {
   const params = useParams<{ token: string }>();
@@ -52,29 +42,17 @@ export default function ClientDashboardPage() {
 
   useEffect(() => {
     let alive = true;
-    setLoading(true);
-    setError(null);
+    setLoading(true); setError(null);
     fetch(`/api/dashboard/public?token=${encodeURIComponent(token)}&period=${period}`, { cache: "no-store" })
-      .then(async (r) => {
-        const text = await r.text();
-        const payload = text ? JSON.parse(text) : {};
-        if (!r.ok || payload.error) throw new Error(payload.error || `Falha (HTTP ${r.status}).`);
-        return payload as DashboardPayload;
-      })
-      .then((payload) => alive && setData(payload))
+      .then(async (r) => { const t = await r.text(); const p = t ? JSON.parse(t) : {}; if (!r.ok || p.error) throw new Error(p.error || `Falha (HTTP ${r.status}).`); return p as DashboardPayload; })
+      .then((p) => alive && setData(p))
       .catch((e) => alive && setError(e?.message ?? "Erro ao abrir o painel."))
       .finally(() => alive && setLoading(false));
-    return () => {
-      alive = false;
-    };
+    return () => { alive = false; };
   }, [token, period]);
 
   return (
-    <div style={{ background: "#f4f5f7", minHeight: "100vh", padding: "22px 16px 60px" }}>
-      {/* O documento tem largura de A4 (700px) e não encolhe — é o mesmo
-          desenho que sai na impressão. Em tela estreita ele rola DENTRO do
-          cartão; sem isso, vaza para fora e corta o conteúdo à direita.
-          Na impressão o recorte precisa sumir, ou a página sai cortada. */}
+    <div className="min-h-screen" style={{ backgroundColor: "var(--color-background)" }}>
       <style>{`
         .page-shell { overflow-x: auto; }
         @media print {
@@ -84,82 +62,51 @@ export default function ClientDashboardPage() {
         }
       `}</style>
 
-      <div className="no-print" style={{ maxWidth: 740, margin: "0 auto 14px", display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
+      {/* Header */}
+      <div className="no-print max-w-[740px] mx-auto px-4 pt-5 pb-0 flex items-center gap-2.5 flex-wrap">
         <BrandMark size={24} />
-        <span style={{ fontSize: 13, fontWeight: 700, color: "#12161f" }}>
-          {data?.client.name ?? "Painel do cliente"}
-        </span>
-        <span style={{ fontSize: 12, color: "#8a919e" }}>· métricas de mídia paga</span>
-        <span style={{ flex: 1 }} />
+        <span className="text-sm font-bold text-foreground">{data?.client.name ?? "Painel do cliente"}</span>
+        <span className="text-xs text-muted-foreground">· métricas de mídia paga</span>
+        <div className="flex-1" />
         <ModeToggle compact={compact} onChange={choose} />
-        <button
-          onClick={printDocument}
-          disabled={loading || !!error}
-          title="O PDF sai sempre no formato de documento"
-          style={{
-            padding: "7px 14px",
-            borderRadius: 9,
-            border: "none",
-            background: loading || error ? "#c9ccd3" : "#12161f",
-            color: "#fff",
-            fontSize: 12.5,
-            fontWeight: 650,
-            cursor: loading || error ? "default" : "pointer",
-          }}
-        >
-          ⤓ Salvar em PDF
+        <button onClick={printDocument} disabled={loading || !!error}
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold border-none cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-default"
+          style={{ backgroundColor: "var(--color-foreground)", color: "var(--color-background)" }}>
+          <Download className="h-3.5 w-3.5" /> Salvar em PDF
         </button>
       </div>
 
-      <div className="no-print" style={{ maxWidth: 740, margin: "0 auto 14px", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-        {PERIODS.map((option) => (
-          <button
-            key={option.key}
-            onClick={() => setPeriod(option.key)}
-            style={{
-              padding: "6px 13px",
-              borderRadius: 999,
-              border: `1px solid ${period === option.key ? "#12161f" : "#e2e4e9"}`,
-              background: period === option.key ? "#12161f" : "#fff",
-              color: period === option.key ? "#fff" : "#5c6373",
-              fontSize: 12,
-              fontWeight: 650,
-              cursor: "pointer",
-            }}
-          >
-            {option.label}
+      {/* Period selector */}
+      <div className="no-print max-w-[740px] mx-auto px-4 pt-3 pb-0 flex items-center gap-1.5 flex-wrap">
+        {PERIODS.map((opt) => (
+          <button key={opt.key} onClick={() => setPeriod(opt.key)}
+            className={cn("px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors cursor-pointer",
+              period === opt.key ? "border-foreground bg-foreground text-background" : "border-border text-muted-foreground hover:text-foreground bg-transparent"
+            )}>
+            {opt.label}
           </button>
         ))}
         {data && (
-          <span style={{ fontSize: 11, color: "#9aa1ad", marginLeft: 4 }}>
+          <span className="text-[11px] text-muted-foreground ml-2">
             {brDate(data.range.since)} a {brDate(data.range.until)}
-            {" · atualizado "}
+            {" · "}
             {new Date(data.fetched_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
           </span>
         )}
       </div>
 
-      <div
-        ref={shellRef}
-        className="page-shell"
-        style={{
-          maxWidth: 740,
-          margin: "0 auto",
-          background: "#fff",
-          borderRadius: 14,
-          // Empilhado, cada pixel de margem é conteúdo perdido.
-          padding: compact ? "16px 12px" : "26px 20px",
-          boxShadow: "0 1px 3px rgba(16,24,40,.08), 0 12px 32px rgba(16,24,40,.06)",
-        }}
-      >
+      {/* Document shell */}
+      <div ref={shellRef} className="page-shell max-w-[740px] mx-auto mt-3 mb-6 rounded-xl shadow-lg"
+        style={{ background: "var(--color-card)", padding: compact ? "16px 12px" : "26px 20px" }}>
         {loading && (
-          <div style={{ padding: 60, textAlign: "center", color: "#8a919e", fontSize: 14 }}>
-            Carregando as métricas…
+          <div className="py-16 text-center">
+            <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-3 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">Carregando as métricas…</p>
           </div>
         )}
         {error && (
-          <div style={{ padding: 24 }}>
-            <div style={{ background: "#fdf0ef", border: "1px solid #f0cfcc", color: "#a3372f", padding: "12px 14px", borderRadius: 10, fontSize: 13 }}>
+          <div className="p-4">
+            <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-red-500/20 bg-red-500/10 text-sm text-red-500">
               {error}
             </div>
           </div>
@@ -167,49 +114,25 @@ export default function ClientDashboardPage() {
         {data && !loading && <ReportDocument data={data.report} compact={compact} width={docWidth} />}
       </div>
 
+      {/* Historical reports */}
       {data && data.reports.length > 0 && (
-        <div
-          className="no-print"
-          style={{
-            maxWidth: 740,
-            margin: "16px auto 0",
-            background: "#fff",
-            borderRadius: 14,
-            padding: "18px 20px",
-            border: "1px solid #e7e9ef",
-          }}
-        >
-          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.5, textTransform: "uppercase", color: "#7c8493", marginBottom: 10 }}>
-            Relatórios semanais anteriores
-          </div>
-          <div style={{ display: "grid", gap: 6 }}>
-            {data.reports.map((item) => (
-              <a
-                key={`${item.since}-${item.until}`}
-                href={item.url}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  padding: "9px 11px",
-                  borderRadius: 9,
-                  border: "1px solid #eceef3",
-                  background: "#fcfcfd",
-                  textDecoration: "none",
-                  color: "#12161f",
-                  fontSize: 12.5,
-                }}
-              >
-                <span style={{ fontWeight: 650 }}>
-                  {brDate(item.since)} a {brDate(item.until)}
-                </span>
-                <span style={{ flex: 1 }} />
-                <span style={{ fontSize: 11, color: "#8a919e" }}>
-                  enviado em {new Date(item.sent_at).toLocaleDateString("pt-BR")}
-                </span>
-                <span style={{ color: "#2f6fe4", fontWeight: 650 }}>abrir →</span>
-              </a>
-            ))}
+        <div className="no-print max-w-[740px] mx-auto px-4 pb-10">
+          <div className="rounded-xl border border-border/50 bg-card p-5">
+            <h3 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-3">
+              Relatórios semanais anteriores
+            </h3>
+            <div className="space-y-1.5">
+              {data.reports.map((item) => (
+                <a key={`${item.since}-${item.until}`} href={item.url}
+                  className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-border/50 bg-muted/20 hover:bg-accent transition-colors no-underline group">
+                  <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="text-xs font-semibold text-foreground">{brDate(item.since)} a {brDate(item.until)}</span>
+                  <span className="flex-1" />
+                  <span className="text-[11px] text-muted-foreground">enviado em {new Date(item.sent_at).toLocaleDateString("pt-BR")}</span>
+                  <ChevronRight className="h-3.5 w-3.5 text-primary group-hover:translate-x-0.5 transition-transform" />
+                </a>
+              ))}
+            </div>
           </div>
         </div>
       )}
