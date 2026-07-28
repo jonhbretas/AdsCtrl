@@ -355,14 +355,14 @@ function CreativeTable({ creatives, benchmark, account, sort, onSort, focusAds }
               <div className="text-right tabular-nums">{num(c.metrics.impressions)}</div>
               <div className="text-right tabular-nums">{c.metrics.frequency?.toFixed(2) ?? "—"}</div>
               <div className="text-right tabular-nums">{c.metrics.cpm ? m(c.metrics.cpm) : "—"}</div>
-              <Heat value={c.metrics.video.hookRate} benchmark={BM ? BM((cr) => cr.metrics.video.hookRate) : null} sample={c.sampleStatus}>{c.metrics.video.hookRate != null ? `${c.metrics.video.hookRate.toFixed(1)}%` : "—"}</Heat>
-              <Heat value={c.metrics.video.holdRate} benchmark={BM ? BM((cr) => cr.metrics.video.holdRate) : null} sample={c.sampleStatus}>{c.metrics.video.holdRate != null ? `${c.metrics.video.holdRate.toFixed(1)}%` : "—"}</Heat>
+              <Heat value={isRelevant(c.goal, "hookRate") && c.metrics.video.hookRate != null ? c.metrics.video.hookRate : null} benchmark={BM ? BM((cr) => cr.metrics.video.hookRate) : null} sample={c.sampleStatus}>{c.metrics.video.hookRate != null && c.metrics.video.isVideo ? `${c.metrics.video.hookRate.toFixed(1)}%` : "—"}</Heat>
+              <Heat value={isRelevant(c.goal, "holdRate") && c.metrics.video.holdRate != null ? c.metrics.video.holdRate : null} benchmark={BM ? BM((cr) => cr.metrics.video.holdRate) : null} sample={c.sampleStatus}>{c.metrics.video.holdRate != null && c.metrics.video.isVideo ? `${c.metrics.video.holdRate.toFixed(1)}%` : "—"}</Heat>
               <Heat value={c.metrics.outboundCtr} benchmark={BM ? BM((cr) => cr.metrics.outboundCtr) : null} sample={c.sampleStatus}>{c.metrics.outboundCtr != null ? `${c.metrics.outboundCtr.toFixed(2)}%` : c.metrics.linkCtr != null ? `${c.metrics.linkCtr.toFixed(2)}%` : "—"}</Heat>
-              <div className="text-right tabular-nums font-medium">{num(c.metrics.conversions)}</div>
-              <Heat value={c.metrics.landingPageViewRate} benchmark={BM ? BM((cr) => cr.metrics.landingPageViewRate) : null} sample={c.sampleStatus}>{c.metrics.landingPageViewRate != null ? `${c.metrics.landingPageViewRate.toFixed(1)}%` : "—"}</Heat>
-              <Heat value={c.metrics.conversionRate} benchmark={BM ? BM((cr) => cr.metrics.conversionRate) : null} sample={c.sampleStatus} invert>{c.metrics.conversionRate != null ? `${c.metrics.conversionRate.toFixed(2)}%` : "—"}</Heat>
-              <Heat value={c.metrics.costPerConversion} benchmark={BM ? BM((cr) => cr.metrics.costPerConversion) : null} sample={c.sampleStatus} invert>{c.metrics.costPerConversion != null ? m(c.metrics.costPerConversion) : "—"}</Heat>
-              <Heat value={hasApplicableRoas(c) ? c.metrics.roas : null} benchmark={BM ? BM((cr) => cr.metrics.roas) : null} sample={c.sampleStatus}>{hasApplicableRoas(c) && c.metrics.roas != null ? `${c.metrics.roas.toFixed(2)}x` : "—"}</Heat>
+              <div className="text-right tabular-nums font-medium">{isRelevant(c.goal, "conversions") ? num(c.metrics.conversions) : "—"}</div>
+              <Heat value={isRelevant(c.goal, "landingPageViewRate") ? c.metrics.landingPageViewRate : null} benchmark={BM ? BM((cr) => cr.metrics.landingPageViewRate) : null} sample={c.sampleStatus}>{isRelevant(c.goal, "landingPageViewRate") && c.metrics.landingPageViewRate != null ? `${c.metrics.landingPageViewRate.toFixed(1)}%` : "—"}</Heat>
+              <Heat value={isRelevant(c.goal, "conversionRate") ? c.metrics.conversionRate : null} benchmark={BM ? BM((cr) => cr.metrics.conversionRate) : null} sample={c.sampleStatus} invert>{isRelevant(c.goal, "conversionRate") && c.metrics.conversionRate != null ? `${c.metrics.conversionRate.toFixed(2)}%` : "—"}</Heat>
+              <Heat value={isRelevant(c.goal, "costPerConversion") ? c.metrics.costPerConversion : null} benchmark={BM ? BM((cr) => cr.metrics.costPerConversion) : null} sample={c.sampleStatus} invert>{isRelevant(c.goal, "costPerConversion") && c.metrics.costPerConversion != null ? m(c.metrics.costPerConversion) : "—"}</Heat>
+              <Heat value={isRelevant(c.goal, "roas") && hasApplicableRoas(c) ? c.metrics.roas : null} benchmark={BM ? BM((cr) => cr.metrics.roas) : null} sample={c.sampleStatus}>{isRelevant(c.goal, "roas") && hasApplicableRoas(c) && c.metrics.roas != null ? `${c.metrics.roas.toFixed(2)}x` : "—"}</Heat>
               <Diagnosis diagnosis={c.primaryDiagnosis} sample={c.sample} />
             </div>
           );
@@ -422,4 +422,18 @@ function Toggle({ active, onClick, children }: { active: boolean; onClick: () =>
 
 function Empty({ text }: { text: string }) {
   return <p className="text-sm text-muted-foreground text-center py-8">{text}</p>;
+}
+
+// Métricas relevantes por objetivo — cada coluna só aparece se fizer sentido.
+function isRelevant(goal: CreativeGoal, metric: string): boolean {
+  switch (goal) {
+    case "sales": return !["messageRate", "costPerMessage", "engagementRate"].includes(metric);
+    case "messages": return !["roas", "landingPageViewRate", "conversionRate", "costPerConversion", "hookRate", "holdRate"].includes(metric);
+    case "leads": return !["roas", "messageRate", "costPerMessage", "hookRate", "holdRate", "engagementRate"].includes(metric);
+    case "traffic": return !["roas", "conversionRate", "costPerConversion", "messageRate", "costPerMessage", "hookRate", "holdRate", "landingPageViewRate", "engagementRate"].includes(metric);
+    case "engagement": return !["roas", "conversionRate", "costPerConversion", "landingPageViewRate", "messageRate", "costPerMessage"].includes(metric);
+    case "awareness": return !["roas", "conversionRate", "costPerConversion", "landingPageViewRate", "messageRate", "costPerMessage", "hookRate", "holdRate", "outboundCtr"].includes(metric);
+    case "app": return !["roas", "landingPageViewRate", "hookRate", "holdRate", "messageRate", "costPerMessage", "engagementRate"].includes(metric);
+    default: return true;
+  }
 }
