@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Lock, LogIn, AlertCircle } from "lucide-react";
 
 type LoginFormProps = {
   configured: boolean;
@@ -41,31 +42,33 @@ export default function LoginForm({ configured, nextPath }: LoginFormProps) {
   }
 
   return (
-    <form onSubmit={submit} style={{ display: "grid", gap: 18 }}>
-      <div>
-        <label htmlFor="dashboard-password" className="ec-login__label">
+    <form onSubmit={submit} className="space-y-4">
+      <div className="space-y-1.5">
+        <label htmlFor="dashboard-password" className="text-sm font-medium text-white/80">
           Senha do dashboard
         </label>
-        {/* 16px de fonte não é estética: abaixo disso o Safari no iPhone dá
-            zoom automático ao focar o campo. */}
-        <input
-          id="dashboard-password"
-          name="password"
-          type="password"
-          autoComplete="current-password"
-          autoFocus={configured}
-          disabled={!configured || submitting}
-          required
-          aria-invalid={error ? true : undefined}
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          className="ec-input ec-login__input"
-          data-error={error ? "true" : undefined}
-        />
+        <div className="relative">
+          <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
+          <input
+            id="dashboard-password"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            autoFocus={configured}
+            disabled={!configured || submitting}
+            required
+            aria-invalid={error ? true : undefined}
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            className="w-full h-11 pl-10 pr-3 rounded-xl border border-white/10 bg-white/5 text-white text-base placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-cyan-400/40 focus:border-cyan-400/60 transition-colors disabled:opacity-50"
+            placeholder="Digite sua senha"
+          />
+        </div>
       </div>
 
       {error && (
-        <div role="alert" className="ec-notice" data-tone="danger">
+        <div role="alert" className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-red-500/20 bg-red-500/10 text-sm text-red-400">
+          <AlertCircle className="h-4 w-4 shrink-0" />
           {error}
         </div>
       )}
@@ -73,11 +76,19 @@ export default function LoginForm({ configured, nextPath }: LoginFormProps) {
       <button
         type="submit"
         disabled={!configured || submitting}
-        className="ec-btn ec-btn--full ec-login__submit"
-        data-variant="primary"
-        data-size="md"
+        className="w-full h-11 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-semibold text-sm hover:from-cyan-400 hover:to-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2 border-none cursor-pointer shadow-lg shadow-cyan-500/20"
       >
-        {submitting ? "Entrando…" : "Entrar"}
+        {submitting ? (
+          <span className="flex items-center gap-2">
+            <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            Entrando…
+          </span>
+        ) : (
+          <span className="flex items-center gap-2">
+            <LogIn className="h-4 w-4" />
+            Entrar
+          </span>
+        )}
       </button>
     </form>
   );

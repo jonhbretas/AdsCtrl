@@ -1,29 +1,35 @@
 "use client";
 
-// components/ui/index.tsx
-// Primitivos do painel interno (identidade Ectolab).
-//
-// Por que existem: o sistema tinha 274 cores hex distintas em estilo inline, o
-// que também significava zero :hover e zero :focus-visible. Aqui os estados
-// vivem em CSS de verdade, e a cor vem sempre de token — não de literal.
-//
-// As páginas /r e /c (que o CLIENTE abre) NÃO usam estes componentes: elas
-// seguem a marca Assertivus.
+// components/ui/index.tsx — shadcn-based rewrite of the old Ectolab UI.
+// All old pages import from here. Now they get modern shadcn components.
 
 import React from "react";
+import { cn } from "@/lib/utils";
+import { Button as ShadButton } from "@/components/ui/button";
+import { Badge as ShadBadge } from "@/components/ui/badge";
+import { Card as ShadCard, CardContent as ShadCardContent } from "@/components/ui/card";
 
-/* ---------------------------------------------------------------- Button ---
-   Três níveis, e a diferença entre eles é intencionalmente grande:
-   primary domina, secondary acompanha, ghost desaparece. Destrutivo é
-   vermelho e nunca é o primário de uma tela. */
 type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 type ButtonSize = "sm" | "md";
+
+const variantMap: Record<ButtonVariant, "default" | "secondary" | "ghost" | "destructive"> = {
+  primary: "default",
+  secondary: "secondary",
+  ghost: "ghost",
+  danger: "destructive",
+};
+
+const sizeMap: Record<ButtonSize, "default" | "sm"> = {
+  sm: "sm",
+  md: "default",
+};
 
 export function Button({
   variant = "secondary",
   size = "md",
   full,
   children,
+  className,
   ...rest
 }: {
   variant?: ButtonVariant;
@@ -31,20 +37,17 @@ export function Button({
   full?: boolean;
 } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
-    <button
-      {...rest}
-      data-variant={variant}
-      data-size={size}
-      className={`ec-btn${full ? " ec-btn--full" : ""}${rest.className ? ` ${rest.className}` : ""}`}
+    <ShadButton
+      {...(rest as any)}
+      variant={variantMap[variant]}
+      size={sizeMap[size]}
+      className={cn(full && "w-full", className)}
     >
       {children}
-    </button>
+    </ShadButton>
   );
 }
 
-/* ------------------------------------------------------------------ Card ---
-   Superfície opaca de propósito: vidro em card de conteúdo custa desempenho e
-   atrapalha a leitura de número. `tone` pinta apenas a borda esquerda. */
 export function Card({
   children,
   tone,
@@ -56,22 +59,28 @@ export function Card({
   children: React.ReactNode;
   tone?: "neutral" | "brand" | "accent" | "ok" | "warn" | "danger";
   padded?: boolean;
-  /** Elemento a renderizar — "article"/"section" quando o card é conteúdo
-      autônomo, para o leitor de tela não ver só uma pilha de div. */
   as?: "div" | "article" | "section" | "li";
 } & React.HTMLAttributes<HTMLElement>) {
   return (
-    <Tag
-      {...rest}
-      data-tone={tone || "neutral"}
-      className={`ec-card${padded ? " ec-card--padded" : ""}${className ? ` ${className}` : ""}`}
+    <ShadCard
+      {...(rest as any)}
+      className={cn(className)}
+      as={Tag as any}
     >
-      {children}
-    </Tag>
+      {padded ? <ShadCardContent className="p-4 sm:p-6">{children}</ShadCardContent> : children}
+    </ShadCard>
   );
 }
 
-/* ----------------------------------------------------------------- Badge --- */
+const badgeToneMap: Record<string, "default" | "secondary" | "destructive" | "success" | "warning" | "info"> = {
+  neutral: "secondary",
+  brand: "info",
+  accent: "info",
+  ok: "success",
+  warn: "warning",
+  danger: "destructive",
+};
+
 export function Badge({
   children,
   tone = "neutral",
@@ -82,15 +91,12 @@ export function Badge({
   title?: string;
 }) {
   return (
-    <span className="ec-badge" data-tone={tone} title={title}>
+    <ShadBadge variant={badgeToneMap[tone] || "secondary"} title={title}>
       {children}
-    </span>
+    </ShadBadge>
   );
 }
 
-/* ------------------------------------------------------------ PageHeader ---
-   Um plano dominante por tela: título, uma linha de contexto e a ação
-   principal à direita. */
 export function PageHeader({
   title,
   subtitle,
@@ -103,53 +109,47 @@ export function PageHeader({
   meta?: React.ReactNode;
 }) {
   return (
-    <header className="ec-pagehead">
-      <div className="ec-pagehead__text">
-        <h1>{title}</h1>
-        {subtitle && <p>{subtitle}</p>}
-        {meta && <div className="ec-pagehead__meta">{meta}</div>}
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+      <div className="min-w-0">
+        <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
+        {subtitle && <p className="text-sm text-muted-foreground mt-0.5">{subtitle}</p>}
+        {meta && <div className="flex flex-wrap gap-2 mt-2">{meta}</div>}
       </div>
-      {actions && <div className="ec-pagehead__actions">{actions}</div>}
-    </header>
-  );
-}
-
-/* ------------------------------------------------------- WideScreenHint ---
-   Criativos e Raio-X comparam 11 e 13 colunas: o valor delas está em ver tudo
-   lado a lado, e nenhuma reorganização faz isso caber em 390px. Em vez de
-   fingir que cabe, a tela avisa — e diz que a tabela rola de lado, porque
-   muita gente simplesmente não descobre que rola. Só aparece no celular. */
-export function WideScreenHint({ children }: { children?: React.ReactNode }) {
-  return (
-    <p className="ec-widehint">
-      {children || "Esta tela compara muitas colunas ao mesmo tempo — as tabelas rolam para o lado. No computador ela fica bem mais confortável."}
-    </p>
-  );
-}
-
-/* -------------------------------------------------------------- Skeleton ---
-   Substitui a frase "Carregando…", que fazia o layout saltar quando os dados
-   chegavam. O esqueleto ocupa o espaço final desde o primeiro quadro. */
-export function Skeleton({ h = 14, w = "100%", radius }: { h?: number; w?: number | string; radius?: number }) {
-  return <span className="ec-skeleton" style={{ display: "block", height: h, width: w, borderRadius: radius }} />;
-}
-
-export function SkeletonCard({ lines = 3 }: { lines?: number }) {
-  return (
-    <div className="ec-card ec-card--padded" aria-busy="true" aria-live="polite">
-      <Skeleton h={11} w="38%" />
-      <div style={{ height: 12 }} />
-      {Array.from({ length: lines }).map((_, i) => (
-        <div key={i} style={{ marginBottom: 8 }}>
-          <Skeleton h={13} w={i === lines - 1 ? "62%" : "100%"} />
-        </div>
-      ))}
+      {actions && <div className="flex items-center gap-2 flex-wrap shrink-0">{actions}</div>}
     </div>
   );
 }
 
-/* ------------------------------------------------------------ EmptyState ---
-   Estado vazio que diz o que fazer em seguida, em vez de só "sem dados". */
+export function WideScreenHint({ children }: { children?: React.ReactNode }) {
+  return (
+    <div className="md:hidden mb-4 px-3 py-2.5 rounded-lg border border-border/50 bg-muted/30 text-xs text-muted-foreground leading-relaxed">
+      {children || "Esta tela compara muitas colunas ao mesmo tempo — as tabelas rolam para o lado. No computador fica mais confortável."}
+    </div>
+  );
+}
+
+export function Skeleton({ h = 14, w = "100%", radius }: { h?: number; w?: number | string; radius?: number }) {
+  return (
+    <div
+      className="animate-pulse rounded-md bg-muted"
+      style={{ height: h, width: w as any, borderRadius: radius }}
+    />
+  );
+}
+
+export function SkeletonCard({ lines = 3 }: { lines?: number }) {
+  return (
+    <ShadCard aria-busy="true" aria-live="polite">
+      <ShadCardContent className="p-4 space-y-3">
+        <Skeleton h={11} w="38%" />
+        {Array.from({ length: lines }).map((_, i) => (
+          <Skeleton key={i} h={13} w={i === lines - 1 ? "62%" : "100%"} />
+        ))}
+      </ShadCardContent>
+    </ShadCard>
+  );
+}
+
 export function EmptyState({
   icon,
   title,
@@ -162,18 +162,15 @@ export function EmptyState({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="ec-empty">
-      {icon && <div className="ec-empty__icon" aria-hidden="true">{icon}</div>}
-      <p className="ec-empty__title">{title}</p>
-      {hint && <p className="ec-empty__hint">{hint}</p>}
-      {action && <div style={{ marginTop: 12 }}>{action}</div>}
+    <div className="text-center py-8 px-4 text-muted-foreground">
+      {icon && <div className="text-2xl mb-2 opacity-50">{icon}</div>}
+      <p className="text-sm font-semibold text-foreground mb-1">{title}</p>
+      {hint && <p className="text-xs max-w-[42ch] mx-auto leading-relaxed">{hint}</p>}
+      {action && <div className="mt-3">{action}</div>}
     </div>
   );
 }
 
-/* ---------------------------------------------------------------- Notice ---
-   Mensagem de erro/sucesso no fluxo. role="status" para leitor de tela
-   anunciar sem roubar o foco. */
 export function Notice({
   tone = "danger",
   children,
@@ -183,11 +180,17 @@ export function Notice({
   children: React.ReactNode;
   onDismiss?: () => void;
 }) {
+  const colors: Record<string, string> = {
+    ok: "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400",
+    warn: "bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400",
+    danger: "bg-red-500/10 border-red-500/20 text-red-600 dark:text-red-400",
+    brand: "bg-sky-500/10 border-sky-500/20 text-sky-600 dark:text-sky-400",
+  };
   return (
-    <div className="ec-notice" data-tone={tone} role="status">
-      <span>{children}</span>
+    <div className={`flex items-start gap-2 px-3 py-2.5 rounded-lg border text-sm ${colors[tone] || colors.danger}`} role="status">
+      <span className="flex-1">{children}</span>
       {onDismiss && (
-        <button onClick={onDismiss} className="ec-notice__x" aria-label="Fechar aviso">
+        <button onClick={onDismiss} className="text-current opacity-60 hover:opacity-100 bg-transparent border-none cursor-pointer p-0 text-sm" aria-label="Fechar">
           ✕
         </button>
       )}
@@ -195,7 +198,6 @@ export function Notice({
   );
 }
 
-/* ----------------------------------------------------------------- Field --- */
 export function Field({
   label,
   hint,
@@ -208,34 +210,46 @@ export function Field({
   htmlFor?: string;
 }) {
   return (
-    <label className="ec-field" htmlFor={htmlFor}>
-      <span className="ec-field__label">{label}</span>
+    <div className="grid gap-1.5 min-w-0">
+      <label htmlFor={htmlFor} className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        {label}
+      </label>
       {children}
-      {hint && <span className="ec-field__hint">{hint}</span>}
-    </label>
+      {hint && <span className="text-[11.5px] text-muted-foreground">{hint}</span>}
+    </div>
   );
 }
 
 export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
   function Input(props, ref) {
-    return <input ref={ref} {...props} className={`ec-input${props.className ? ` ${props.className}` : ""}`} />;
+    return (
+      <input
+        ref={ref}
+        {...props}
+        className={cn(
+          "flex h-9 w-full rounded-lg border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+          props.className
+        )}
+      />
+    );
   }
 );
 
 export const Select = React.forwardRef<HTMLSelectElement, React.SelectHTMLAttributes<HTMLSelectElement>>(
   function Select(props, ref) {
-    return <select ref={ref} {...props} className={`ec-input${props.className ? ` ${props.className}` : ""}`} />;
+    return (
+      <select
+        ref={ref}
+        {...props}
+        className={cn(
+          "flex h-9 w-full rounded-lg border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+          props.className
+        )}
+      />
+    );
   }
 );
 
-/* ----------------------------------------------------------- Collapsible ---
-   Painel que só MONTA o conteúdo quando aberto.
-
-   A diferença em relação ao <details> nativo importa aqui: com <details>, o
-   React renderiza os filhos mesmo fechado — o navegador só os esconde. Como o
-   conteúdo destes painéis busca dados no efeito de montagem, um cliente
-   expandido disparava as consultas de TODAS as contas vinculadas de uma vez,
-   fechadas ou não. Montando sob demanda, só paga quem abre. */
 export function Collapsible({
   id,
   summary,
@@ -244,76 +258,88 @@ export function Collapsible({
   tone,
   storageKey,
 }: {
-  /** Âncora da seção. Um link com #id abre a seção ao chegar. */
   id?: string;
   summary: React.ReactNode;
   children: React.ReactNode;
   defaultOpen?: boolean;
   tone?: "brand" | "neutral";
-  /** Guarda aberto/fechado entre visitas. Sem isto, toda visita recomeça. */
   storageKey?: string;
 }) {
   const [open, setOpen] = React.useState(defaultOpen);
-  const ref = React.useRef<HTMLElement>(null);
+  const ref = React.useRef<HTMLDivElement>(null);
 
-  // localStorage e location só depois de montar: ler durante o render quebra
-  // a hidratação, porque o servidor não tem como saber o que ficou aberto.
   React.useEffect(() => {
-    // A âncora vence o que estava guardado: quem clicou num link para esta
-    // seção quer vê-la aberta, não descobrir um cabeçalho fechado.
-    const openFromHash = () => {
-      if (!id || window.location.hash !== `#${id}`) return false;
-      setOpen(true);
-      // O navegador já tentou rolar antes de a seção existir no DOM.
-      window.requestAnimationFrame(() => ref.current?.scrollIntoView({ block: "start" }));
-      return true;
-    };
-    // Ir de /admin para /admin#clients é navegação no MESMO documento: o React
-    // não remonta e só o evento de hash avisa. Sem escutá-lo, um link para a
-    // seção não abre nada quando já se está na página.
-    window.addEventListener("hashchange", openFromHash);
-    const cleanup = () => window.removeEventListener("hashchange", openFromHash);
+    if (!id) return;
+    if (window.location.hash === `#${id}`) { setOpen(true); setTimeout(() => ref.current?.scrollIntoView({ block: "start" }), 0); }
+    const handler = () => { if (window.location.hash === `#${id}`) setOpen(true); };
+    window.addEventListener("hashchange", handler);
+    return () => window.removeEventListener("hashchange", handler);
+  }, [id]);
 
-    if (openFromHash()) return cleanup;
-    if (!storageKey) return cleanup;
+  React.useEffect(() => {
+    if (!storageKey) return;
     try {
-      const saved = window.localStorage.getItem(`ec-collapse:${storageKey}`);
+      const saved = localStorage.getItem(`ec-collapse:${storageKey}`);
       if (saved === "1" || saved === "0") setOpen(saved === "1");
-    } catch {
-      /* modo privado ou storage cheio: fica no padrão */
-    }
-    return cleanup;
-  }, [id, storageKey]);
+    } catch {}
+  }, [storageKey]);
 
   function toggle() {
-    setOpen((wasOpen) => {
-      const next = !wasOpen;
-      if (storageKey) {
-        try {
-          window.localStorage.setItem(`ec-collapse:${storageKey}`, next ? "1" : "0");
-        } catch {
-          /* idem */
-        }
-      }
+    setOpen((v) => {
+      const next = !v;
+      if (storageKey) { try { localStorage.setItem(`ec-collapse:${storageKey}`, next ? "1" : "0"); } catch {} }
       return next;
     });
   }
 
   return (
-    <section id={id} ref={ref} className="ec-collapse" data-open={open ? "true" : undefined} data-tone={tone}>
-      <button className="ec-collapse__head" onClick={toggle} aria-expanded={open}>
-        <span className="ec-collapse__summary">{summary}</span>
-        <span className="ec-collapse__chevron" aria-hidden="true">{open ? "▲" : "▼"}</span>
+    <div id={id} ref={ref} className="rounded-lg border border-border/50 overflow-hidden bg-card">
+      <button
+        onClick={toggle}
+        aria-expanded={open}
+        className="flex items-center gap-3 w-full px-4 py-3 text-left bg-muted/10 hover:bg-accent/20 transition-colors cursor-pointer border-none"
+      >
+        <span className="flex-1 flex items-center gap-3 flex-wrap min-w-0">{summary}</span>
+        <span className="text-muted-foreground text-xs shrink-0">{open ? "▲" : "▼"}</span>
       </button>
-      {open && <div className="ec-collapse__body">{children}</div>}
-    </section>
+      {open && <div className="px-4 py-3 border-t border-border/30">{children}</div>}
+    </div>
   );
 }
 
-/* ------------------------------------------------------------------ Menu ---
-   Botão que abre uma lista de ações. Existe para o caso em que a ação é uma
-   só mas o alvo varia (sincronizar Meta, Google ou as duas): três botões
-   lado a lado pesariam mais na tela do que a escolha merece. */
+export function Segmented<T extends string | number>({
+  value,
+  options,
+  onChange,
+  label,
+}: {
+  value: T;
+  options: { value: T; label: string; title?: string }[];
+  onChange: (value: T) => void;
+  label?: string;
+}) {
+  return (
+    <div className="inline-flex p-0.5 rounded-lg bg-muted/50 border border-border/50 gap-0.5" role="group" aria-label={label}>
+      {options.map((option) => (
+        <button
+          key={String(option.value)}
+          onClick={() => onChange(option.value)}
+          aria-pressed={option.value === value}
+          title={option.title}
+          className={cn(
+            "px-3 py-1.5 text-xs font-medium rounded-md transition-colors border-none cursor-pointer",
+            option.value === value
+              ? "bg-background text-foreground shadow-sm"
+              : "bg-transparent text-muted-foreground hover:text-foreground"
+          )}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function Menu({
   label,
   items,
@@ -330,118 +356,35 @@ export function Menu({
   title?: string;
 }) {
   const [open, setOpen] = React.useState(false);
-  const [dropUp, setDropUp] = React.useState(false);
-  const ref = React.useRef<HTMLDivElement>(null);
-  const listRef = React.useRef<HTMLDivElement>(null);
 
-  // Numa tabela dentro de .ec-scroll-x, o menu da última linha era recortado
-  // pelo contêiner: medido, sobravam 81px do lado de fora e a segunda opção
-  // sumia. Quando não cabe embaixo e cabe em cima, ele inverte.
-  // useLayoutEffect e não useEffect: medir e corrigir antes de pintar, senão
-  // o menu aparece no lugar errado por um quadro.
-  React.useLayoutEffect(() => {
-    if (!open) {
-      setDropUp(false);
-      return;
-    }
-    const list = listRef.current;
-    const anchor = ref.current;
-    if (!list || !anchor) return;
-
-    let limit = window.innerHeight;
-    for (let el = anchor.parentElement; el; el = el.parentElement) {
-      const style = window.getComputedStyle(el);
-      if (/auto|scroll|hidden/.test(style.overflowX + style.overflowY)) {
-        limit = Math.min(limit, el.getBoundingClientRect().bottom);
-        break;
-      }
-    }
-    const listBox = list.getBoundingClientRect();
-    const anchorBox = anchor.getBoundingClientRect();
-    const naoCabeEmbaixo = listBox.bottom > limit;
-    const cabeEmCima = anchorBox.top - listBox.height > 0;
-    setDropUp(naoCabeEmbaixo && cabeEmCima);
-  }, [open]);
-
-  // Sem isto o menu fica aberto atrás do próximo clique — e o usuário não
-  // tem para onde clicar para desistir.
   React.useEffect(() => {
     if (!open) return;
-    const onDown = (event: MouseEvent) => {
-      if (!ref.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const onKey = (event: KeyboardEvent) => event.key === "Escape" && setOpen(false);
+    const onDown = (e: MouseEvent) => { if (!(e.target as HTMLElement).closest('[data-menu]')) setOpen(false); };
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
+    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
   }, [open]);
 
   return (
-    <div className="ec-menu" ref={ref}>
-      <Button
-        variant={variant}
-        size={size}
-        disabled={disabled}
-        title={title}
-        aria-expanded={open}
-        aria-haspopup="menu"
-        onClick={() => setOpen((v) => !v)}
-      >
-        {label} <span aria-hidden="true" style={{ fontSize: "0.8em" }}>▾</span>
+    <div className="relative inline-flex" data-menu>
+      <Button variant={variant} size={size} disabled={disabled} title={title} onClick={() => setOpen((v) => !v)}>
+        {label} <span className="text-[0.8em]">▾</span>
       </Button>
       {open && (
-        <div className="ec-menu__list" role="menu" ref={listRef} data-drop={dropUp ? "up" : undefined}>
-          {items.map((item, index) => (
+        <div className="absolute top-full right-0 mt-1.5 z-40 min-w-[180px] p-1 rounded-xl border border-border/50 bg-popover shadow-lg">
+          {items.map((item, i) => (
             <button
-              key={index}
-              type="button"
-              role="menuitem"
-              className="ec-menu__item"
-              onClick={() => {
-                setOpen(false);
-                item.onSelect();
-              }}
+              key={i}
+              className="flex flex-col items-start w-full px-2.5 py-2 rounded-lg text-sm text-left hover:bg-accent hover:text-accent-foreground transition-colors bg-transparent border-none cursor-pointer"
+              onClick={() => { setOpen(false); item.onSelect(); }}
             >
               <span>{item.label}</span>
-              {item.hint && <small>{item.hint}</small>}
+              {item.hint && <span className="text-[11px] text-muted-foreground font-normal">{item.hint}</span>}
             </button>
           ))}
         </div>
       )}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------ SegmentedControl ---
-   Substitui as fileiras de "chips" que hoje se repetem em cada tela com
-   estilo próprio. Um só componente, um só comportamento de teclado. */
-export function Segmented<T extends string | number>({
-  value,
-  options,
-  onChange,
-  label,
-}: {
-  value: T;
-  options: { value: T; label: string; title?: string }[];
-  onChange: (value: T) => void;
-  label?: string;
-}) {
-  return (
-    <div className="ec-seg" role="group" aria-label={label}>
-      {options.map((option) => (
-        <button
-          key={String(option.value)}
-          onClick={() => onChange(option.value)}
-          data-active={option.value === value ? "true" : undefined}
-          aria-pressed={option.value === value}
-          title={option.title}
-        >
-          {option.label}
-        </button>
-      ))}
     </div>
   );
 }

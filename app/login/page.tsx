@@ -35,46 +35,43 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const localBypass = mayBypassAuthInDevelopment(hostname) && !configuration.configured;
 
   return (
-    <main className="ec-login ec-mesh">
-      <section style={{ width: "100%", maxWidth: 420 }}>
-        <div className="ec-login__brand">
-          {/* O mesmo símbolo do app, em vez de uma letra em caixa azul: é a
-              primeira tela que se vê e precisa ser a mesma marca. */}
+    <main className="min-h-screen flex items-center justify-center p-5 bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950">
+      <section className="w-full max-w-sm">
+        <div className="flex items-center gap-3 mb-6">
           <BrandMark size={40} />
           <div>
-            <div className="ec-login__name">Assertivus Dash</div>
-            <div className="ec-login__tagline">Cockpit de performance em mídia paga</div>
+            <div className="text-lg font-semibold text-white">Assertivus Dash</div>
+            <div className="text-xs text-white/60">Cockpit de performance em mídia paga</div>
           </div>
         </div>
 
-        <div className="ec-login__card">
-          <h1 className="ec-login__title">Acesse seu painel</h1>
-          <p className="ec-login__sub">Área privada para gestão das suas contas de mídia.</p>
+        <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl p-7 shadow-2xl">
+          <h1 className="text-2xl font-bold text-white mb-1">Acesse seu painel</h1>
+          <p className="text-sm text-white/60 mb-6">Área privada para gestão das suas contas de mídia.</p>
 
           {!configuration.configured && (
             <div
               role="alert"
-              className="ec-notice"
-              data-tone="warn"
-              style={{ marginBottom: 20, display: "block" }}
+              className="flex items-start gap-2 px-3 py-2.5 rounded-lg border border-amber-500/20 bg-amber-500/10 text-sm text-amber-400 mb-5"
             >
-              <strong>Configuração necessária.</strong>
-              <div style={{ marginTop: 5 }}>
-                Adicione <code>DASHBOARD_PASSWORD</code> e <code>SESSION_SECRET</code> nas variáveis
-                de ambiente da Vercel e faça um novo deploy.
+              <div>
+                <strong className="font-semibold">Configuração necessária.</strong>
+                <div className="mt-1 text-xs text-amber-400/80">
+                  Adicione <code className="text-amber-300">DASHBOARD_PASSWORD</code> e <code className="text-amber-300">SESSION_SECRET</code> nas variáveis de ambiente da Vercel e faça um novo deploy.
+                </div>
+                {localBypass && (
+                  <a href="/" className="inline-block mt-2 text-sm font-semibold text-cyan-400 hover:text-cyan-300">
+                    Continuar no ambiente local
+                  </a>
+                )}
               </div>
-              {localBypass && (
-                <a href="/" style={{ display: "inline-block", marginTop: 8, color: "var(--brand-700)", fontWeight: 700 }}>
-                  Continuar no ambiente local
-                </a>
-              )}
             </div>
           )}
 
           <LoginForm configured={configuration.configured} nextPath={nextPath} />
         </div>
 
-        <p className="ec-login__foot">Sessão privada protegida por cookie seguro.</p>
+        <p className="text-xs text-white/40 text-center mt-5">Sessão privada protegida por cookie seguro.</p>
       </section>
     </main>
   );
