@@ -756,52 +756,8 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Main area: Alerts + Table */}
-      <div className="grid grid-cols-1 xl:grid-cols-[320px_1fr] gap-4">
-        {/* Alerts */}
-        <div className="space-y-3">
-          <div className="flex items-center gap-1.5 p-1 rounded-lg bg-muted/50 border border-border/50 w-fit">
-            <button onClick={() => setAlertTab("active")} className={cn("px-3 py-1.5 text-xs font-medium rounded-md transition-colors", alertTab === "active" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground")}>
-              Ativos {visibleAlerts.length > 0 && <span className="ml-1 text-primary font-bold">({visibleAlerts.length})</span>}
-            </button>
-            <button onClick={() => setAlertTab("history")} className={cn("px-3 py-1.5 text-xs font-medium rounded-md transition-colors", alertTab === "history" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground")}>
-              Histórico
-            </button>
-          </div>
-
-          <div className="space-y-2 max-h-[65vh] overflow-y-auto pr-1">
-            {alertTab === "active" && (
-              <>
-                {visibleAlerts.length === 0 && (
-                  <div className="text-sm text-muted-foreground text-center py-8">Nenhum alerta ativo</div>
-                )}
-                {visibleAlerts.map((a) => (
-                  <AlertCard
-                    key={a.id}
-                    alert={a}
-                    onAck={() => setAck(a.id, true)}
-                    acking={acking === a.id}
-                  />
-                ))}
-              </>
-            )}
-            {alertTab === "history" && (
-              <>
-                {historyLoading && <div className="text-sm text-muted-foreground text-center py-8">Carregando…</div>}
-                {!historyLoading && visibleHistory.length === 0 && <div className="text-sm text-muted-foreground text-center py-8">Sem histórico.</div>}
-                {!historyLoading && visibleHistory.map((a) => (
-                  <HistoryCard
-                    key={a.id}
-                    alert={a}
-                    onReopen={a.acknowledged && !a.resolved ? () => setAck(a.id, false) : undefined}
-                    acking={acking === a.id}
-                  />
-                ))}
-              </>
-            )}
-          </div>
-        </div>
-
+      {/* Main area: Table only */}
+      <div>
         {/* Table */}
         <Card className="min-w-0 overflow-hidden">
           <div className="overflow-x-auto">

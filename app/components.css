@@ -423,6 +423,37 @@
   padding: 1rem;
   background: rgba(0, 0, 0, 0.4);
 }
+.ec-modal__panel {
+  width: min(620px, 100%);
+  max-height: min(88vh, 820px);
+  display: flex;
+  flex-direction: column;
+  background: var(--color-card, #fff);
+  border-radius: var(--radius, 0.75rem);
+  box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+  overflow: hidden;
+}
+.ec-modal__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1rem;
+  border-bottom: 1px solid var(--color-border, #e2e8f0);
+}
+.ec-modal__body {
+  padding: 1rem;
+  overflow-y: auto;
+  display: grid;
+  gap: 0.75rem;
+}
+.ec-modal__foot {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--color-border, #e2e8f0);
+  background: var(--color-muted, #f8fafc);
+}
 
 /* Acknowledge label */
 .ec-ack { cursor: pointer; }

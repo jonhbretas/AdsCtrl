@@ -11,6 +11,12 @@ import {
   BarChart,
   Bar,
   Line,
+  Area,
+  AreaChart,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
   XAxis,
   YAxis,
   Tooltip,
@@ -610,9 +616,9 @@ export default function AccountDetail({
                           <button className="ec-btn" data-variant="ghost" data-size="sm"
                             onClick={() => { setBudgetModal({ id: r.id, name: r.name }); setBudgetPct("30"); setBudgetDir("up"); }}
                             title="Ajustar orçamento da campanha">Orçamento</button>
-                          <button className="ec-btn" data-variant="ghost" data-size="sm"
+                          <button className="ec-btn" data-variant="secondary" data-size="sm"
                             onClick={() => setDuplicating({ id: r.id, name: r.name })}
-                            title="Copiar campanha e conjuntos para outra conta de anúncios">⧉</button>
+                            title="Copiar campanha e conjuntos para outra conta de anúncios">⧉ Duplicar</button>
                         </div>
                       </td>
                     )}
@@ -636,40 +642,67 @@ export default function AccountDetail({
       {/* TERMOS DE BUSCA (Google, campanhas de Pesquisa) */}
       {platform === "google" && <SearchTerms terms={data.searchTerms} currency={currency} accountId={accountId} />}
 
-      {/* OBJETIVOS */}
-      <SectionTitle>Detalhamento dos objetivos</SectionTitle>
+      {/* VISÃO GERAL — funil + gasto diário + resultado x CPM */}
+      <SectionTitle>Funil de performance</SectionTitle>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 24 }}>
-        <ChartCard height={220} title="Investimento por objetivo">
+        <ChartCard height={220} title="Distribuição por objetivo">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={byObjective} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
-              <XAxis type="number" tickFormatter={(v) => formatMoneyShort(v)} tick={{ fontSize: 11, fill: "#999" }} axisLine={false} tickLine={false} />
-              <YAxis type="category" dataKey="objective" width={130} tick={{ fontSize: 11, fill: "#666" }} axisLine={false} tickLine={false} />
-              <Tooltip formatter={(v: any) => formatMoney(Number(v))} />
-              <Bar dataKey="spend" fill={TEAL} radius={[0, 4, 4, 0]} maxBarSize={28} />
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+              <XAxis type="number" tickFormatter={(v) => formatMoneyShort(v)} tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
+              <YAxis type="category" dataKey="objective" width={130} tick={{ fontSize: 10, fill: "#64748b" }} axisLine={false} tickLine={false} />
+              <Tooltip formatter={(v: any) => formatMoney(Number(v))} contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0" }} />
+              <Bar dataKey="spend" fill="#06b6d4" radius={[0, 4, 4, 0]} maxBarSize={28} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
-        <ChartCard height={220} title="Resultados por dia">
+        <ChartCard height={220} title="Investimento diário">
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={data.daily.map((d) => ({ label: dayLabel(d.date), res: resultOf(d), cpm: d.cpm }))} margin={{ top: 10, right: 8, left: 8, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eee" />
-              <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#999" }} tickLine={false} axisLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: "#999" }} tickLine={false} axisLine={false} width={36} />
-              <Tooltip />
-              <Bar dataKey="res" name="Resultados" fill="#bfe6e0" radius={[4, 4, 0, 0]} maxBarSize={40} />
-              <Line type="monotone" dataKey="cpm" name="CPM" stroke={TEAL} strokeWidth={2} dot={false} />
+            <AreaChart data={data.daily.map((d) => ({ label: dayLabel(d.date), spend: d.spend }))} margin={{ top: 4, right: 8, left: 8, bottom: 0 }}>
+              <defs>
+                <linearGradient id="spendGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#06b6d4" stopOpacity={0.3} /><stop offset="100%" stopColor="#06b6d4" stopOpacity={0} /></linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+              <XAxis dataKey="label" tick={{ fontSize: 10, fill: "#94a3b8" }} tickLine={false} axisLine={false} />
+              <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} tickLine={false} axisLine={false} width={48} tickFormatter={(v) => formatMoneyShort(v)} />
+              <Tooltip formatter={(v: any) => formatMoney(Number(v))} contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0" }} />
+              <Area type="monotone" dataKey="spend" name="Investimento" stroke="#06b6d4" strokeWidth={2} fill="url(#spendGrad)" dot={false} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </ChartCard>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 24 }}>
+        <ChartCard height={200} title="Alcance diário">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={data.daily.map((d) => ({ label: dayLabel(d.date), reach: d.reach }))} margin={{ top: 4, right: 8, left: 8, bottom: 0 }}>
+              <defs>
+                <linearGradient id="reachGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#10b981" stopOpacity={0.3} /><stop offset="100%" stopColor="#10b981" stopOpacity={0} /></linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+              <XAxis dataKey="label" tick={{ fontSize: 10, fill: "#94a3b8" }} tickLine={false} axisLine={false} />
+              <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} tickLine={false} axisLine={false} width={36} tickFormatter={(v) => num(v)} />
+              <Tooltip formatter={(v: any) => num(Number(v))} contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0" }} />
+              <Area type="monotone" dataKey="reach" name="Alcance" stroke="#10b981" strokeWidth={2} fill="url(#reachGrad)" dot={false} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </ChartCard>
+        <ChartCard height={200} title="Cliques + CTR">
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={data.daily.map((d) => ({ label: dayLabel(d.date), clicks: d.clicks, ctr: d.ctr }))} margin={{ top: 4, right: 8, left: 8, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+              <XAxis dataKey="label" tick={{ fontSize: 10, fill: "#94a3b8" }} tickLine={false} axisLine={false} />
+              <YAxis yAxisId="l" tick={{ fontSize: 10, fill: "#94a3b8" }} tickLine={false} axisLine={false} width={36} tickFormatter={(v) => num(v)} />
+              <YAxis yAxisId="r" orientation="right" tick={{ fontSize: 10, fill: "#94a3b8" }} tickLine={false} axisLine={false} width={28} tickFormatter={(v) => `${v.toFixed(1)}%`} />
+              <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0" }} />
+              <Bar yAxisId="l" dataKey="clicks" name="Cliques" fill="#06b6d4" radius={[3, 3, 0, 0]} maxBarSize={24} />
+              <Line yAxisId="r" type="monotone" dataKey="ctr" name="CTR" stroke="#f59e0b" strokeWidth={2} dot={false} />
+              <Legend wrapperStyle={{ fontSize: 10 }} />
             </ComposedChart>
           </ResponsiveContainer>
         </ChartCard>
       </div>
 
-      {/* DEMOGRÁFICOS + DISPOSITIVO
-          Cinco dos seis cartões vinham escritos "Sem dados para o período" em
-          conta Google — e vão continuar vindo, porque a API do Google Ads não
-          entrega estes recortes por esta via (lib/google-ads.ts devolve
-          breakdowns vazios de propósito). Cartão vazio não é informação: ocupa
-          metade da tela e some com o que tem dado. Agora só entra o recorte
-          que tem número, e o rodapé diz o que ficou de fora e por quê. */}
+      {/* SEGMENTAÇÕES — gráficos profissionais tipo Meta Business Manager */}
       {segments.withData.length > 0 && (
         <>
           <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "8px 0 12px" }}>
@@ -680,17 +713,69 @@ export default function AccountDetail({
               {(Object.keys(METRIC_LABELS) as MetricKey[]).map((m) => <option key={m} value={m}>{METRIC_LABELS[m]}</option>)}
             </select>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))", gap: 12, marginBottom: 12 }}>
-            {segments.withData.map((segment) => (
-              <DemoCard
-                key={segment.title}
-                title={segment.title}
-                rows={segment.rows}
-                metric={demoMetric}
-                metricOf={metricOf}
-                fmt={fmtMetric}
-              />
-            ))}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 340px), 1fr))", gap: 12, marginBottom: 12 }}>
+            {segments.withData.map((segment) => {
+              const rows = segment.rows.filter((r) => metricOf(r, demoMetric) > 0);
+              const data = rows.map((r) => ({ name: r.key, primary: metricOf(r, demoMetric), secondary: (r as any).reach || (r as any).impressions || 0 }));
+              const maxVal = Math.max(...data.map((d) => d.primary), 1);
+              const isPie = segment.title === "PLATAFORMA" || segment.title === "DISPOSITIVO";
+              const isAgeGender = segment.title === "IDADE E GÊNERO";
+
+              if (isPie && data.length <= 6) {
+                const COLORS = ["#06b6d4", "#10b981", "#f59e0b", "#8b5cf6", "#ef4444", "#3b82f6"];
+                return (
+                  <div key={segment.title} style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: 14 }}>
+                    <h4 style={{ fontSize: 11, fontWeight: 700, color: "#64748b", letterSpacing: 0.4, textTransform: "uppercase", marginBottom: 8 }}>{segment.title.replace("_", " ")}</h4>
+                    <ResponsiveContainer width="100%" height={180}>
+                      <PieChart>
+                        <Pie data={data} dataKey="primary" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={75} paddingAngle={2}>
+                          {data.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                        </Pie>
+                        <Tooltip formatter={(v: any) => fmtMetric(Number(v), demoMetric)} contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0" }} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px", marginTop: 6, justifyContent: "center", fontSize: 10, color: "#64748b" }}>
+                      {data.map((d, i) => <span key={d.name} style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 8, height: 8, borderRadius: "50%", background: COLORS[i % COLORS.length] }} />{d.name}</span>)}
+                    </div>
+                  </div>
+                );
+              }
+
+              if (isAgeGender) {
+                return (
+                  <div key={segment.title} style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: 14 }}>
+                    <h4 style={{ fontSize: 11, fontWeight: 700, color: "#64748b", letterSpacing: 0.4, textTransform: "uppercase", marginBottom: 8 }}>{segment.title.replace("_", " ")}</h4>
+                    <ResponsiveContainer width="100%" height={200}>
+                      <BarChart data={data} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis dataKey="name" tick={{ fontSize: 9, fill: "#94a3b8" }} tickLine={false} axisLine={false} />
+                        <YAxis tick={{ fontSize: 9, fill: "#94a3b8" }} tickLine={false} axisLine={false} width={40} tickFormatter={(v) => num(v)} />
+                        <Tooltip formatter={(v: any) => fmtMetric(Number(v), demoMetric)} contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0" }} />
+                        <Bar dataKey="primary" name={METRIC_LABELS[demoMetric]} fill="#06b6d4" radius={[3, 3, 0, 0]} maxBarSize={24} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                );
+              }
+
+              // Default: horizontal bar chart
+              return (
+                <div key={segment.title} style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: 14 }}>
+                  <h4 style={{ fontSize: 11, fontWeight: 700, color: "#64748b", letterSpacing: 0.4, textTransform: "uppercase", marginBottom: 8 }}>{segment.title.replace("_", " ")}</h4>
+                  <div style={{ display: "grid", gap: 4 }}>
+                    {data.slice(0, 8).map((d) => (
+                      <div key={d.name} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ width: 80, fontSize: 10, color: "#333", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "right" }}>{d.name}</span>
+                        <div style={{ flex: 1, height: 12, background: "#f1f5f9", borderRadius: 4, overflow: "hidden" }}>
+                          <div style={{ width: `${Math.max((d.primary / maxVal) * 100, 2)}%`, height: "100%", borderRadius: 4, background: demoMetric === "spend" || demoMetric === "cpr" ? "#06b6d4" : "#10b981" }} />
+                        </div>
+                        <span style={{ width: 60, fontSize: 10, fontWeight: 600, color: "#333", textAlign: "right" }}>{fmtMetric(d.primary, demoMetric)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
           {segments.empty.length > 0 && (
             <p style={{ fontSize: 11.5, color: "var(--text-muted)", margin: "0 0 16px", lineHeight: 1.5 }}>
@@ -703,16 +788,18 @@ export default function AccountDetail({
         </>
       )}
 
-      {/* POR HORA — só quando existe hora. Em conta Google o eixo vinha vazio. */}
-      {data.breakdowns.hour.some((h) => metricOf(h, demoMetric) > 0) && (
-        <ChartCard height={200} title="Por hora do dia">
+      {/* POR HORA — impressões e alcance lado a lado */}
+      {data.breakdowns.hour.some((h) => (h as any).impressions > 0) && (
+        <ChartCard height={220} title="Impressões × Alcance por hora">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data.breakdowns.hour.map((h) => ({ label: h.key, v: metricOf(h, demoMetric) }))} margin={{ top: 6, right: 8, left: 8, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eee" />
-              <XAxis dataKey="label" tick={{ fontSize: 10, fill: "#999" }} tickLine={false} axisLine={false} interval={1} />
-              <YAxis tick={{ fontSize: 11, fill: "#999" }} tickLine={false} axisLine={false} width={48} tickFormatter={(v) => (demoMetric === "spend" || demoMetric === "cpm" || demoMetric === "cpr" ? formatMoneyShort(v) : num(v))} />
-              <Tooltip formatter={(v: any) => fmtMetric(Number(v), demoMetric)} />
-              <Bar dataKey="v" fill={ACCENT} radius={[3, 3, 0, 0]} maxBarSize={22} />
+            <BarChart data={data.breakdowns.hour.map((h) => ({ label: `${h.key}h`, impressions: (h as any).impressions || 0, reach: (h as any).reach || 0 }))} margin={{ top: 6, right: 8, left: 8, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+              <XAxis dataKey="label" tick={{ fontSize: 10, fill: "#94a3b8" }} tickLine={false} axisLine={false} interval={2} />
+              <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} tickLine={false} axisLine={false} width={44} tickFormatter={(v) => num(v)} />
+              <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0" }} />
+              <Bar dataKey="impressions" name="Impressões" fill="#06b6d4" radius={[3, 3, 0, 0]} maxBarSize={16} />
+              <Bar dataKey="reach" name="Alcance" fill="#10b981" radius={[3, 3, 0, 0]} maxBarSize={16} />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
