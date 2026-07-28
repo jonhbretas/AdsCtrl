@@ -157,13 +157,25 @@ function checkLinks(): Integration {
 
 function checkCron(): Integration {
   const configured = Boolean((process.env.CRON_SECRET || "").trim());
+  if (!configured) {
+    return {
+      key: "cron",
+      label: "Rotinas automáticas",
+      state: "warn",
+      detail: "CRON_SECRET ausente — o cron da Vercel será barrado pelo middleware.",
+    };
+  }
+  const hourly = (process.env.REPORT_CRON_HOURLY || "").trim() === "1";
   return {
     key: "cron",
     label: "Rotinas automáticas",
-    state: configured ? "ok" : "warn",
-    detail: configured
-      ? "Coleta diária 10h UTC · relatórios de hora em hora (cada cliente no dia e hora dele)."
-      : "CRON_SECRET ausente — o cron da Vercel será barrado pelo middleware.",
+    state: "ok",
+    detail: hourly
+      ? "Coleta diária 10h UTC · relatórios de hora em hora, cada cliente no dia e na hora dele."
+      : "Coleta diária 10h UTC · relatórios no cron semanal: vale o dia de cada cliente, o horário é ignorado.",
+    hint: hourly
+      ? undefined
+      : "Para o horário valer, mude vercel.json para \"0 * * * *\" (exige plano com cron horário) e defina REPORT_CRON_HOURLY=1.",
   };
 }
 

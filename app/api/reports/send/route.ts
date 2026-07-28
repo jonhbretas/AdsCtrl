@@ -75,14 +75,23 @@ function localNow(timezone: string | null): { weekday: number; hour: number } {
   return { weekday, hour: Number.isFinite(hour) ? hour % 24 : 11 };
 }
 
-// A janela é a hora cheia combinada. O cron roda de hora em hora, então cada
-// combinação dia+hora acontece uma vez por semana — e o registro em
-// report_sends impede repetir se o cron disparar duas vezes na mesma hora.
+// A hora só pode ser cobrada quando o cron passa de hora em hora. No plano
+// Hobby da Vercel ele roda uma vez por dia: exigir a hora cheia ali faria
+// nenhum cliente casar e nada seria enviado. Por isso o dia sempre vale e a
+// hora só entra com REPORT_CRON_HOURLY=1, que é quem liga o cron horário.
+function hourlyCronEnabled(): boolean {
+  return (process.env.REPORT_CRON_HOURLY || "").trim() === "1";
+}
+
+// O registro em report_sends impede repetir se o cron disparar duas vezes
+// dentro da mesma janela.
 function isScheduledNow(client: any): boolean {
   const { weekday, hour } = localNow(client.timezone);
   const wanted = Number.isInteger(client.report_weekday) ? client.report_weekday : 1;
+  if (weekday !== wanted) return false;
+  if (!hourlyCronEnabled()) return true;
   const wantedHour = Number.isInteger(client.report_hour) ? client.report_hour : 11;
-  return weekday === wanted && hour === wantedHour;
+  return hour === wantedHour;
 }
 
 export async function GET(req: Request) {

@@ -161,15 +161,17 @@ CPM, frequência, hook, hold, outbound CTR, CVR, CPA, ROAS, funil de retenção,
 quadrante e diagnósticos relativos à mediana da conta.
 
 ### Relatório semanal
-O cron roda de hora em hora e envia para cada cliente com `report_enabled =
-true` no dia e na hora configurados em `/relatorios`, avaliados no fuso do
-próprio cliente (padrão: segunda, 11h). Período já enviado não repete e conta
-sem investimento é pulada. Use `/api/reports/send?dry=1` para testar — o teste
-vai para o e-mail de teste da Config, nunca para o cliente.
+Envia para cada cliente com `report_enabled = true` no dia configurado em
+`/relatorios`, avaliado no fuso do próprio cliente (padrão: segunda). Período
+já enviado não repete e conta sem investimento é pulada. Use
+`/api/reports/send?dry=1` para testar — o teste vai para o e-mail de teste da
+Config, nunca para o cliente.
 
-> Plano Hobby da Vercel limita crons a uma execução diária. Nele, mantenha
-> `vercel.json` em `0 11 * * 1` e a agenda por cliente funciona só como filtro
-> de dia; a hora só é respeitada de fato em plano com cron de hora em hora.
+O **horário** por cliente só é cobrado quando o cron passa de hora em hora, o
+que exige plano com cron horário na Vercel (o Hobby limita a uma execução
+diária). Para ligar: `vercel.json` em `0 * * * *` **e** `REPORT_CRON_HOURLY=1`
+no ambiente. Sem isso o cron semanal continua valendo e o horário fica só como
+referência na tela. O estado atual aparece em Config › Integrações.
 
 ### Lembrete interno de tarefas
 Junto da coleta diária, um e-mail é enviado para o endereço de lembretes

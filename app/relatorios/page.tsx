@@ -136,10 +136,11 @@ export default function RelatoriosPage() {
           </div>
 
           <p className="text-xs text-muted-foreground leading-relaxed max-w-3xl">
-            O envio real roda de hora em hora e só dispara na combinação de dia e hora de cada cliente,
-            no fuso dele. Período já enviado não repete, e conta sem investimento no período é pulada em
-            vez de virar e-mail vazio. O remetente e o endereço de teste ficam em{" "}
-            <Link href="/admin" className="underline underline-offset-2">Config › E-mail</Link>.
+            O envio respeita o dia de cada cliente, no fuso dele. O horário só é cobrado quando o cron
+            roda de hora em hora — no cron semanal ele fica como referência; veja o estado atual em{" "}
+            <Link href="/admin" className="underline underline-offset-2">Config › Integrações</Link>.
+            Período já enviado não repete, e conta sem investimento no período é pulada em vez de virar
+            e-mail vazio. O remetente e o endereço de teste ficam em Config › E-mail.
           </p>
         </>
       )}
