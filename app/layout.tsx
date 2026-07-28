@@ -3,7 +3,7 @@ import "./components.css";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import AppNav from "@/components/AppNav";
-import { appBrandName, appBrandDescription } from "@/lib/brand";
+import { getSettings } from "@/lib/settings";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -17,10 +17,13 @@ const jetbrains = JetBrains_Mono({
   display: "swap",
 });
 
-export function generateMetadata() {
+// Nome e descrição saem da Config (tabela app_settings), com o .env como
+// reserva — trocar a marca não exige redeploy.
+export async function generateMetadata() {
+  const settings = await getSettings();
   return {
-    title: appBrandName(),
-    description: appBrandDescription(),
+    title: settings.brand_name,
+    description: settings.brand_description,
   };
 }
 
@@ -29,7 +32,8 @@ export const viewport = {
   initialScale: 1,
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const { brand_name } = await getSettings();
   return (
     <html lang="pt-BR" className={`${inter.variable} ${jetbrains.variable}`} suppressHydrationWarning>
       <body className="min-h-screen bg-background font-sans antialiased">
@@ -39,7 +43,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           enableSystem
           disableTransitionOnChange
         >
-          <AppNav />
+          <AppNav brand={brand_name} />
           <main className="flex-1">{children}</main>
         </ThemeProvider>
       </body>

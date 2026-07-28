@@ -18,6 +18,8 @@ import {
   ChevronRight,
   BarChart3,
   DollarSign,
+  Users,
+  Mail,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { appBrandName } from "@/lib/brand";
@@ -49,11 +51,13 @@ const NAV_GROUPS = [
     items: [
       { href: "/tarefas", label: "Tarefas", icon: CheckSquare2 },
       { href: "/vendas", label: "ROI por Cliente", icon: DollarSign },
+      { href: "/relatorios", label: "Relatórios", icon: Mail },
     ],
   },
   {
     label: "Sistema",
     items: [
+      { href: "/clientes", label: "Clientes", icon: Users },
       { href: "/admin", label: "Config", icon: Settings },
       { href: "/utilidades", label: "Utilidades", icon: BarChart3 },
     ],
@@ -65,7 +69,9 @@ const ALL_ITEMS = NAV_GROUPS.flatMap((g) => g.items);
 
 const CHROMELESS_PREFIXES = ["/login", "/report/", "/r/", "/c/"];
 
-export default function AppNav() {
+// `brand` chega do layout (servidor), que lê a Config. Sem ele, cai no .env.
+export default function AppNav({ brand }: { brand?: string }) {
+  const brandName = (brand || "").trim() || appBrandName();
   const pathname = usePathname();
   const router = useRouter();
   const { theme, setTheme } = useTheme();
@@ -128,7 +134,7 @@ export default function AppNav() {
             A
           </div>
           <div>
-            <div className="text-sm font-semibold text-foreground">{appBrandName()}</div>
+            <div className="text-sm font-semibold text-foreground">{brandName}</div>
             <div className="text-[10px] text-muted-foreground leading-tight">Dash</div>
           </div>
         </div>
@@ -158,7 +164,7 @@ export default function AppNav() {
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent side="right" align="end" className="w-48">
-              <DropdownMenuLabel>{appBrandName()} Dash</DropdownMenuLabel>
+              <DropdownMenuLabel>{brandName} Dash</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
                 {theme === "dark" ? "☀️" : "🌙"} {theme === "dark" ? "Modo claro" : "Modo escuro"}
@@ -181,7 +187,7 @@ export default function AppNav() {
           <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white text-[10px] font-bold">
             A
           </div>
-          <span className="text-sm font-semibold">{appBrandName()}</span>
+          <span className="text-sm font-semibold">{brandName}</span>
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -212,7 +218,7 @@ export default function AppNav() {
                 <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white text-[10px] font-bold">
                   A
                 </div>
-                <span className="text-sm font-semibold">{appBrandName()}</span>
+                <span className="text-sm font-semibold">{brandName}</span>
               </div>
               <button onClick={() => setSidebarOpen(false)} className="p-1 text-muted-foreground">
                 <X className="h-5 w-5" />

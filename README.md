@@ -36,8 +36,10 @@ Em um projeto novo (ou existente) no Supabase, execute os arquivos SQL abaixo
 | 14 | `supabase-migration-report-cache.sql` | Cache do relatório público |
 | 15 | `supabase-migration-brand.sql` | Marca personalizada por cliente |
 | 16 | `supabase-migration-balance.sql` | Saldo vs fatura em aberto |
+| 17 | `supabase-migration-report-schedule.sql` | Dia e hora do relatório por cliente |
+| 18 | `supabase-migration-settings.sql` | Configurações do sistema editáveis no painel |
 
-**Importante:** para um projeto novo, rode do 1 ao 16 sequencialmente.
+**Importante:** para um projeto novo, rode do 1 ao 18 sequencialmente.
 Para atualizar um projeto existente, rode apenas as migrations que faltam,
 sempre da mais antiga para a mais nova.
 
@@ -105,7 +107,8 @@ lib/
   task-digest.ts       — Lembrete interno de pendências
   supabase.ts          — Cliente Supabase (service role)
   auth.ts              — Autenticação (senha + sessão)
-  brand.ts             — Nome da marca (via env APP_BRAND_NAME)
+  brand.ts             — Nome da marca no cliente (fallback do env)
+  settings.ts          — Configurações do sistema (banco, com env de reserva)
   format.ts            — Formatação de valores, moedas, percentuais
   utils.ts             — Utilitários diversos
 app/
@@ -115,13 +118,17 @@ app/
   api/alerts           — Alertas
   api/tasks            — CRUD de tarefas
   api/clients          — CRUD de clientes
-  api/reports/send     — Envio semanal de relatórios
+  api/reports/send     — Envio semanal de relatórios (agenda por cliente)
+  api/settings         — Configurações do sistema (GET/PATCH)
+  api/integrations/status — Estado das integrações, com teste ao vivo
   page.tsx             — Visão geral (overview matinal)
   today/page.tsx       — Cockpit com pacing, metas e prioridades
   creatives/page.tsx   — Laboratório de Criativos Meta
   tarefas/page.tsx     — Quadro de tarefas (kanban)
   vendas/page.tsx      — ROI por cliente
-  admin/page.tsx       — Configurações (clientes, contas)
+  clientes/page.tsx    — Clientes, metas, grupos e contas
+  relatorios/page.tsx  — Entrega do relatório e link do painel por cliente
+  admin/page.tsx       — Config do sistema (marca, e-mail, integrações)
   login/page.tsx       — Tela de login
   r/[token]/page.tsx   — Relatório público assinado
   c/[token]/page.tsx   — Painel público do cliente
@@ -133,9 +140,16 @@ components/
 
 ## Uso
 
-### Organizar contas por cliente
-Use `/admin` para configurar clientes, orçamento, objetivo e KPI, e para
-vincular contas Meta e Google.
+### Três telas de configuração
+- `/clientes` — metas, orçamento, objetivo, KPI, grupos e vínculo de contas
+  Meta e Google.
+- `/relatorios` — entrega por cliente: e-mail de destino, marca do relatório,
+  dia e hora do envio, teste que vai só para você e link do painel do cliente.
+- `/admin` (Config) — sistema: nome do painel, endereços de e-mail do disparo,
+  estado das integrações (com teste ao vivo) e o lembrete interno de tarefas.
+
+Na Config, campo vazio herda a variável de ambiente correspondente — a tela
+mostra qual valor viria do `.env`. Chaves de API continuam só no ambiente.
 
 ### Cockpit e metas
 `/today` mostra investimento MTD, orçamento, pacing, projeção de fim do mês,
@@ -147,12 +161,20 @@ CPM, frequência, hook, hold, outbound CTR, CVR, CPA, ROAS, funil de retenção,
 quadrante e diagnósticos relativos à mediana da conta.
 
 ### Relatório semanal
-O cron de segunda-feira envia relatório por e-mail para os clientes com
-report_enabled = true. Use `/api/reports/send?dry=1` para testar.
+O cron roda de hora em hora e envia para cada cliente com `report_enabled =
+true` no dia e na hora configurados em `/relatorios`, avaliados no fuso do
+próprio cliente (padrão: segunda, 11h). Período já enviado não repete e conta
+sem investimento é pulada. Use `/api/reports/send?dry=1` para testar — o teste
+vai para o e-mail de teste da Config, nunca para o cliente.
+
+> Plano Hobby da Vercel limita crons a uma execução diária. Nele, mantenha
+> `vercel.json` em `0 11 * * 1` e a agenda por cliente funciona só como filtro
+> de dia; a hora só é respeitada de fato em plano com cron de hora em hora.
 
 ### Lembrete interno de tarefas
-Junto da coleta diária, um e-mail é enviado para `TASK_ALERT_EMAIL` listando
-tarefas atrasadas e projetos no prazo final.
+Junto da coleta diária, um e-mail é enviado para o endereço de lembretes
+internos (Config › E-mail, ou `TASK_ALERT_EMAIL`) listando tarefas atrasadas e
+projetos no prazo final.
 
 ## Segurança
 Todas as páginas e APIs exigem autenticação (DASHBOARD_PASSWORD + sessão).
@@ -160,5 +182,7 @@ O Vercel Cron usa `Authorization: Bearer CRON_SECRET`. O Supabase tem RLS
 ativado sem políticas públicas — o acesso é exclusivamente via service role.
 
 ## Personalização da marca
-Defina `NEXT_PUBLIC_APP_BRAND_NAME` no .env para substituir "AdsCtrl" pelo
-nome da sua agência em todo o dashboard, relatórios e e-mails.
+Defina o nome em `/admin` (Config › Identidade) — vale para o dashboard, os
+relatórios e os e-mails, sem redeploy. `NEXT_PUBLIC_APP_BRAND_NAME` no .env
+continua valendo como padrão quando o campo está vazio. Cada cliente pode ter
+uma marca própria no relatório, em `/relatorios`.

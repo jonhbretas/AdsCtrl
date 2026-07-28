@@ -15,6 +15,7 @@
 
 import { appBaseUrl } from "./report-token";
 import { looksLikeEmail, resendIssues, sendEmail } from "./resend";
+import { getSettings } from "./settings";
 import { getServiceClient, supabaseEnvMissing } from "./supabase";
 import { appBrandName } from "./brand";
 
@@ -26,10 +27,10 @@ const AMBER = "#8a6117";
 const BLUE = "#2f6fe4";
 const FONT = "Arial, Helvetica, sans-serif";
 
-export function digestRecipient(): string {
-  const configured = (process.env.TASK_ALERT_EMAIL || "").trim();
+export async function digestRecipient(): Promise<string> {
+  const configured = (await getSettings()).task_alert_email;
   if (!looksLikeEmail(configured)) {
-    throw new Error("TASK_ALERT_EMAIL não configurado. Defina no .env o e-mail que receberá os lembretes de tarefas.");
+    throw new Error("Defina o e-mail dos lembretes internos em Config › E-mail.");
   }
   return configured;
 }
@@ -371,14 +372,14 @@ export async function sendTaskDigest(options: {
   if (supabaseEnvMissing()) {
     return { status: "skipped", reason: "Supabase não configurado.", digest: null };
   }
-  const issues = resendIssues();
+  const issues = await resendIssues();
   if (issues.length) {
     return { status: "skipped", reason: `Envio não configurado: ${issues.join(" · ")}`, digest: null };
   }
 
   const supabase = getServiceClient();
   const digest = await buildTaskDigest();
-  const recipient = digestRecipient();
+  const recipient = await digestRecipient();
 
   const log = async (
     status: DigestSendResult["status"],

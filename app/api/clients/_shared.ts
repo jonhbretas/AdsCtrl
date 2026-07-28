@@ -166,6 +166,25 @@ export function clientPatchFromBody(body: unknown, creating = false): Record<str
     patch.report_enabled = input.report_enabled;
   }
 
+  // Quando o relatório sai, no fuso do próprio cliente. O cron passa de hora em
+  // hora e só envia para quem bate dia e hora — por isso os dois são inteiros
+  // fechados, e não texto livre de horário.
+  if (Object.prototype.hasOwnProperty.call(input, "report_weekday")) {
+    const weekday = Number(input.report_weekday);
+    if (!Number.isInteger(weekday) || weekday < 0 || weekday > 6) {
+      throw new ClientInputError("report_weekday deve ser um inteiro de 0 (domingo) a 6 (sábado).");
+    }
+    patch.report_weekday = weekday;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(input, "report_hour")) {
+    const hour = Number(input.report_hour);
+    if (!Number.isInteger(hour) || hour < 0 || hour > 23) {
+      throw new ClientInputError("report_hour deve ser um inteiro de 0 a 23.");
+    }
+    patch.report_hour = hour;
+  }
+
   // Marca que o CLIENTE vê (relatório, painel e e-mail). Vazio = APP_BRAND_NAME.
   if (Object.prototype.hasOwnProperty.call(input, "brand_name")) {
     patch.brand_name = nullableText(input.brand_name, "brand_name", 60);

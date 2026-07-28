@@ -52,7 +52,7 @@ export default function ClientDashboardPage() {
   }, [token, period]);
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: "var(--color-background)" }}>
+    <div className="doc-light min-h-screen">
       <style>{`
         .page-shell { overflow-x: auto; }
         @media print {

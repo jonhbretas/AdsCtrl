@@ -40,7 +40,7 @@ export default function ReportPage() {
   }, [accountId]);
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: "var(--color-background)" }}>
+    <div className="doc-light min-h-screen">
       <style>{`@media print { body { background: #fff !important; } .page-shell { box-shadow: none !important; padding: 0 !important; background: #fff !important; } }`}</style>
 
       <div className="no-print max-w-[740px] mx-auto px-4 pt-5 pb-0 flex items-center gap-2">

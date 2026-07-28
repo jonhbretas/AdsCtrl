@@ -54,6 +54,12 @@ export async function PATCH(req: Request, { params }: RouteContext) {
         { status: 503 }
       );
     }
+    if (error && /report_weekday|report_hour/.test(error.message || "")) {
+      return NextResponse.json(
+        { error: "Rode supabase-migration-report-schedule.sql no SQL Editor do Supabase para agendar o envio por cliente." },
+        { status: 503 }
+      );
+    }
     if (error && /track_sales/.test(error.message || "")) {
       return NextResponse.json(
         { error: "Rode supabase-migration-vendas.sql no SQL Editor do Supabase para acompanhar vendas." },

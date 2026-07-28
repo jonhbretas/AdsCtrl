@@ -47,7 +47,7 @@ async function handle(req: Request) {
       const email = renderTaskDigestEmail(digest);
       return NextResponse.json({
         preview: true,
-        recipient: digestRecipient(),
+        recipient: await digestRecipient(),
         date: digest.date,
         late_tasks: digest.lateTasks,
         today_tasks: digest.todayTasks,

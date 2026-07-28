@@ -1,17 +1,22 @@
 // lib/resend.ts
 // Envio de e-mail pela API do Resend (HTTP direto, sem SDK).
 
+import { getSettings } from "./settings";
+
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
 
-export function resendConfigured(): boolean {
-  return Boolean((process.env.RESEND_API_KEY || "").trim() && (process.env.REPORT_FROM_EMAIL || "").trim());
+// A chave de API fica só no ambiente — segredo não vai para tabela que a tela
+// lê. Remetente e reply-to vêm da Config (com o ambiente como reserva).
+export async function resendConfigured(): Promise<boolean> {
+  return (await resendIssues()).length === 0;
 }
 
-export function resendIssues(): string[] {
+export async function resendIssues(): Promise<string[]> {
   const issues: string[] = [];
+  const settings = await getSettings();
   if (!(process.env.RESEND_API_KEY || "").trim()) issues.push("RESEND_API_KEY não configurada");
-  if (!(process.env.REPORT_FROM_EMAIL || "").trim()) {
-    issues.push('REPORT_FROM_EMAIL não configurado (ex.: "Agência <relatorios@seudominio.com>")');
+  if (!settings.report_from_email) {
+    issues.push('remetente não configurado em Config › E-mail (ex.: "Agência <relatorios@seudominio.com>")');
   }
   return issues;
 }
@@ -25,8 +30,10 @@ export interface SendEmailInput {
 }
 
 export async function sendEmail(input: SendEmailInput): Promise<{ id: string }> {
-  const issues = resendIssues();
+  const issues = await resendIssues();
   if (issues.length) throw new Error(issues.join(" · "));
+  const settings = await getSettings();
+  const replyTo = input.replyTo || settings.report_reply_to;
 
   const response = await fetch(RESEND_ENDPOINT, {
     method: "POST",
@@ -35,14 +42,12 @@ export async function sendEmail(input: SendEmailInput): Promise<{ id: string }> 
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      from: (process.env.REPORT_FROM_EMAIL || "").trim(),
+      from: settings.report_from_email,
       to: [input.to],
       subject: input.subject,
       html: input.html,
       ...(input.text ? { text: input.text } : {}),
-      ...(input.replyTo || process.env.REPORT_REPLY_TO
-        ? { reply_to: input.replyTo || (process.env.REPORT_REPLY_TO || "").trim() }
-        : {}),
+      ...(replyTo ? { reply_to: replyTo } : {}),
     }),
     cache: "no-store",
   });

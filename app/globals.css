@@ -89,6 +89,44 @@
   }
 }
 
+/* Documento do cliente: relatório (/r, /report) e painel (/c).
+   Estas telas viram PDF e viram e-mail, então não seguem o tema do painel
+   interno — no modo escuro o "Salvar em PDF" saía com fundo preto, fora da
+   paleta da entrega. Aqui os tokens voltam aos valores claros dentro do
+   escopo, e o resto do app continua livre para alternar tema. */
+.doc-light {
+  color-scheme: light;
+  --color-background: #f8fafc;
+  --color-foreground: #0f172a;
+  --color-card: #ffffff;
+  --color-card-foreground: #0f172a;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #0f172a;
+  --color-primary: #06b6d4;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #f1f5f9;
+  --color-secondary-foreground: #1e293b;
+  --color-muted: #f1f5f9;
+  --color-muted-foreground: #64748b;
+  --color-accent: #f8fafc;
+  --color-accent-foreground: #1e293b;
+  --color-destructive: #ef4444;
+  --color-destructive-foreground: #ffffff;
+  --color-border: #e2e8f0;
+  --color-input: #e2e8f0;
+  --color-ring: #06b6d4;
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-info: #3b82f6;
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+}
+
+/* A impressão ignora o fundo da tela; o papel é sempre branco. */
+@media print {
+  .doc-light { background: #ffffff !important; }
+}
+
 /* Card hover effect — mesh glassmorphism na borda */
 .card-hover {
   transition: box-shadow 0.3s ease, border-color 0.3s ease, transform 0.2s ease;

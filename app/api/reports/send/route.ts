@@ -10,6 +10,10 @@
 // Ex.: GET /api/reports/send?dry=1            (teste com todos os habilitados)
 //      GET /api/reports/send?client=<uuid>&dry=1
 //      GET /api/reports/send                  (envio real — o que o cron faz)
+//
+// O cron passa de hora em hora; cada cliente tem dia e hora próprios
+// (report_weekday / report_hour, no fuso dele). Quem não bate a janela é
+// ignorado sem virar registro — ver isScheduledNow abaixo.
 
 import { NextResponse } from "next/server";
 import { buildReport, lastFullWeek } from "@/lib/report-data";
@@ -17,6 +21,7 @@ import { renderReportEmail } from "@/lib/report-email";
 import { dashboardLink, reportLink, reportLinkConfigured } from "@/lib/report-token";
 import { looksLikeEmail, resendIssues, sendEmail } from "@/lib/resend";
 import { getServiceClient, supabaseEnvMissing } from "@/lib/supabase";
+import { getSettings } from "@/lib/settings";
 import { AUTH_COOKIE_NAME, constantTimeEqual, verifySessionToken } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -52,6 +57,34 @@ function primaryAccountId(client: any, links: any[]): string | null {
   return own[0]?.account_id ?? null;
 }
 
+const WEEKDAY_INDEX: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+
+// Dia da semana e hora agora, no fuso do cliente. Fuso inválido cai em UTC em
+// vez de derrubar o envio da rodada inteira.
+function localNow(timezone: string | null): { weekday: number; hour: number } {
+  const format = (tz: string) =>
+    new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short", hour: "2-digit", hour12: false }).formatToParts(new Date());
+  let parts: Intl.DateTimeFormatPart[];
+  try {
+    parts = format(timezone || "UTC");
+  } catch {
+    parts = format("UTC");
+  }
+  const weekday = WEEKDAY_INDEX[parts.find((p) => p.type === "weekday")?.value || "Mon"] ?? 1;
+  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? 11);
+  return { weekday, hour: Number.isFinite(hour) ? hour % 24 : 11 };
+}
+
+// A janela é a hora cheia combinada. O cron roda de hora em hora, então cada
+// combinação dia+hora acontece uma vez por semana — e o registro em
+// report_sends impede repetir se o cron disparar duas vezes na mesma hora.
+function isScheduledNow(client: any): boolean {
+  const { weekday, hour } = localNow(client.timezone);
+  const wanted = Number.isInteger(client.report_weekday) ? client.report_weekday : 1;
+  const wantedHour = Number.isInteger(client.report_hour) ? client.report_hour : 11;
+  return weekday === wanted && hour === wantedHour;
+}
+
 export async function GET(req: Request) {
   return handle(req);
 }
@@ -67,7 +100,7 @@ async function handle(req: Request) {
     if (supabaseEnvMissing()) {
       return NextResponse.json({ error: "Supabase não configurado." }, { status: 503 });
     }
-    const issues = [...resendIssues()];
+    const issues = [...(await resendIssues())];
     if (!reportLinkConfigured()) {
       issues.push("REPORT_LINK_SECRET (ou SESSION_SECRET) precisa ter pelo menos 32 caracteres");
     }
@@ -78,20 +111,23 @@ async function handle(req: Request) {
     const params = new URL(req.url).searchParams;
     const dryRun = params.get("dry") === "1";
     const onlyClient = params.get("client");
-    const testAddress = (process.env.REPORT_TEST_EMAIL || "").trim();
+    const testAddress = (await getSettings()).report_test_email;
     if (dryRun && !looksLikeEmail(testAddress)) {
       return NextResponse.json(
-        { error: "Defina REPORT_TEST_EMAIL para usar o modo de teste." },
+        { error: "Defina o e-mail de teste em Config › E-mail para usar o modo de teste." },
         { status: 400 }
       );
     }
 
     const supabase = getServiceClient();
-    // brand_name entra no select por último de propósito: se a migração de
-    // marca não rodou, o catch abaixo já trata e o envio segue sem ela.
+    // Colunas de acabamento (marca e agenda) entram por último de propósito: se
+    // a migração correspondente não rodou, o retry abaixo repete sem elas e o
+    // envio segue com o comportamento antigo — segunda-feira, 11h.
+    const BASE_COLUMNS = "id,name,timezone,report_email,report_enabled,source_meta_account_id,status";
+    const EXTRA_COLUMNS = "brand_name,report_weekday,report_hour";
     let query = supabase
       .from("clients")
-      .select("id,name,timezone,report_email,report_enabled,source_meta_account_id,status,brand_name")
+      .select(`${BASE_COLUMNS},${EXTRA_COLUMNS}`)
       .neq("status", "archived");
     if (onlyClient) query = query.eq("id", onlyClient);
     else query = query.eq("report_enabled", true);
@@ -100,13 +136,8 @@ async function handle(req: Request) {
       query,
       supabase.from("client_ad_accounts").select("client_id,account_id,is_primary"),
     ]);
-    // Sem a migração de marca, repete a consulta sem a coluna: o envio semanal
-    // não pode falhar por causa de um campo de acabamento.
-    if (clientsError && /brand_name/.test(clientsError.message || "")) {
-      let retry = supabase
-        .from("clients")
-        .select("id,name,timezone,report_email,report_enabled,source_meta_account_id,status")
-        .neq("status", "archived");
+    if (clientsError && /brand_name|report_weekday|report_hour/.test(clientsError.message || "")) {
+      let retry = supabase.from("clients").select(BASE_COLUMNS).neq("status", "archived");
       retry = onlyClient ? retry.eq("id", onlyClient) : retry.eq("report_enabled", true);
       const again = await retry;
       clients = again.data as any;
@@ -131,8 +162,16 @@ async function handle(req: Request) {
     }));
 
     const results: SendOutcome[] = [];
+    // Rodada do cron: passa de hora em hora e só toca em quem tem a janela
+    // agora. Disparo manual (client=...) e teste ignoram a agenda de propósito.
+    const scheduledRun = !onlyClient && !dryRun;
+    let outOfWindow = 0;
 
     for (const client of clients || []) {
+      if (scheduledRun && !isScheduledNow(client)) {
+        outOfWindow++;
+        continue;
+      }
       const range = lastFullWeek(client.timezone);
       const recipient = dryRun ? testAddress : (client.report_email || "").trim();
 
@@ -207,8 +246,8 @@ async function handle(req: Request) {
           link,
           dashboardLink: dashboard,
           dryRun,
-          // Marca do cliente quando configurada; APP_BRAND_NAME por padrão.
-          brand: (client as any).brand_name ?? null,
+          // Marca do cliente quando configurada; a da Config por padrão.
+          brand: (client as any).brand_name || (await getSettings()).brand_name,
         });
         const sent = await sendEmail({
           to: recipient,
@@ -232,6 +271,7 @@ async function handle(req: Request) {
       dry_run: dryRun,
       week: lastFullWeek(),
       total: results.length,
+      out_of_window: outOfWindow,
       sent: results.filter((r) => r.status === "sent").length,
       skipped: results.filter((r) => r.status === "skipped").length,
       errors: results.filter((r) => r.status === "error").length,

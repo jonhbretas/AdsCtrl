@@ -92,7 +92,9 @@ export default function ReportDocument({ data, compact = false, width }: { data:
         <PrintStyles />
 
         {/* Cover */}
-        <section style={{ paddingBottom: 16, marginBottom: 20, borderBottom: `2px solid ${C.ink}` }}>
+        {/* Régua fina em vez de barra preta: o documento acompanha a paleta
+            clara do painel, e não o contraste pesado da versão antiga. */}
+        <section style={{ paddingBottom: 16, marginBottom: 20, borderBottom: `1px solid ${C.line}` }}>
           <div className="flex items-center gap-2 mb-3">
             <BrandMark size={26} />
             <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: -0.2, color: C.ink }}>{brand}</span>
@@ -383,13 +385,16 @@ function FunnelChart({ steps, compact }: { steps: { label: string; value: number
         const prevPct = i > 0 ? (steps[i - 1].value / maxVal) * 100 : 100;
         const drop = prevPct > 0 ? (1 - pct / prevPct) * 100 : 0;
         const barW = (s.value / maxVal) * barMaxW;
-        const colors = ["#06b6d4", "#0ea5e9", "#3b82f6", "#6366f1", "#8b5cf6", "#a855f7", "#10b981"];
+        // Degradê do ciano da marca até o verde do resultado. A rampa antiga
+        // ia até roxo saturado e destoava do resto do documento.
+        const colors = ["#a5f3fc", "#67e8f9", "#22d3ee", "#06b6d4", "#0891b2", "#0e7490", C.teal];
         return (
           <div key={s.label} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%" }}>
             <div style={{ width: compact ? 80 : 110, textAlign: "right", fontSize: compact ? 9 : 10, color: C.muted, flexShrink: 0 }}>{s.label}</div>
             <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>
               <div style={{ width: barW, height: 22, borderRadius: 4, background: colors[i % colors.length], display: "flex", alignItems: "center", justifyContent: "center", minWidth: 40, transition: "width 0.3s" }}>
-                <span style={{ fontSize: compact ? 9 : 10, fontWeight: 700, color: "#fff" }}>{num(s.value)}</span>
+                {/* Os primeiros degraus são claros demais para texto branco. */}
+                <span style={{ fontSize: compact ? 9 : 10, fontWeight: 700, color: i < 3 ? "#0e7490" : "#fff" }}>{num(s.value)}</span>
               </div>
             </div>
             <div style={{ width: 40, textAlign: "right", fontSize: 9, color: i > 0 ? (drop > 20 ? C.red : drop > 5 ? C.amber : C.green) : "transparent" }}>
@@ -456,8 +461,8 @@ function generateInsights(kpis: Kpis, prevKpis: Kpis, currency: string, platform
 function InsightBox({ title, lines }: { title: string; lines: string[] }) {
   if (!lines.length) return null;
   return (
-    <div style={{ background: "#f0f9ff", border: "1px solid #bae6fd", borderRadius: 10, padding: "12px 14px", marginTop: 12 }}>
-      <div style={{ fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.5, color: "#0369a1", marginBottom: 6 }}>{title}</div>
+    <div style={{ background: "#ecfeff", border: "1px solid #a5f3fc", borderRadius: 10, padding: "12px 14px", marginTop: 12 }}>
+      <div style={{ fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.5, color: "#0e7490", marginBottom: 6 }}>{title}</div>
       {lines.map((l, i) => <p key={i} style={{ fontSize: 12, lineHeight: 1.6, color: C.ink, margin: "3px 0" }}>{l}</p>)}
     </div>
   );
