@@ -62,9 +62,15 @@ export default function AlertsPage() {
             {(["all", "critical", "warning", "info"] as const).map((l) => <button key={l} onClick={() => setLevel(l)} className={cn("px-3 py-1.5 text-xs font-medium rounded-md transition-colors border-none cursor-pointer", level === l ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground bg-transparent")}>{l === "all" ? "Todos" : LEVEL[l]?.label || l}</button>)}
           </div>
           {allGroups.length > 0 && (
-            <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-muted/50 border border-border/50">
-              <button onClick={() => setGroupFilter("all")} className={cn("px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors border-none cursor-pointer", groupFilter === "all" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground bg-transparent")}>Todos</button>
-              {allGroups.map((g) => <button key={g.name} onClick={() => setGroupFilter(g.name)} className={cn("px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors border-none cursor-pointer", groupFilter === g.name ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground bg-transparent")} style={groupFilter === g.name ? { color: g.color, backgroundColor: g.color + "15" } : {}}>{g.name}</button>)}
+            <div className="flex flex-wrap gap-1.5">
+              <button onClick={() => setGroupFilter("all")}
+                className={cn("px-3 py-1.5 text-xs font-medium rounded-full border transition-colors", groupFilter === "all" ? "bg-primary/10 border-primary/30 text-primary" : "border-border/50 text-muted-foreground hover:text-foreground hover:bg-accent/50")}>Todos</button>
+              {allGroups.map((g) => <button key={g.name} onClick={() => setGroupFilter(g.name)}
+                className={cn("px-3 py-1.5 text-xs font-medium rounded-full border transition-colors", groupFilter === g.name ? "border-primary/30" : "border-border/50 text-muted-foreground hover:text-foreground hover:bg-accent/50")}
+                style={groupFilter === g.name ? { backgroundColor: g.color + "18", borderColor: g.color + "40", color: g.color } : undefined}>
+                <span className="inline-block w-1.5 h-1.5 rounded-full mr-1.5" style={{ backgroundColor: g.color }} />
+                {g.name}
+              </button>)}
             </div>
           )}
         <div className="relative flex-1 min-w-[140px] max-w-[220px]">
