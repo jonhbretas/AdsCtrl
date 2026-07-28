@@ -41,6 +41,7 @@ const NAV_ITEMS = [
   { href: "/meta-assets", label: "Raio-X", icon: Search },
   { href: "/alerts", label: "Alertas", icon: Bell },
   { href: "/admin", label: "Config", icon: Settings },
+  { href: "/utilidades", label: "Utilidades", icon: BarChart3 },
 ];
 
 const CHROMELESS_PREFIXES = ["/login", "/report/", "/r/", "/c/"];
