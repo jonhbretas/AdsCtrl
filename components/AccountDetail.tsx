@@ -177,6 +177,7 @@ export default function AccountDetail({
   const [changeNote, setChangeNote] = useState<{ text: string; bad?: boolean } | null>(null);
   // Campanha escolhida para duplicar; null = diálogo fechado.
   const [duplicating, setDuplicating] = useState<{ id: string; name: string } | null>(null);
+  const [previewAd, setPreviewAd] = useState<string | null>(null);
   const [tableSort, setTableSort] = usePersistentSort<DetailSortKey>(
     "adsctrl:sort:account-detail",
     { key: "spend", direction: "desc" },
@@ -588,7 +589,10 @@ export default function AccountDetail({
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                         {tab === "ads" && r.thumbnail && (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img src={r.thumbnail} alt="" width={34} height={34} style={{ borderRadius: 6, objectFit: "cover", flexShrink: 0 }} />
+                          <img src={r.thumbnail} alt="" width={34} height={34} style={{ borderRadius: 6, objectFit: "cover", flexShrink: 0, cursor: "pointer", imageRendering: "auto" }}
+                            onMouseEnter={(e) => { const t = e.currentTarget; const rect = t.getBoundingClientRect(); setPreviewAd(t.src); }}
+                            onMouseLeave={() => { const t = previewAd; setTimeout(() => { if (previewAd === t) setPreviewAd(null); }, 200); }}
+                          />
                         )}
                         <span style={{ maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.name}>{r.name}</span>
                       </div>
@@ -709,6 +713,17 @@ export default function AccountDetail({
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
+      )}
+
+      {/* Preview popup para thumbnail de anúncio */}
+      {previewAd && (
+        <div
+          style={{ position: "fixed", zIndex: 999, top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: 400, height: 400, maxWidth: "90vw", maxHeight: "90vh", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, boxShadow: "0 20px 60px rgba(0,0,0,0.3)", overflow: "hidden", cursor: "pointer" }}
+          onClick={() => setPreviewAd(null)}
+          onMouseLeave={() => setPreviewAd(null)}
+        >
+          <img src={previewAd} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+        </div>
       )}
     </div>
   );
