@@ -103,34 +103,33 @@ export default function CreativeLab() {
     } catch (e: any) { setError(e?.message); } finally { setLoading(false); }
   }
 
+  const creativesList = lab?.creatives || [];
   const creatives = useMemo(() => {
-    if (!lab) return [];
-    let list = [...lab.creatives];
+    let list = [...creativesList];
     if (onlyFocus && focusAds.size > 0) list = list.filter((c) => focusAds.has(c.adId));
     if (format !== "all") list = list.filter((c) => formatBucket(c.mediaType) === format);
     if (goalFilter !== "all") list = list.filter((c) => c.goal === goalFilter);
     if (search.trim()) { const q = search.toLowerCase(); list = list.filter((c) => c.adName.toLowerCase().includes(q) || c.campaignName?.toLowerCase().includes(q)); }
     return list;
-  }, [lab, format, goalFilter, search, focusAds, onlyFocus]);
+  }, [creativesList, format, goalFilter, search, focusAds, onlyFocus]);
 
   const benchmarkCohort = useMemo(() => {
     if (!lab) return null;
     const byGoal = new Map<CreativeGoal, Creative[]>();
-    for (const c of lab.creatives) { if (!byGoal.has(c.goal)) byGoal.set(c.goal, []); byGoal.get(c.goal)!.push(c); }
+    for (const c of creativesList) { if (!byGoal.has(c.goal)) byGoal.set(c.goal, []); byGoal.get(c.goal)!.push(c); }
     return (goal: CreativeGoal, picker: (c: Creative) => number | null) => creativeMedian(byGoal.get(goal) || [], picker);
-  }, [lab]);
+  }, [lab, creativesList]);
 
   const goalCounts = useMemo(() => {
     if (!lab) return [];
     const counts = new Map<CreativeGoal, number>();
-    for (const c of lab.creatives) counts.set(c.goal, (counts.get(c.goal) || 0) + 1);
+    for (const c of creativesList) counts.set(c.goal, (counts.get(c.goal) || 0) + 1);
     return GOAL_ORDER.filter((g) => counts.has(g)).map((g) => ({ goal: g, label: FALLBACK_GOAL_LABELS[g], count: counts.get(g)! }));
-  }, [lab]);
+  }, [lab, creativesList]);
 
   const scatter = useMemo(() => {
-    if (!lab) return [];
-    return lab.creatives.filter((c) => c.mediaType === "VIDEO" && c.metrics.video.hookRate != null && c.metrics.outboundCtr != null && c.metrics.spend > 0).map((c) => ({ hook: c.metrics.video.hookRate! * 100, ctr: c.metrics.outboundCtr! * 100, spend: c.metrics.spend, name: c.adName }));
-  }, [lab]);
+    return creativesList.filter((c) => c.mediaType === "VIDEO" && c.metrics.video.hookRate != null && c.metrics.outboundCtr != null && c.metrics.spend > 0).map((c) => ({ hook: c.metrics.video.hookRate! * 100, ctr: c.metrics.outboundCtr! * 100, spend: c.metrics.spend, name: c.adName }));
+  }, [creativesList]);
 
   const panelStyle = "rounded-lg border border-border/50 bg-card p-4";
 
@@ -186,10 +185,10 @@ export default function CreativeLab() {
         <>
           {/* Summary KPIs */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <SummaryKpi label="Anúncios analisados" value={String(lab.creatives.length)} />
+            <SummaryKpi label="Anúncios analisados" value={String((lab.creatives || []).length)} />
             <SummaryKpi label="Investimento no período" value={money(lab.summary?.spend || 0, lab.currency)} />
-            <SummaryKpi label="Com amostra confiável" value={String(lab.creatives.filter((c) => c.sampleStatus === "reliable" || c.sampleStatus === "learning").length)} />
-            <SummaryKpi label="Com diagnóstico" value={String(lab.creatives.filter((c) => c.primaryDiagnosis).length)} />
+            <SummaryKpi label="Com amostra confiável" value={String((lab.creatives || []).filter((c) => c.sampleStatus === "reliable" || c.sampleStatus === "learning").length)} />
+            <SummaryKpi label="Com diagnóstico" value={String((lab.creatives || []).filter((c) => c.primaryDiagnosis).length)} />
           </div>
 
           {/* Two-column charts */}
