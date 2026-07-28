@@ -33,6 +33,7 @@ export default function VendasPage() {
   const [salvando, setSalvando] = useState<string | null>(null);
   const [rascunho, setRascunho] = useState<Record<string, string>>({});
   const [emFoco, setEmFoco] = useState<string | null>(null);
+  const [grupoFiltro, setGrupoFiltro] = useState("all");
 
   async function carregar(qtd = meses) { setCarregando(true); setErro(null); try { const r = await fetch(`/api/sales?months=${qtd}`, { cache: "no-store" }); const d = await r.json(); if (!r.ok || d.error) throw new Error(d.error || `Falha (HTTP ${r.status}).`); setData(d); setRascunho({}); } catch (e: any) { setErro(e?.message ?? "Erro ao carregar."); } finally { setCarregando(false); } }
   useEffect(() => { carregar(meses); }, [meses]);
@@ -60,6 +61,29 @@ export default function VendasPage() {
     });
   }, [data]);
 
+  const grupos = useMemo(() => {
+    if (!data) return [];
+    const seen = new Map<string, { name: string; color: string }>();
+    for (const r of data.rows) { if (r.group) seen.set(r.group.name, r.group); }
+    return Array.from(seen.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [data]);
+
+  const linhasFiltradas = useMemo(() => {
+    if (!data) return [];
+    if (grupoFiltro === "all") return data.rows;
+    return data.rows.filter((r) => r.group?.name === grupoFiltro);
+  }, [data, grupoFiltro]);
+
+  const totalsGrupo = useMemo(() => {
+    if (!data || grupos.length === 0) return [];
+    return grupos.map((g) => {
+      const linhas = data.rows.filter((r) => r.group?.name === g.name);
+      let spend = 0, revenue = 0, orders = 0;
+      for (const l of linhas) { for (const m of l.months) { spend += m.spend; if (m.revenue != null) revenue += m.revenue; if (m.orders != null) orders += m.orders; } }
+      return { group: g, spend, revenue, orders, roas: spend > 0 && revenue > 0 ? revenue / spend : null };
+    }).filter((t) => t.spend > 0 || t.revenue > 0);
+  }, [data, grupos]);
+
   const semClientes = !!data && data.rows.length === 0;
 
   function chave(clienteId: string, mes: string, campo: string) { return `${clienteId}::${mes}::${campo}`; }
@@ -69,11 +93,17 @@ export default function VendasPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Vendas reais</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">O valor que de fato entrou, mês a mês, contra o investido.</p>
+          <h1 className="text-2xl font-bold tracking-tight">ROI por Cliente</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">Receita real informada vs. investimento em mídia, mês a mês.</p>
         </div>
-        <div className="flex items-center gap-2">
-          {data && <Badge variant="secondary" className="text-[11px]">{data.rows.length} cliente(s)</Badge>}
+        <div className="flex items-center gap-2 flex-wrap">
+          {data && <Badge variant="secondary" className="text-[11px]">{linhasFiltradas.length} cliente(s)</Badge>}
+          {grupos.length > 0 && (
+            <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-muted/50 border border-border/50">
+              <button onClick={() => setGrupoFiltro("all")} className={cn("px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors border-none cursor-pointer", grupoFiltro === "all" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground bg-transparent")}>Todos</button>
+              {grupos.map((g) => <button key={g.name} onClick={() => setGrupoFiltro(g.name)} className={cn("px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors border-none cursor-pointer", grupoFiltro === g.name ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground bg-transparent")} style={grupoFiltro === g.name ? { color: g.color, backgroundColor: g.color + "15" } : {}}>{g.name}</button>)}
+            </div>
+          )}
           <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <span className="font-semibold">Meses</span>
             <select value={meses} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setMeses(Number(e.target.value))} className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm">{[3, 6, 12, 24].map((n) => <option key={n} value={n}>{n}</option>)}</select>
@@ -98,12 +128,12 @@ export default function VendasPage() {
       )}
 
       {/* Current month entry */}
-      {data && data.rows.length > 0 && mesVigente && (
+      {data && linhasFiltradas.length > 0 && mesVigente && (
         <section>
           <h2 className="text-base font-semibold mb-1">Lançar vendas de {rotuloMes(mesVigente, true)}</h2>
           <p className="text-xs text-muted-foreground mb-3">Qualquer mês é editável — na tabela abaixo também.</p>
           <Card><CardContent className="p-4 space-y-3">
-            {data.rows.map((linha) => {
+            {linhasFiltradas.map((linha) => {
               const m = linha.months.find((x) => x.month === mesVigente);
               if (!m) return null;
               const ch = `${linha.client_id}::${mesVigente}`;
@@ -144,7 +174,7 @@ export default function VendasPage() {
       )}
 
       {/* Month-by-month table */}
-      {data && data.rows.length > 0 && (
+      {data && linhasFiltradas.length > 0 && (
         <section>
           <h2 className="text-base font-semibold mb-1">Mês a mês</h2>
           <p className="text-xs text-muted-foreground mb-3">Investido, vendido em valor e quantidade. Qualquer mês é editável. <em className="text-amber-500">parcial</em> = histórico incompleto.</p>
@@ -155,7 +185,7 @@ export default function VendasPage() {
                 {data.months.map((mes) => <th key={mes} className="p-2 font-semibold text-muted-foreground uppercase tracking-wider text-right">{rotuloMes(mes)}</th>)}
               </tr></thead>
               <tbody>
-                {data.rows.map((linha) => (
+                {linhasFiltradas.map((linha) => (
                   <tr key={linha.client_id} className="border-b border-border/30 last:border-b-0">
                     <th className="text-left p-2 font-semibold text-foreground whitespace-nowrap">{linha.name}{linha.group && <SeloGrupo grupo={linha.group} />}</th>
                     {linha.months.map((m) => {
@@ -218,7 +248,7 @@ export default function VendasPage() {
       )}
 
       {/* Ticket médio table */}
-      {data && data.rows.some((l) => l.months.some((m) => m.orders != null)) && (
+      {data && linhasFiltradas.some((l) => l.months.some((m) => m.orders != null)) && (
         <section>
           <h2 className="text-base font-semibold mb-1">Por venda: ticket médio e custo</h2>
           <p className="text-xs text-muted-foreground mb-3">Ticket = valor ÷ quantidade; custo = investido ÷ quantidade.</p>
@@ -229,7 +259,7 @@ export default function VendasPage() {
                 {data.months.map((mes) => <th key={mes} className="p-2 font-semibold text-muted-foreground uppercase tracking-wider text-right">{rotuloMes(mes)}</th>)}
               </tr></thead>
               <tbody>
-                {data.rows.map((linha) => (
+                {linhasFiltradas.map((linha) => (
                   <tr key={linha.client_id} className="border-b border-border/30">
                     <th className="text-left p-2 font-semibold text-foreground whitespace-nowrap">{linha.name}{linha.group && <SeloGrupo grupo={linha.group} />}</th>
                     {linha.months.map((m) => {
@@ -268,6 +298,35 @@ export default function VendasPage() {
             </table>
           </div>
         </section>
+      )}
+
+      {/* Group summary */}
+      {data && linhasFiltradas.length > 0 && totalsGrupo.length > 1 && (
+        <Card><CardContent className="p-4">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Resumo por grupo</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead><tr className="border-b border-border text-muted-foreground uppercase tracking-wider">
+                <th className="text-left p-2 font-semibold">Grupo</th>
+                <th className="text-right p-2 font-semibold">Investido</th>
+                <th className="text-right p-2 font-semibold">Vendas</th>
+                <th className="text-right p-2 font-semibold">Qtd</th>
+                <th className="text-right p-2 font-semibold">ROI</th>
+              </tr></thead>
+              <tbody>
+                {totalsGrupo.map((t) => (
+                  <tr key={t.group.name} className="border-b border-border/30">
+                    <td className="p-2 font-semibold"><span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: t.group.color }} />{t.group.name}</span></td>
+                    <td className="p-2 text-right tabular-nums">{new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(t.spend)}</td>
+                    <td className="p-2 text-right tabular-nums font-semibold">{t.revenue > 0 ? new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(t.revenue) : "—"}</td>
+                    <td className="p-2 text-right tabular-nums">{t.orders > 0 ? String(t.orders) : "—"}</td>
+                    <td className={cn("p-2 text-right tabular-nums font-bold", t.roas != null ? t.roas >= 1 ? "text-emerald-500" : "text-red-500" : "text-muted-foreground")}>{t.roas != null ? `${t.roas.toFixed(2)}x` : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent></Card>
       )}
     </div>
   );
