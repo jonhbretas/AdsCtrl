@@ -412,13 +412,13 @@ function TaskDetailModal({ task, owner, clients, projects, onPatch, onStats, onC
           <button onClick={onClose} className="p-1 text-muted-foreground hover:text-foreground bg-transparent border-none cursor-pointer rounded"><X className="h-4 w-4" /></button>
         </div>
 
-        {/* Fields row */}
-        <div className="flex flex-wrap gap-3">
+        {/* Fields row — 2 columns for readability */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Field label="Cliente"><Select value={task.client_id || ""} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => onPatch({ client_id: e.target.value || null })}><option value="">sem cliente</option>{clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</Select></Field>
           <Field label="Projeto"><Select value={task.project_id || ""} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => onPatch({ project_id: e.target.value || null })}><option value="">sem projeto</option>{projects.filter((p) => p.status === "active" || p.id === task.project_id).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</Select></Field>
           <Field label="Prazo"><Input type="date" value={task.due_date || ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => onPatch({ due_date: e.target.value || null })} /></Field>
           <Field label="Coluna"><Select value={task.status} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => onPatch({ status: e.target.value })}>{COLUMNS.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}</Select></Field>
-          <Field label="Urgência"><Button type="button" variant={task.priority === "high" ? "destructive" : "secondary"} size="sm" onClick={() => onPatch({ priority: task.priority === "high" ? "normal" : "high" })}>{task.priority === "high" ? "● urgente" : "○ normal"}</Button></Field>
+          <Field label="Urgência"><Button type="button" variant={task.priority === "high" ? "destructive" : "secondary"} size="sm" className="w-full justify-center" onClick={() => onPatch({ priority: task.priority === "high" ? "normal" : "high" })}>{task.priority === "high" ? "● urgente" : "○ normal"}</Button></Field>
           {owner?.group && <Field label="Grupo"><span className="text-sm text-muted-foreground">{owner.group.name}</span></Field>}
         </div>
 
