@@ -178,7 +178,7 @@ export default function Dashboard() {
   const [groups, setGroups] = useState<Group[]>([]);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [groupFilter, setGroupFilter] = useState<string>("all");
-  const [platformFilter, setPlatformFilter] = useState<"meta" | "google">("meta");
+  const [platformFilter, setPlatformFilter] = useState<"meta" | "google" | "all">("meta");
   const [onlyActive, setOnlyActive] = useState(true);
   const [search, setSearch] = useState("");
   const [period, setPeriod] = useState<Period>("7d");
@@ -449,7 +449,7 @@ export default function Dashboard() {
   const filtered = useMemo(() => {
     let list = accounts;
     if (!showHidden) list = list.filter((a) => !a.hidden);
-    list = list.filter((a) => a.platform === platformFilter);
+    if (platformFilter !== "all") list = list.filter((a) => a.platform === platformFilter);
     if (groupFilter !== "all") list = list.filter((a) => a.group_id === groupFilter);
     if (onlyActive) list = list.filter((a) => a.status === "ACTIVE");
     if (search.trim()) {
@@ -525,9 +525,9 @@ export default function Dashboard() {
   }, [accounts]);
 
   const groupById = (id: string | null) => groups.find((g) => g.id === id);
-  const activeFilters = [groupFilter !== "all", platformFilter !== "meta", !onlyActive, search.trim() !== "", showHidden].filter(Boolean).length;
+  const activeFilters = [groupFilter !== "all", platformFilter !== "meta" && platformFilter !== "all", !onlyActive, search.trim() !== "", showHidden].filter(Boolean).length;
   const periodLabel = period === "custom" ? "personalizado" : PRESETS.find((p) => p.key === period)?.label || period;
-  const platformLabel = platformFilter === "google" ? "Google" : "Meta";
+  const platformLabel = platformFilter === "google" ? "Google" : platformFilter === "all" ? "Meta + Google" : "Meta";
   const short = PERIOD_SHORT[period];
   const fam = RESULT_FAMILY_BY_SLUG[focus] || RESULT_FAMILIES[0];
   const primaryCurrency = totals.currencyTotals[0]?.currency || "BRL";
@@ -656,6 +656,9 @@ export default function Dashboard() {
         <div className="flex items-center gap-1.5 p-1 rounded-lg bg-muted/50 border border-border/50">
           <button onClick={() => setPlatformFilter("meta")} className={cn("px-3 py-1.5 text-xs font-medium rounded-md transition-colors", platformFilter === "meta" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
             Meta
+          </button>
+          <button onClick={() => setPlatformFilter("all")} className={cn("px-3 py-1.5 text-xs font-medium rounded-md transition-colors", platformFilter === "all" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+            Todas
           </button>
           <button onClick={() => { setPlatformFilter("google"); setFocus("conversoes"); }} className={cn("px-3 py-1.5 text-xs font-medium rounded-md transition-colors", platformFilter === "google" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
             Google
