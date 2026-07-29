@@ -2,7 +2,6 @@
 
 import { createContext, useContext } from "react";
 import { Bar, BarChart, CartesianGrid, ComposedChart, Line, Tooltip, XAxis, YAxis, Area, AreaChart, Pie, PieChart, Cell, Legend } from "recharts";
-import BrandMark from "@/components/BrandMark";
 import { money, moneyShort, num, pct, dayLabel, resultLabel, pickVal, delta, PURCHASE_KEYS, ATC_KEYS, CHECKOUT_KEYS, LINKCLICK_KEYS, RESULT_FAMILY_BY_SLUG } from "@/lib/format";
 import { appBrandName } from "@/lib/brand";
 
@@ -92,13 +91,7 @@ export default function ReportDocument({ data, compact = false, width }: { data:
         <PrintStyles />
 
         {/* Cover */}
-        {/* Régua fina em vez de barra preta: o documento acompanha a paleta
-            clara do painel, e não o contraste pesado da versão antiga. */}
         <section style={{ paddingBottom: 16, marginBottom: 20, borderBottom: `1px solid ${C.line}` }}>
-          <div className="flex items-center gap-2 mb-3">
-            <BrandMark size={26} />
-            <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: -0.2, color: C.ink }}>{brand}</span>
-          </div>
           <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1.4, textTransform: "uppercase", color: C.muted }}>Relatório de mídia paga</div>
           <h1 style={{ margin: "6px 0 2px", fontSize: compact ? 22 : 30, fontWeight: 800, letterSpacing: -0.6, lineHeight: 1.15, color: C.ink }}>{account.name}</h1>
           <div style={{ fontSize: compact ? 13 : 15, color: C.muted, fontWeight: 500 }}>Análise de desempenho</div>
@@ -138,7 +131,7 @@ export default function ReportDocument({ data, compact = false, width }: { data:
         <footer style={{ marginTop: 24, paddingTop: 12, borderTop: `1px solid ${C.line}`, fontSize: 10, color: C.muted, lineHeight: 1.6 }}>
           <div>Fontes: {metaOk ? "Meta Marketing API" : ""}{metaOk && google.length ? " · " : ""}{google.length ? "Google Ads API" : ""}. Dados ao vivo em {new Date(data.generated_at).toLocaleString("pt-BR")}.</div>
           {data.organic_note && <div style={{ marginTop: 2 }}>{data.organic_note}</div>}
-          <div style={{ marginTop: 2 }}>Gerado por {brand}.</div>
+          <div style={{ marginTop: 2 }}>Relatório gerado automaticamente.</div>
         </footer>
       </div>
     </LayoutCtx.Provider>

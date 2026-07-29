@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { Download, RefreshCw } from "lucide-react";
 import ReportDocument, { ReportPayload } from "@/components/ReportDocument";
-import BrandMark from "@/components/BrandMark";
 import { ModeToggle, useReadingMode } from "@/components/ReadingMode";
 
 export default function PublicReportPage() {
@@ -39,9 +38,8 @@ export default function PublicReportPage() {
       `}</style>
 
       <div className="no-print max-w-[740px] mx-auto px-4 pt-5 pb-0 flex items-center gap-2.5 flex-wrap">
-        <BrandMark size={22} />
         <span className="text-xs text-muted-foreground">
-          Relatório de mídia paga · {(data?.brand || "").trim() || process.env.NEXT_PUBLIC_APP_BRAND_NAME || "AdsCtrl"}
+          Relatório de mídia paga · {(data?.brand || "").trim() || data?.account?.name || "Cliente"}
         </span>
         <div className="flex-1" />
         <ModeToggle compact={compact} onChange={choose} />

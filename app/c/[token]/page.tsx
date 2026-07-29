@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { Download, ChevronRight, Calendar, RefreshCw } from "lucide-react";
 import ReportDocument, { ReportPayload } from "@/components/ReportDocument";
-import BrandMark from "@/components/BrandMark";
 import { ModeToggle, useReadingMode } from "@/components/ReadingMode";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -64,7 +63,6 @@ export default function ClientDashboardPage() {
 
       {/* Header */}
       <div className="no-print max-w-[740px] mx-auto px-4 pt-5 pb-0 flex items-center gap-2.5 flex-wrap">
-        <BrandMark size={24} />
         <span className="text-sm font-bold text-foreground">{data?.client.name ?? "Painel do cliente"}</span>
         <span className="text-xs text-muted-foreground">· métricas de mídia paga</span>
         <div className="flex-1" />
