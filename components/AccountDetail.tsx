@@ -731,8 +731,7 @@ export default function AccountDetail({
               {(Object.keys(METRIC_LABELS) as MetricKey[]).map((m) => <option key={m} value={m}>{METRIC_LABELS[m]}</option>)}
             </select>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 340px), 1fr))", gap: GAP, marginBottom: SECTION_GAP }}>
-            {segments.withData.map((segment) => {
+          <div className="grid grid-cols-2 gap-3 mb-3">{segments.withData.map((segment) => {
               const rows = segment.rows.filter((r) => metricOf(r, demoMetric) > 0);
               const data = rows.map((r) => ({ name: r.key, primary: metricOf(r, demoMetric), secondary: (r as any).reach || (r as any).impressions || 0 }));
               const maxVal = Math.max(...data.map((d) => d.primary), 1);
