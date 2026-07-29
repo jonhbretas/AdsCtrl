@@ -45,7 +45,7 @@ const mult = (v: number) => `${v.toFixed(2).replace(".", ",")}x`;
 const ageLabel = (k: string) => k.replace("_", "–").replace("65", "65+");
 const regionLabel = (k: string) => k.split(",")[0];
 const platformLabel = (k: string) => k === "facebook" ? "Facebook" : k === "instagram" ? "Instagram" : k === "messenger" ? "Messenger" : k === "audience_network" ? "Audience" : k;
-const deviceLabel = (k: string) => ({ ipad: "iPad", iphone: "iPhone", android_smartphone: "Android", android_tablet: "Android Tablet", desktop: "Desktop", feature_phone: "Básico" }[k] || k);
+const deviceLabel = (k: string) => ({ ipad: "iPad", iphone: "iPhone", android_smartphone: "Android", android_tablet: "Android Tablet", desktop: "Desktop", feature_phone: "Básico", mobile_app: "App mobile", mobile_web: "Web mobile", other: "Outro" }[k] || k);
 const genderLabel = (k: string) => k === "male" ? "Masculino" : k === "female" ? "Feminino" : "Desconhecido";
 const MESSAGE_KEYS = RESULT_FAMILY_BY_SLUG.mensagens.keys;
 const LEAD_KEYS = RESULT_FAMILY_BY_SLUG.leads.keys;
@@ -161,7 +161,11 @@ function Kpi({ label, value, cur, prev, prevText, invert }: { label: string; val
 }
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
-  return <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 10, padding: 12, marginTop: 8 }}>
+  // flex:1 + minWidth:0 only bite inside a flex row (two-card layouts like
+  // Idade/Região, Gênero/Dispositivo). Solo cards ignore it — no flex parent.
+  // Without it, cards with short content (BarList) shrink to fit instead of
+  // splitting the row 50/50, leaving a dead gap on the right.
+  return <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 10, padding: 12, marginTop: 8, flex: 1, minWidth: 0 }}>
     <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>{title}</div>
     {children}
   </div>;
@@ -341,7 +345,10 @@ function Funnel({ steps }: { steps: { label: string; v: number }[] }) {
 
 function BarList({ rows, color }: { rows: { key: string; value: number; right: string }[]; color: string }) {
   const maxV = Math.max(...rows.map((r) => r.value), 1);
-  return <div style={{ display: "grid", gap: 3 }}>{rows.map((r, i) => <div key={i} style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ fontSize: 10, width: 80, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: C.ink }}>{r.key}</span><div style={{ flex: 1, height: 14, borderRadius: 3, background: C.accent, overflow: "hidden" }}><div style={{ height: "100%", borderRadius: 3, width: `${(r.value / maxV) * 100}%`, background: color }} /></div><span style={{ fontSize: 10, color: C.muted, width: 64, textAlign: "right" }}>{r.right}</span></div>)}</div>;
+  // "right" width fixed at 64px used to clip/wrap longer strings (Gênero's
+  // "5.263 impr · 2.272 alc" broke onto its own line). flexShrink:0 + nowrap
+  // + auto width lets it size to content instead.
+  return <div style={{ display: "grid", gap: 4 }}>{rows.map((r, i) => <div key={i} style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ fontSize: 10, width: 80, flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: C.ink }}>{r.key}</span><div style={{ flex: 1, minWidth: 0, height: 14, borderRadius: 3, background: C.accent, overflow: "hidden" }}><div style={{ height: "100%", borderRadius: 3, width: `${(r.value / maxV) * 100}%`, background: color }} /></div><span style={{ fontSize: 10, color: C.muted, flexShrink: 0, whiteSpace: "nowrap", textAlign: "right" }}>{r.right}</span></div>)}</div>;
 }
 
 function DataTable({ head, rows }: { head: { label: string; align?: "left" | "right" }[]; rows: (string | number)[][] }) {
