@@ -195,6 +195,7 @@ export default function Dashboard() {
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
   const [collecting, setCollecting] = useState(false);
+  const [salesData, setSalesData] = useState<Map<string, { revenue: number; orders: number; spend: number }>>(new Map());
   const [alertTab, setAlertTab] = useState<"active" | "history">("active");
   const [history, setHistory] = useState<AlertItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -242,13 +243,33 @@ export default function Dashboard() {
   async function load() {
     setError(null);
     try {
-      const r = await fetch("/api/accounts");
+      const [r, sr] = await Promise.all([
+        fetch("/api/accounts"),
+        fetch("/api/sales?months=1", { cache: "no-store" }).catch(() => null),
+      ]);
       const text = await r.text();
       const d = text ? JSON.parse(text) : {};
       if (!r.ok || d.error) throw new Error(d.error || `Falha ao carregar (HTTP ${r.status}).`);
       setAccounts(d.accounts || []);
       setGroups(d.groups || []);
       setAlerts(d.alerts || []);
+
+      // Carrega dados de vendas (ROI offline) por nome de conta/cliente
+      if (sr && sr.ok) {
+        const sd = await sr.json();
+        const map = new Map<string, { revenue: number; orders: number; spend: number }>();
+        for (const row of sd.rows || []) {
+          const m = row.months?.[0];
+          if (m && (m.revenue != null || m.orders != null)) {
+            map.set(row.name.toLowerCase().trim(), {
+              revenue: m.revenue ?? 0,
+              orders: m.orders ?? 0,
+              spend: m.spend || 0,
+            });
+          }
+        }
+        setSalesData(map);
+      }
     } catch (e: any) {
       setError(e?.message ?? "Erro ao carregar os dados.");
     } finally {
@@ -770,12 +791,13 @@ export default function Dashboard() {
           <div className="overflow-x-auto">
             <div className="min-w-[900px]">
               {/* Header */}
-              <div className="grid grid-cols-[1.7fr_0.5fr_0.8fr_1fr_0.9fr_0.9fr_28px_28px] gap-2 px-4 py-2.5 border-b border-border/50 bg-muted/30 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider items-center">
+              <div className="grid grid-cols-[1.7fr_0.5fr_0.8fr_1fr_0.9fr_0.7fr_0.9fr_28px_28px] gap-2 px-4 py-2.5 border-b border-border/50 bg-muted/30 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider items-center">
                 <GridSortHeader sortKey="name" sort={tableSort} onSort={setTableSort} align="left">Cliente</GridSortHeader>
                 <GridSortHeader sortKey="channels" sort={tableSort} onSort={setTableSort} align="left" initialDirection="desc">Canais</GridSortHeader>
                 <GridSortHeader sortKey="trend" sort={tableSort} onSort={setTableSort} align="center" initialDirection="desc">Tendência</GridSortHeader>
                 <GridSortHeader sortKey="spend" sort={tableSort} onSort={setTableSort} initialDirection="desc">Investimento ({short})</GridSortHeader>
                 <GridSortHeader sortKey="result" sort={tableSort} onSort={setTableSort} initialDirection="desc">{fam.label.split(" ")[0]}</GridSortHeader>
+                <span>Vendas (ROI)</span>
                 <GridSortHeader sortKey="balance" sort={tableSort} onSort={setTableSort} initialDirection="desc">Saldo / fatura</GridSortHeader>
                 <span /><span />
               </div>
@@ -803,7 +825,7 @@ export default function Dashboard() {
                     <div
                       onClick={() => { if (!a.hidden) setExpanded(open ? null : a.account_id); }}
                       className={cn(
-                        "grid grid-cols-[1.7fr_0.5fr_0.8fr_1fr_0.9fr_0.9fr_28px_28px] gap-2 px-4 py-3 items-center transition-colors",
+                        "grid grid-cols-[1.7fr_0.5fr_0.8fr_1fr_0.9fr_0.7fr_0.9fr_28px_28px] gap-2 px-4 py-3 items-center transition-colors",
                         a.hidden ? "cursor-default" : "cursor-pointer hover:bg-accent/30",
                         open && "bg-accent/20"
                       )}
@@ -879,6 +901,21 @@ export default function Dashboard() {
                         {fam.sales && m.value > 0 && m.spend > 0 && (
                           <div className="text-[11px] text-emerald-500 font-medium">{(m.value / m.spend).toFixed(1)}x ROAS</div>
                         )}
+                      </div>
+
+                      {/* Vendas (ROI) */}
+                      <div className="text-right">
+                        {(() => {
+                          const v = salesData.get(a.name.toLowerCase().trim());
+                          if (!v) return <span className="text-[11px] text-muted-foreground">—</span>;
+                          const roas = v.spend > 0 ? v.revenue / v.spend : null;
+                          return (
+                            <>
+                              <div className="text-sm font-semibold">{new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v.revenue)}</div>
+                              {roas != null && <div className={cn("text-[11px] font-medium", roas >= 1 ? "text-emerald-500" : "text-red-500")}>{roas.toFixed(2)}x ROI</div>}
+                            </>
+                          );
+                        })()}
                       </div>
 
                       {/* Balance */}
