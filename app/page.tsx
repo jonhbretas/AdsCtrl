@@ -116,7 +116,7 @@ interface LiveOverview {
   errors?: { account_id: string; platform: string; message: string }[];
 }
 
-type Period = "today" | "7d" | "14d" | "30d" | "custom";
+type Period = "today" | "7d" | "14d" | "30d" | "mtd" | "custom";
 type AccountSortKey = "name" | "channels" | "trend" | "spend" | "result" | "balance";
 const ACCOUNT_SORT_KEYS: readonly AccountSortKey[] = ["name", "channels", "trend", "spend", "result", "balance"];
 const PRESETS: { key: Period; label: string }[] = [
@@ -124,12 +124,18 @@ const PRESETS: { key: Period; label: string }[] = [
   { key: "7d", label: "7D" },
   { key: "14d", label: "14D" },
   { key: "30d", label: "30D" },
+  { key: "mtd", label: "Mês atual" },
 ];
 
 function isoDaysAgo(n: number) {
   const d = new Date();
   d.setUTCDate(d.getUTCDate() - n);
   return d.toISOString().slice(0, 10);
+}
+
+function firstOfMonth() {
+  const d = new Date();
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-01`;
 }
 
 function rangeForPeriod(period: Period, customSince: string, customUntil: string) {
@@ -139,11 +145,12 @@ function rangeForPeriod(period: Period, customSince: string, customUntil: string
     case "7d": return { since: isoDaysAgo(7), until: isoDaysAgo(1) };
     case "14d": return { since: isoDaysAgo(14), until: isoDaysAgo(1) };
     case "30d": return { since: isoDaysAgo(30), until: isoDaysAgo(1) };
+    case "mtd": return { since: firstOfMonth(), until: today };
     case "custom": return { since: customSince, until: customUntil };
   }
 }
 
-const PERIOD_SHORT: Record<Period, string> = { today: "hoje", "7d": "7d", "14d": "14d", "30d": "30d", custom: "período" };
+const PERIOD_SHORT: Record<Period, string> = { today: "hoje", "7d": "7d", "14d": "14d", "30d": "30d", mtd: "mês", custom: "período" };
 
 function initials(name: string) {
   return name.trim().charAt(0).toUpperCase() || "?";
