@@ -194,6 +194,8 @@ function MetaSection({ detail, currency, accountName, focus }: { detail: MetaDet
   const linkCtr = ratio(linkClicks, k.impressions); const prevLinkCtr = ratio(prevLinkClicks, p.impressions);
   const cpc = k.clicks ? k.spend / k.clicks : 0; const prevCpc = p.clicks ? p.spend / p.clicks : 0;
   const freq = k.reach ? k.impressions / k.reach : 0; const prevFreq = p.reach ? p.impressions / p.reach : 0;
+  const atc = pickVal(k.results, ATC_KEYS); const prevAtc = pickVal(p.results, ATC_KEYS);
+  const checkout = pickVal(k.results, CHECKOUT_KEYS); const prevCheckout = pickVal(p.results, CHECKOUT_KEYS);
   const purchases = pickVal(k.results, PURCHASE_KEYS); const prevPurchases = pickVal(p.results, PURCHASE_KEYS);
   const purchaseValue = pickVal(k.values, PURCHASE_KEYS); const prevPurchaseValue = pickVal(p.values, PURCHASE_KEYS);
   const leads = pickVal(k.results, LEAD_KEYS) + pickVal(k.results, REGISTER_KEYS); const prevLeads = pickVal(p.results, LEAD_KEYS) + pickVal(p.results, REGISTER_KEYS);
@@ -218,6 +220,9 @@ function MetaSection({ detail, currency, accountName, focus }: { detail: MetaDet
         <Kpi label="CTR (link)" value={pct(linkCtr)} cur={linkCtr} prev={prevLinkCtr} prevText={pct(prevLinkCtr)} />
         <Kpi label="CPC médio" value={m(cpc)} cur={cpc} prev={prevCpc} prevText={m(prevCpc)} invert />
         <Kpi label="CPM médio" value={m(k.cpm)} cur={k.cpm} prev={p.cpm} prevText={m(p.cpm)} invert />
+        <Kpi label="Peças ativas" value={num(detail.ads.length)} />
+        {atc > 0 && (<><Kpi label="Adicionar ao carrinho" value={num(atc)} cur={atc} prev={prevAtc} prevText={num(prevAtc)} /><Kpi label="Custo/carrinho" value={atc ? m(k.spend / atc) : "—"} cur={atc ? k.spend / atc : undefined} prev={prevAtc ? p.spend / prevAtc : undefined} prevText={prevAtc ? m(p.spend / prevAtc) : undefined} invert /></>)}
+        {checkout > 0 && (<><Kpi label="Iniciar checkout" value={num(checkout)} cur={checkout} prev={prevCheckout} prevText={num(prevCheckout)} /><Kpi label="Custo/checkout" value={checkout ? m(k.spend / checkout) : "—"} cur={checkout ? k.spend / checkout : undefined} prev={prevCheckout ? p.spend / prevCheckout : undefined} prevText={prevCheckout ? m(p.spend / prevCheckout) : undefined} invert /></>)}
         {messages > 0 && (<><Kpi label="Conversas" value={num(messages)} cur={messages} prev={prevMessages} prevText={num(prevMessages)} /><Kpi label="Custo/conversa" value={messages ? m(k.spend / messages) : "—"} cur={messages ? k.spend / messages : undefined} prev={prevMessages ? p.spend / prevMessages : undefined} prevText={prevMessages ? m(p.spend / prevMessages) : undefined} invert /></>)}
         {leads > 0 && (<><Kpi label="Leads" value={num(leads)} cur={leads} prev={prevLeads} prevText={num(prevLeads)} /><Kpi label="Custo/lead" value={leads ? m(k.spend / leads) : "—"} cur={leads ? k.spend / leads : undefined} prev={prevLeads ? p.spend / prevLeads : undefined} prevText={prevLeads ? m(p.spend / prevLeads) : undefined} invert /></>)}
         {purchases > 0 && (<><Kpi label="Compras" value={num(purchases)} cur={purchases} prev={prevPurchases} prevText={num(prevPurchases)} /><Kpi label="Custo/compra" value={purchases ? m(k.spend / purchases) : "—"} cur={purchases ? k.spend / purchases : undefined} prev={prevPurchases ? p.spend / prevPurchases : undefined} prevText={prevPurchases ? m(p.spend / prevPurchases) : undefined} invert /></>)}
@@ -331,9 +336,15 @@ function GoogleSection({ block }: { block: GoogleBlock }) {
         compact={compact}
       />
     </Card>
-    {e?.campaigns && e.campaigns.length > 0 && <Card title="Campanhas"><GoogleTable rows={e.campaigns.slice(0, 10)} cur={block.currency} /></Card>}
-    {e?.keywords && e.keywords.length > 0 && <Card title="Termos de busca"><GoogleTable rows={e.keywords.slice(0, 10)} cur={block.currency} /></Card>}
-    {e?.cities && e.cities.length > 0 && <Card title="Cidades"><GoogleTable rows={e.cities.slice(0, 10)} cur={block.currency} /></Card>}
+    {e?.campaigns && e.campaigns.length > 0 && <Card title="Campanhas"><GoogleTable rows={e.campaigns.slice(0, 10)} cur={block.currency} labelHead="Campanha" /></Card>}
+    {e?.adGroups && e.adGroups.length > 0 && <Card title="Grupos de anúncios"><GoogleTable rows={e.adGroups.slice(0, 10)} cur={block.currency} labelHead="Grupo" /></Card>}
+    {e?.keywords && e.keywords.length > 0 && <Card title="Palavras-chave"><GoogleTable rows={e.keywords.slice(0, 10)} cur={block.currency} labelHead="Palavra-chave" /></Card>}
+    {(e?.devices?.length || e?.ages?.length || e?.genders?.length) ? <div style={{ display: "flex", gap: 12, flexDirection: compact ? "column" : "row" }}>
+      {e?.devices && e.devices.length > 0 && <Card title="Dispositivo"><GoogleTable rows={e.devices} cur={block.currency} labelHead="Dispositivo" /></Card>}
+      {e?.ages && e.ages.length > 0 && <Card title="Idade"><GoogleTable rows={e.ages} cur={block.currency} labelHead="Idade" /></Card>}
+      {e?.genders && e.genders.length > 0 && <Card title="Gênero"><GoogleTable rows={e.genders} cur={block.currency} labelHead="Gênero" /></Card>}
+    </div> : null}
+    {e?.cities && e.cities.length > 0 && <Card title="Cidades"><GoogleTable rows={e.cities.slice(0, 10)} cur={block.currency} labelHead="Cidade" /></Card>}
     {e?.notes && e.notes.length > 0 && <div style={{ marginTop: 8 }}>{e.notes.map((n, i) => <p key={i} style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, margin: "2px 0" }}>· {n}</p>)}</div>}
   </Block>);
 }
@@ -355,8 +366,8 @@ function DataTable({ head, rows }: { head: { label: string; align?: "left" | "ri
   return <div style={{ overflowX: "auto" }}><table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse" }}><thead><tr style={{ borderBottom: `1px solid ${C.line}` }}>{head.map((h, i) => <th key={i} style={{ paddingBottom: 4, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: 0.3, textAlign: h.align === "right" ? "right" : "left" }}>{h.label}</th>)}</tr></thead><tbody>{rows.map((row, i) => <tr key={i} style={{ borderBottom: `1px solid ${C.line}80` }}>{row.map((cell, j) => <td key={j} style={{ padding: "4px 0", fontVariantNumeric: "tabular-nums", textAlign: j > 0 ? "right" : "left", fontWeight: j > 0 ? 600 : 400, color: C.ink }}>{cell}</td>)}</tr>)}</tbody></table></div>;
 }
 
-function GoogleTable({ rows, cur }: { rows: GoogleReportRow[]; cur: string }) {
-  return <div style={{ overflowX: "auto" }}><table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse" }}><thead><tr style={{ borderBottom: `1px solid ${C.line}` }}>{["Termo", "Custo", "Impr.", "Cliques", "CTR", "CPC", "Conv.", "CPA"].map((h) => <th key={h} style={{ paddingBottom: 4, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: 0.3, textAlign: "right" }}>{h}</th>)}</tr></thead><tbody>{rows.map((r, i) => <tr key={i} style={{ borderBottom: `1px solid ${C.line}80` }}><td style={{ padding: "4px 0", textAlign: "left", fontWeight: 600, color: C.ink }}>{r.key}</td>{[r.cost, r.impressions, r.clicks, r.ctr, r.cpc, r.conversions, r.costPerConversion].map((v, j) => <td key={j} style={{ padding: "4px 0", textAlign: "right", fontVariantNumeric: "tabular-nums", fontWeight: 600, color: C.ink }}>{j === 0 || j === 4 || j === 6 ? money(v, cur) : j === 3 ? pct(v) : num(v)}</td>)}</tr>)}</tbody></table></div>;
+function GoogleTable({ rows, cur, labelHead = "Termo" }: { rows: GoogleReportRow[]; cur: string; labelHead?: string }) {
+  return <div style={{ overflowX: "auto" }}><table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse" }}><thead><tr style={{ borderBottom: `1px solid ${C.line}` }}>{[labelHead, "Custo", "Impr.", "Cliques", "CTR", "CPC", "Conv.", "CPA"].map((h) => <th key={h} style={{ paddingBottom: 4, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: 0.3, textAlign: h === labelHead ? "left" : "right" }}>{h}</th>)}</tr></thead><tbody>{rows.map((r, i) => <tr key={i} style={{ borderBottom: `1px solid ${C.line}80` }}><td style={{ padding: "4px 0", textAlign: "left", fontWeight: 600, color: C.ink, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.key}>{r.key}</td>{[r.cost, r.impressions, r.clicks, r.ctr, r.cpc, r.conversions, r.costPerConversion].map((v, j) => <td key={j} style={{ padding: "4px 0", textAlign: "right", fontVariantNumeric: "tabular-nums", fontWeight: 600, color: C.ink }}>{j === 0 || j === 4 || j === 6 ? money(v, cur) : j === 3 ? pct(v) : num(v)}</td>)}</tr>)}</tbody></table></div>;
 }
 
 function RowsTable({ rows, currency, focus, thumbs }: { rows: Row[]; currency: string; focus: Focus | null; thumbs?: boolean; }) {
