@@ -240,6 +240,56 @@ export default function Dashboard() {
     return norm((periodKey && a.prevByPeriod?.[periodKey]) || a.prevMetrics);
   }
 
+  // Conta Google vinculada a um cliente Meta, por id da conta Meta. Em "Todas"
+  // a linha do cliente precisa somar as duas plataformas — sem isto, o
+  // Investimento da linha ficava igual ao de "Meta", porque cada linha só
+  // lia os próprios números, nunca os da conta vinculada.
+  const linkedGoogleByMeta = useMemo(() => {
+    const map = new Map<string, Account[]>();
+    for (const g of accounts) {
+      if (g.platform === "google" && g.linked_meta_account_id && !g.hidden) {
+        const list = map.get(g.linked_meta_account_id) || [];
+        list.push(g);
+        map.set(g.linked_meta_account_id, list);
+      }
+    }
+    return map;
+  }, [accounts]);
+
+  // Métricas da linha, combinadas com a conta Google vinculada quando "Todas"
+  // está selecionado. Fora de "Todas", a linha mostra só a própria conta —
+  // clicar em Meta continua mostrando só Meta, como já era.
+  function combine(own: M, a: Account): M {
+    if (platformFilter !== "all" || a.platform !== "meta") return own;
+    const linked = linkedGoogleByMeta.get(a.account_id) || [];
+    if (!linked.length) return own;
+    let spend = own.spend, conversions = own.conversions, value = own.value;
+    const results = { ...own.results };
+    for (const g of linked) {
+      const gm = isLive ? norm(live?.metrics?.[g.account_id]) : null;
+      if (!gm) continue;
+      spend += gm.spend; conversions += gm.conversions; value += gm.value;
+      for (const [k, v] of Object.entries(gm.results)) results[k] = (results[k] || 0) + v;
+    }
+    return { ...own, spend, conversions, value, results, result: results[focus] || 0 };
+  }
+  function comboMetrics(a: Account): M { return combine(accMetrics(a), a); }
+  function comboPrev(a: Account): M {
+    if (platformFilter !== "all" || a.platform !== "meta") return accPrev(a);
+    const linked = linkedGoogleByMeta.get(a.account_id) || [];
+    const own = accPrev(a);
+    if (!linked.length) return own;
+    let spend = own.spend, conversions = own.conversions, value = own.value;
+    const results = { ...own.results };
+    for (const g of linked) {
+      const gp = isLive ? norm(live?.prev?.[g.account_id]) : null;
+      if (!gp) continue;
+      spend += gp.spend; conversions += gp.conversions; value += gp.value;
+      for (const [k, v] of Object.entries(gp.results)) results[k] = (results[k] || 0) + v;
+    }
+    return { ...own, spend, conversions, value, results, result: results[focus] || 0 };
+  }
+
   async function load() {
     setError(null);
     try {
@@ -456,9 +506,16 @@ export default function Dashboard() {
       const q = search.trim().toLowerCase();
       list = list.filter((a) => a.name.toLowerCase().includes(q));
     }
+    // Em "Todas", a conta Google vinculada já entra somada na linha do
+    // cliente Meta (ver combine()). Listá-la de novo como linha própria
+    // contaria o investimento duas vezes no total da tela.
+    if (platformFilter === "all") {
+      const visibleMetaIds = new Set(list.filter((a) => a.platform === "meta").map((a) => a.account_id));
+      list = list.filter((a) => !(a.platform === "google" && a.linked_meta_account_id && visibleMetaIds.has(a.linked_meta_account_id)));
+    }
     const value = (account: Account) => {
-      const metrics = accMetrics(account);
-      const previous = accPrev(account);
+      const metrics = combine(accMetrics(account), account);
+      const previous = combine(accPrev(account), account);
       const unavailable = isLive && Boolean(live?.errors?.some((item) => item.account_id === account.account_id));
       switch (tableSort.key) {
         case "name": return account.name;
@@ -480,14 +537,14 @@ export default function Dashboard() {
       }
       return compareSortValues(leftValue, rightValue, tableSort.direction) || compareSortValues(left.name, right.name, "asc");
     });
-  }, [accounts, groupFilter, platformFilter, onlyActive, search, showHidden, period, live, tableSort, focus]);
+  }, [accounts, groupFilter, platformFilter, onlyActive, search, showHidden, period, live, tableSort, focus, linkedGoogleByMeta]);
 
   const totals = useMemo(() => {
     let spend = 0, res = 0, val = 0;
     let prevSpend = 0, prevRes = 0, prevVal = 0;
     const byCurrency: Record<string, { spend: number; res: number; val: number; prevSpend: number; prevRes: number; prevVal: number }> = {};
     for (const a of filtered) {
-      const m = accMetrics(a), p = accPrev(a);
+      const m = comboMetrics(a), p = comboPrev(a);
       const currency = (a.currency || "BRL").toUpperCase();
       const bucket = byCurrency[currency] || (byCurrency[currency] = { spend: 0, res: 0, val: 0, prevSpend: 0, prevRes: 0, prevVal: 0 });
       spend += m.spend; res += m.result; val += m.value;
@@ -506,7 +563,7 @@ export default function Dashboard() {
       currencyTotals,
       mixedCurrencies: currencyTotals.length > 1,
     };
-  }, [filtered, period, live, focus]);
+  }, [filtered, period, live, focus, platformFilter, linkedGoogleByMeta]);
 
   const visibleAlerts = useMemo(() => {
     const names = new Set(filtered.map((a) => a.name));
@@ -816,8 +873,8 @@ export default function Dashboard() {
                 const g = groupById(a.group_id);
                 const open = !a.hidden && expanded === a.account_id;
                 const dimmed = expanded !== null && !open && !a.hidden;
-                const m = accMetrics(a);
-                const previous = accPrev(a);
+                const m = comboMetrics(a);
+                const previous = comboPrev(a);
                 const liveError = isLive ? live?.errors?.find((item) => item.account_id === a.account_id) : undefined;
                 const spendTrend = !liveError && previous.spend > 0 ? ((m.spend - previous.spend) / previous.spend) * 100 : null;
                 const linkedMeta = a.platform === "google" && a.linked_meta_account_id ? accounts.find((meta) => meta.account_id === a.linked_meta_account_id) : null;
