@@ -189,6 +189,17 @@ export function clientPatchFromBody(body: unknown, creating = false): Record<str
     patch.track_sales = input.track_sales;
   }
 
+  // Orgânico (Página/Instagram Business): puro dado, sem formato específico
+  // a validar — a Meta usa IDs numéricos para Página e para o usuário
+  // comercial do Instagram. Preenchido só quando o cliente tem as duas
+  // atribuídas ao usuário de sistema na BM (ver lib/meta-social.ts).
+  if (Object.prototype.hasOwnProperty.call(input, "facebook_page_id")) {
+    patch.facebook_page_id = nullableText(input.facebook_page_id, "facebook_page_id", 60);
+  }
+  if (Object.prototype.hasOwnProperty.call(input, "instagram_business_id")) {
+    patch.instagram_business_id = nullableText(input.instagram_business_id, "instagram_business_id", 60);
+  }
+
   return patch;
 }
 

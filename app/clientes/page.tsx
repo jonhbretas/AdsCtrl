@@ -18,7 +18,7 @@ import { RefreshCw, AlertTriangle, Plus, X, Mail } from "lucide-react";
 
 interface Group { id: string; name: string; color: string; }
 interface Account { account_id: string; name: string; status: string; group_id: string | null; platform: "meta" | "google"; hidden?: boolean; linked_meta_account_id?: string | null; }
-interface ClientRecord { id: string; name: string; status: "active" | "paused" | "archived"; objective: string | null; result_family: string | null; brand_name?: string | null; primary_kpi: string | null; target_value: number | null; monthly_budget: number | null; monthly_conversion_goal: number | null; currency: string; timezone: string; budget_start_day: number; track_sales?: boolean; accounts: Account[]; }
+interface ClientRecord { id: string; name: string; status: "active" | "paused" | "archived"; objective: string | null; result_family: string | null; brand_name?: string | null; primary_kpi: string | null; target_value: number | null; monthly_budget: number | null; monthly_conversion_goal: number | null; currency: string; timezone: string; budget_start_day: number; track_sales?: boolean; facebook_page_id?: string | null; instagram_business_id?: string | null; accounts: Account[]; }
 type ClientAdminSortKey = "name" | "objective" | "budget" | "result" | "kpi" | "target" | "cycle";
 type GroupSortKey = "name" | "accounts";
 type AccountAdminSortKey = "platform" | "name" | "status" | "client" | "group" | "visibility";
@@ -140,6 +140,47 @@ export default function ClientesPage() {
               </div>
             </div>
           )}
+        </Collapsible>
+
+        {/* Orgânico: alimenta a seção de Facebook/Instagram no relatório. Fica
+            vazio de propósito até a Página estar atribuída ao usuário de
+            sistema na BM — ver lib/meta-social.ts. */}
+        <Collapsible id="social" storageKey="clientes:organico"
+          summary={<SectionHead icon="◑" title="Orgânico (Facebook/Instagram)" hint="Página e conta comercial, para o relatório trazer alcance e seguidores." meta={`${clients.filter((c) => c.facebook_page_id || c.instagram_business_id).length} configurado(s)`} />}>
+          <div className="space-y-2">
+            {sortedClients.map((client) => (
+              <div key={client.id} className="grid gap-2 p-3 rounded-lg border border-border/50 bg-card items-end" style={{ gridTemplateColumns: "minmax(160px,1fr) 1fr 1fr" }}>
+                <div className="text-sm font-semibold truncate min-w-0">{client.name}</div>
+                <Field label="ID da Página (Facebook)">
+                  <input
+                    key={`${client.id}-fb-${loadRevision}`}
+                    defaultValue={client.facebook_page_id ?? ""}
+                    placeholder="ex.: 102938475600"
+                    onBlur={(e) => {
+                      const value = e.target.value.trim();
+                      if (value === (client.facebook_page_id ?? "")) return;
+                      updateClientField(client, "facebook_page_id", value || null);
+                    }}
+                    style={compactInput}
+                  />
+                </Field>
+                <Field label="ID do Instagram (Business)">
+                  <input
+                    key={`${client.id}-ig-${loadRevision}`}
+                    defaultValue={client.instagram_business_id ?? ""}
+                    placeholder="ex.: 178234659021"
+                    onBlur={(e) => {
+                      const value = e.target.value.trim();
+                      if (value === (client.instagram_business_id ?? "")) return;
+                      updateClientField(client, "instagram_business_id", value || null);
+                    }}
+                    style={compactInput}
+                  />
+                </Field>
+              </div>
+            ))}
+            {!sortedClients.length && <div className="text-sm text-muted-foreground px-1">Nenhum cliente ativo.</div>}
+          </div>
         </Collapsible>
 
         {/* Grupos */}

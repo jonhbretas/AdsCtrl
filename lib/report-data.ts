@@ -10,6 +10,7 @@ import {
   googleAdsConfigured,
   googleCustomerId,
 } from "@/lib/google-ads";
+import { fetchSocialReport, SocialReport } from "@/lib/meta-social";
 import { getServiceClient, supabaseEnvMissing } from "@/lib/supabase";
 
 export class ReportError extends Error {
@@ -35,19 +36,29 @@ export interface ClientReportSettings {
   result_family: string | null;
   /** Marca que assina o que o cliente vê. Nulo = usa APP_BRAND_NAME. */
   brand: string | null;
+  /** Orgânico (Facebook/Instagram). Nulo até a migration + cadastro em /clientes. */
+  facebook_page_id: string | null;
+  instagram_business_id: string | null;
 }
 
 // Resolve o cliente de uma conta e devolve o que o relatório precisa saber
-// sobre ele. Uma consulta serve as duas coisas: foco e marca.
+// sobre ele. Uma consulta serve todas essas leituras.
 export async function clientReportSettings(accountId: string): Promise<ClientReportSettings> {
-  const empty: ClientReportSettings = { result_family: null, brand: null };
+  const empty: ClientReportSettings = {
+    result_family: null, brand: null, facebook_page_id: null, instagram_business_id: null,
+  };
   if (supabaseEnvMissing()) return empty;
 
-  // brand_name pode não existir ainda (supabase-migration-brand.sql). Tenta com
-  // a coluna e repete sem ela: marca é acabamento, não pode derrubar relatório.
-  const read = async (withBrand: boolean) => {
+  // brand_name e as colunas de orgânico podem não existir ainda (migrações
+  // próprias). Tenta com tudo e vai reduzindo: nenhuma delas pode derrubar o
+  // relatório por não terem sido rodadas.
+  const COLUMN_SETS = [
+    "result_family,brand_name,facebook_page_id,instagram_business_id",
+    "result_family,brand_name",
+    "result_family",
+  ];
+  const read = async (columns: string) => {
     const supabase = getServiceClient();
-    const columns = withBrand ? "result_family,brand_name" : "result_family";
     const bare = accountId.replace(/^act_/, "").replace(/^google:/, "");
 
     const direct = await supabase
@@ -72,20 +83,25 @@ export async function clientReportSettings(accountId: string): Promise<ClientRep
   };
 
   try {
-    let row: any;
-    try {
-      row = await read(true);
-    } catch (error: any) {
-      if (!/brand_name/.test(error?.message || "")) throw error;
-      row = await read(false);
+    let row: any = null;
+    for (const columns of COLUMN_SETS) {
+      try {
+        row = await read(columns);
+        break;
+      } catch (error: any) {
+        if (columns === COLUMN_SETS[COLUMN_SETS.length - 1]) throw error;
+        if (!/brand_name|facebook_page_id|instagram_business_id/.test(error?.message || "")) throw error;
+      }
     }
     if (!row) return empty;
     return {
       result_family: row.result_family ?? null,
       brand: (row.brand_name ?? null) || null,
+      facebook_page_id: row.facebook_page_id ?? null,
+      instagram_business_id: row.instagram_business_id ?? null,
     };
   } catch {
-    // Foco e marca são refinamentos de leitura; nunca derrubam o relatório.
+    // Foco, marca e orgânico são refinamentos de leitura; nunca derrubam o relatório.
     return empty;
   }
 }
@@ -195,6 +211,21 @@ export async function buildReport(requestedAccountId: string, since: string, unt
       )
     : [];
 
+  // Orgânico (Facebook/Instagram): só tenta quando o cliente tem os IDs
+  // cadastrados em /clientes. Sem Página atribuída ao usuário de sistema na
+  // BM, a chamada falha e cai no aviso de sempre — não derruba o relatório.
+  const settings = await clientReportSettings(account.account_id);
+  const socialToken = tokenByIndex(account.platform === "meta" && typeof account.token_ref === "number" ? account.token_ref : 0);
+  let social: SocialReport | null = null;
+  if (settings.facebook_page_id || settings.instagram_business_id) {
+    social = await fetchSocialReport(
+      { facebookPageId: settings.facebook_page_id, instagramBusinessId: settings.instagram_business_id },
+      socialToken,
+      since,
+      until
+    ).catch(() => null);
+  }
+
   return {
     generated_at: new Date().toISOString(),
     account: {
@@ -208,8 +239,10 @@ export async function buildReport(requestedAccountId: string, since: string, unt
     prevRange: previousRange(since, until),
     meta,
     google,
-    organic_note:
-      "Dados orgânicos de Instagram/Facebook não entram: o token atual não tem as Páginas atribuídas na BM.",
+    social,
+    organic_note: social
+      ? undefined
+      : "Dados orgânicos de Instagram/Facebook não entram: o token atual não tem as Páginas atribuídas na BM.",
   };
 }
 

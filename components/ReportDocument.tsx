@@ -37,7 +37,10 @@ interface Breakdown extends Vals { key: string; spend: number; impressions: numb
 interface MetaDetail { name?: string; currency?: string; kpis: Kpis; prevKpis: Kpis; daily: Daily[]; campaigns: Row[]; adsets: Row[]; ads: Row[]; breakdowns: { age_gender: Breakdown[]; region: Breakdown[]; platform: Breakdown[]; position: Breakdown[]; device: Breakdown[]; hour: Breakdown[]; age?: Breakdown[]; gender?: Breakdown[]; }; error?: string | null; }
 interface GoogleReportRow { key: string; cost: number; impressions: number; clicks: number; ctr: number; cpc: number; conversions: number; conversionValue: number; costPerConversion: number; topImpressionShare?: number | null; }
 interface GoogleBlock { account_id: string; name: string; currency: string; detail: any; extras: { campaigns: GoogleReportRow[]; adGroups: GoogleReportRow[]; keywords: GoogleReportRow[]; devices: GoogleReportRow[]; ages: GoogleReportRow[]; genders: GoogleReportRow[]; cities: GoogleReportRow[]; notes: string[]; } | null; }
-export interface ReportPayload { generated_at: string; account: { account_id: string; name: string; platform: string; currency: string; status: string; }; range: { since: string; until: string; }; prevRange: { since: string; until: string; }; meta: MetaDetail | null; google: GoogleBlock[]; organic_note?: string; result_family?: string | null; brand?: string | null; error?: string; }
+interface PageReport { page_id: string; name: string | null; fan_count: number | null; followers_count: number | null; impressions_unique: number; post_engagements: number; page_views: number; notes: string[]; }
+interface InstagramReport { ig_user_id: string; username: string | null; followers_count: number | null; media_count: number | null; reach: number; profile_views: number; website_clicks: number; notes: string[]; }
+interface SocialReport { facebook: PageReport | null; instagram: InstagramReport | null; }
+export interface ReportPayload { generated_at: string; account: { account_id: string; name: string; platform: string; currency: string; status: string; }; range: { since: string; until: string; }; prevRange: { since: string; until: string; }; meta: MetaDetail | null; google: GoogleBlock[]; social?: SocialReport | null; organic_note?: string; result_family?: string | null; brand?: string | null; error?: string; }
 
 const br = (iso: string) => { const [y, m, d] = iso.split("-"); return `${d}/${m}/${y}`; };
 const ratio = (a: number, b: number) => (b ? (a / b) * 100 : 0);
@@ -126,6 +129,7 @@ export default function ReportDocument({ data, compact = false, width }: { data:
         {meta?.error && <Block><SectionTitle kicker="Meta Ads" color={C.meta}>{account.name}</SectionTitle><Warn>{meta.error}</Warn></Block>}
         {metaOk && <MetaSection detail={meta!} currency={cur} accountName={account.name} focus={resolveFocus(data.result_family)} />}
         {google.map((g) => <GoogleSection key={g.account_id} block={g} />)}
+        {data.social && (data.social.facebook || data.social.instagram) && <SocialSection social={data.social} />}
 
         {/* Footer */}
         <footer style={{ marginTop: 24, paddingTop: 12, borderTop: `1px solid ${C.line}`, fontSize: 10, color: C.muted, lineHeight: 1.6 }}>
@@ -347,6 +351,43 @@ function GoogleSection({ block }: { block: GoogleBlock }) {
     {e?.cities && e.cities.length > 0 && <Card title="Cidades"><GoogleTable rows={e.cities.slice(0, 10)} cur={block.currency} labelHead="Cidade" /></Card>}
     {e?.notes && e.notes.length > 0 && <div style={{ marginTop: 8 }}>{e.notes.map((n, i) => <p key={i} style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, margin: "2px 0" }}>· {n}</p>)}</div>}
   </Block>);
+}
+
+// Orgânico (Página do Facebook + Instagram Business). Só existe quando o
+// cliente tem os IDs cadastrados em /clientes E a Página está atribuída ao
+// usuário de sistema na BM — sem isso, data.social vem null e esta seção
+// nem monta (ver lib/meta-social.ts para o porquê).
+function SocialSection({ social }: { social: { facebook: any; instagram: any } }) {
+  const { facebook, instagram } = social;
+  return (
+    <Block>
+      <SectionTitle kicker="Orgânico" color={C.green}>Facebook e Instagram</SectionTitle>
+      <div style={{ display: "flex", gap: 12, flexDirection: "row", flexWrap: "wrap" }}>
+        {facebook && (
+          <Card title={facebook.name || "Página do Facebook"}>
+            <Grid cols={2}>
+              <Kpi label="Seguidores" value={num(facebook.followers_count ?? facebook.fan_count ?? 0)} />
+              <Kpi label="Curtidas na Página" value={num(facebook.fan_count ?? 0)} />
+              <Kpi label="Alcance (período)" value={num(facebook.impressions_unique)} />
+              <Kpi label="Interações com posts" value={num(facebook.post_engagements)} />
+            </Grid>
+            {facebook.notes?.length > 0 && <p style={{ fontSize: 10, color: C.faint, marginTop: 6 }}>{facebook.notes.join(" · ")}</p>}
+          </Card>
+        )}
+        {instagram && (
+          <Card title={instagram.username ? `@${instagram.username}` : "Instagram"}>
+            <Grid cols={2}>
+              <Kpi label="Seguidores" value={num(instagram.followers_count ?? 0)} />
+              <Kpi label="Publicações" value={num(instagram.media_count ?? 0)} />
+              <Kpi label="Alcance (período)" value={num(instagram.reach)} />
+              <Kpi label="Visitas ao perfil" value={num(instagram.profile_views)} />
+            </Grid>
+            {instagram.notes?.length > 0 && <p style={{ fontSize: 10, color: C.faint, marginTop: 6 }}>{instagram.notes.join(" · ")}</p>}
+          </Card>
+        )}
+      </div>
+    </Block>
+  );
 }
 
 function Funnel({ steps }: { steps: { label: string; v: number }[] }) {
