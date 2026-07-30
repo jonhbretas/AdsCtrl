@@ -7,16 +7,78 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { RefreshCw, Settings, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { RefreshCw, Settings, AlertTriangle, CheckCircle2, LayoutDashboard, ExternalLink } from "lucide-react";
 
+interface ContaCliente { account_id: string; platform: "meta" | "google"; }
 interface MesDoCliente { month: string; spend: number; daysWithData: number; daysElapsed: number; inProgress: boolean; partial: boolean; revenue: number | null; orders: number | null; note: string | null; }
-interface LinhaCliente { client_id: string; name: string; currency: string; accounts: number; group?: { name: string; color: string } | null; months: MesDoCliente[]; }
+interface LinhaCliente { client_id: string; name: string; currency: string; accounts: ContaCliente[]; group?: { name: string; color: string } | null; months: MesDoCliente[]; }
 interface Payload { months: string[]; rows: LinhaCliente[]; allClients: { id: string; name: string; track_sales?: boolean }[]; }
 
 const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 function SeloGrupo({ grupo }: { grupo: { name: string; color: string } }) {
   return <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full font-semibold whitespace-nowrap" style={{ backgroundColor: grupo.color + "22", color: grupo.color }}>{grupo.name}</span>;
+}
+
+// Meta e Google abrem pelo id nu, sem prefixo (act_/google:). O painel expõe o
+// id prefixado, então cada gerenciador tira o prefixo que não é dele.
+function gerenciadorUrl(conta: ContaCliente): string {
+  const bareId = conta.account_id.replace(/^act_/, "").replace(/^google:/, "");
+  return conta.platform === "google"
+    ? `https://ads.google.com/aw/overview?ocid=${encodeURIComponent(bareId)}`
+    : `https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=${encodeURIComponent(bareId)}`;
+}
+
+// Nome do cliente vira menu: visão geral no painel, ou o gerenciador de cada
+// conta vinculada (uma pode ter Meta e Google ao mesmo tempo). Sem isto,
+// resolver algo na conta de um cliente era sair da tela de vendas, procurar o
+// cliente na Visão Geral e copiar o link do gerenciador na mão.
+function NomeCliente({ nome, contas, children }: { nome: string; contas: ContaCliente[]; children?: React.ReactNode }) {
+  const metaConta = contas.find((c) => c.platform === "meta");
+  const googleContas = contas.filter((c) => c.platform === "google");
+  // Visão geral abre por qualquer conta vinculada; a Meta é preferida porque
+  // a Visão Geral organiza a linha por ela e aninha o Google embaixo.
+  const overviewConta = metaConta || contas[0];
+  if (!contas.length) return <>{nome}{children}</>;
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          onClick={(e) => e.stopPropagation()}
+          className="bg-transparent border-none p-0 font-inherit text-inherit cursor-pointer underline decoration-dotted decoration-muted-foreground/50 underline-offset-2 hover:decoration-foreground"
+          title="Ir para a visão geral ou abrir o gerenciador da conta"
+        >
+          {nome}
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        <DropdownMenuLabel>{nome}</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <a href={`/?account=${encodeURIComponent(overviewConta.account_id)}`}>
+            <LayoutDashboard className="h-3.5 w-3.5" /> Visão geral do cliente
+          </a>
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        {metaConta && (
+          <DropdownMenuItem asChild>
+            <a href={gerenciadorUrl(metaConta)} target="_blank" rel="noreferrer">
+              <ExternalLink className="h-3.5 w-3.5" /> Abrir Meta Ads Manager
+            </a>
+          </DropdownMenuItem>
+        )}
+        {googleContas.map((conta) => (
+          <DropdownMenuItem key={conta.account_id} asChild>
+            <a href={gerenciadorUrl(conta)} target="_blank" rel="noreferrer">
+              <ExternalLink className="h-3.5 w-3.5" /> Abrir Google Ads{googleContas.length > 1 ? ` (${conta.account_id.replace(/^google:/, "")})` : ""}
+            </a>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 }
 function rotuloMes(iso: string, longo = false) { const [ano, mes] = iso.split("-"); const nome = MESES[Number(mes) - 1] || mes; return longo ? `${nome}/${ano}` : `${nome}/${ano.slice(2)}`; }
 function paraNumero(texto: string): number | null { const limpo = texto.trim().replace(/\s/g, "").replace(/\./g, "").replace(",", "."); if (!limpo) return null; const valor = Number(limpo); return Number.isFinite(valor) ? valor : null; }
@@ -147,7 +209,7 @@ export default function VendasPage() {
               return (
                 <div key={linha.client_id} className="flex flex-wrap items-end gap-x-4 gap-y-2 pb-3 border-b border-border/50 last:pb-0 last:border-b-0">
                   <div className="min-w-0 flex-[2_1_200px]">
-                    <div className="text-sm font-semibold">{linha.name}{linha.group && <SeloGrupo grupo={linha.group} />}</div>
+                    <div className="text-sm font-semibold"><NomeCliente nome={linha.name} contas={linha.accounts}>{linha.group && <SeloGrupo grupo={linha.group} />}</NomeCliente></div>
                     <div className="text-[11px] text-muted-foreground">investido {new Intl.NumberFormat("pt-BR", { style: "currency", currency: linha.currency }).format(m.spend)}{m.inProgress && " · mês em curso"}</div>
                   </div>
                   <label className="grid gap-0.5 min-w-0 flex-[1_0_120px]"><span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Vendas (R$)</span>
@@ -193,7 +255,7 @@ export default function VendasPage() {
               <tbody>
                 {linhasFiltradas.map((linha) => (
                   <tr key={linha.client_id} className="border-b border-border/30 last:border-b-0">
-                    <th className="text-left p-2 font-semibold text-foreground whitespace-nowrap">{linha.name}{linha.group && <SeloGrupo grupo={linha.group} />}</th>
+                    <th className="text-left p-2 font-semibold text-foreground whitespace-nowrap"><NomeCliente nome={linha.name} contas={linha.accounts}>{linha.group && <SeloGrupo grupo={linha.group} />}</NomeCliente></th>
                     {linha.months.map((m) => {
                       const ch = `${linha.client_id}::${m.month}`;
                       const roas = m.revenue != null && m.spend > 0 ? m.revenue / m.spend : null;
@@ -267,7 +329,7 @@ export default function VendasPage() {
               <tbody>
                 {linhasFiltradas.map((linha) => (
                   <tr key={linha.client_id} className="border-b border-border/30">
-                    <th className="text-left p-2 font-semibold text-foreground whitespace-nowrap">{linha.name}{linha.group && <SeloGrupo grupo={linha.group} />}</th>
+                    <th className="text-left p-2 font-semibold text-foreground whitespace-nowrap"><NomeCliente nome={linha.name} contas={linha.accounts}>{linha.group && <SeloGrupo grupo={linha.group} />}</NomeCliente></th>
                     {linha.months.map((m) => {
                       const ticket = ticketMedio(m.revenue, m.orders);
                       const custo = custoPorVenda(m.spend, m.orders);

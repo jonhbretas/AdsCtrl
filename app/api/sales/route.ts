@@ -122,13 +122,16 @@ export async function GET(req: Request) {
 
     // O grupo mora na conta; o do cliente é o da primeira conta vinculada que
     // tiver um. Vem junto para o nome do cliente nunca aparecer sem ele.
+    // platform vem junto para o popup de "abrir gerenciador" saber se a conta
+    // é Meta ou Google sem precisar de outra ida ao banco.
     const [{ data: contasComGrupo }, { data: grupos }] = todasContas.length
       ? await Promise.all([
-          sb.from("ad_accounts").select("account_id, group_id").in("account_id", todasContas),
+          sb.from("ad_accounts").select("account_id, group_id, platform").in("account_id", todasContas),
           sb.from("client_groups").select("id, name, color"),
         ])
       : [{ data: [] as any[] }, { data: [] as any[] }];
     const grupoPorConta = new Map((contasComGrupo || []).map((a: any) => [a.account_id, a.group_id]));
+    const plataformaPorConta = new Map((contasComGrupo || []).map((a: any) => [a.account_id, a.platform]));
     const grupoPorId = new Map((grupos || []).map((g: any) => [g.id, { name: g.name, color: g.color }]));
     const grupoDoCliente = (contas: string[]) => {
       for (const conta of contas) {
@@ -201,7 +204,7 @@ export async function GET(req: Request) {
         client_id: cliente.id,
         name: cliente.name,
         currency: cliente.currency || "BRL",
-        accounts: contas.length,
+        accounts: contas.map((id) => ({ account_id: id, platform: plataformaPorConta.get(id) || "meta" })),
         group: grupoDoCliente(contas),
         months: meses,
       };
