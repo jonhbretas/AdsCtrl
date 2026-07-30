@@ -65,6 +65,7 @@ function problemTarget(task: Task): { href: string; label: string; external?: bo
     case "low_balance": case "payment_issue":
       return account.startsWith("google:") ? clientView : { href: `https://adsmanager.facebook.com/ads/manager/billing?act=${accountParam}`, label: "Abrir cobrança na Meta", external: true };
     case "account_disabled": return clientView;
+    case "broad_location": return { href: `/?account=${accountParam}`, label: "Ver campanhas na conta" };
     default: return type ? clientView : null;
   }
 }

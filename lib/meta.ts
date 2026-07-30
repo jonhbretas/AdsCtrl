@@ -460,6 +460,9 @@ export interface RowInsight {
   // ou fora do período de veiculação).
   status?: string;
   effective_status?: string;
+  // Conjunto (ou campanha com um conjunto assim dentro) rodando o país
+  // inteiro sem nenhum recorte de localização. Ver fetchBroadLocationAdSets.
+  broad_location?: boolean;
 }
 
 export interface BreakdownRow {
@@ -721,6 +724,49 @@ export async function fetchStatuses(
       status: row.status || "",
       effective_status: row.effective_status || "",
     };
+  }
+  return out;
+}
+
+export interface BroadLocationAdSet {
+  adset_id: string;
+  adset_name: string;
+  campaign_id: string;
+  campaign_name: string;
+}
+
+// Conjunto rodando o país inteiro, sem nenhum recorte (região, cidade, raio).
+// É a marca de campanha duplicada onde ninguém trocou a localização: a cópia
+// nasce com o mesmo targeting da origem, e "país inteiro" é o padrão de quem
+// nunca configurou nada — não algo que se escolhe por engano de outro jeito.
+// Só ENTRA nesta lista se o conjunto está de fato rodando (effective_status
+// ACTIVE): duplicata parada no rascunho não é urgência de ninguém.
+export async function fetchBroadLocationAdSets(
+  actId: string,
+  token: string = TOKEN
+): Promise<BroadLocationAdSet[]> {
+  if (!actId.startsWith("act_")) actId = `act_${actId}`;
+  const fields = "id,name,effective_status,campaign{id,name},targeting{geo_locations}";
+  const rows = await fbGetAll<any>(
+    `${GRAPH}/${actId}/adsets?fields=${fields}&limit=500&access_token=${token}`
+  );
+  const out: BroadLocationAdSet[] = [];
+  for (const row of rows) {
+    if (row.effective_status !== "ACTIVE") continue;
+    const geo = row.targeting?.geo_locations || {};
+    const countries: string[] = geo.countries || [];
+    if (!countries.length) continue;
+    const narrowed = Boolean(
+      geo.regions?.length || geo.cities?.length || geo.zips?.length ||
+      geo.geo_markets?.length || geo.custom_locations?.length || geo.electoral_districts?.length
+    );
+    if (narrowed) continue;
+    out.push({
+      adset_id: String(row.id),
+      adset_name: row.name || row.id,
+      campaign_id: String(row.campaign?.id || ""),
+      campaign_name: row.campaign?.name || "",
+    });
   }
   return out;
 }
@@ -1175,6 +1221,7 @@ export async function getAccountDetail(
     campaignStatus,
     adsetStatus,
     adStatus,
+    broadLocation,
   ] = await Promise.all([
     fetchAccountKpis(actId, since, until, token),
     fetchAccountKpis(actId, prev.since, prev.until, token).catch(() => EMPTY_KPIS),
@@ -1212,6 +1259,7 @@ export async function getAccountDetail(
     fetchStatuses(actId, "campaign", token).catch(() => ({})),
     fetchStatuses(actId, "adset", token).catch(() => ({})),
     fetchStatuses(actId, "ad", token).catch(() => ({})),
+    fetchBroadLocationAdSets(actId, token).catch(() => []),
   ]);
 
   // Anexa thumbnails aos anúncios.
@@ -1228,6 +1276,14 @@ export async function getAccountDetail(
   applyStatus(campaigns, campaignStatus);
   applyStatus(adsets, adsetStatus);
   applyStatus(ads, adStatus);
+
+  // Marca a linha do conjunto direto (é onde a localização mora) e sobe o
+  // aviso para a campanha mãe: a aba de Campanhas é a que abre primeiro, e o
+  // problema precisa aparecer ali sem trocar de aba para achar o conjunto.
+  const broadAdsetIds = new Set(broadLocation.map((b) => b.adset_id));
+  const broadCampaignIds = new Set(broadLocation.map((b) => b.campaign_id));
+  for (const row of adsets) if (broadAdsetIds.has(row.id)) row.broad_location = true;
+  for (const row of campaigns) if (broadCampaignIds.has(row.id)) row.broad_location = true;
 
   const [age, gender] = opts.extended
     ? await Promise.all([

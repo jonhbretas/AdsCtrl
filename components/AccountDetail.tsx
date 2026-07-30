@@ -44,6 +44,9 @@ interface Row extends Vals {
   // status = configurado no objeto; effective_status = o que a Meta faz de
   // fato (pode estar pausado pelo pai, reprovado ou fora do período).
   status?: string; effective_status?: string;
+  // Conjunto (ou campanha com um conjunto assim dentro) rodando o país
+  // inteiro, sem recorte de localização — sintoma de duplicação esquecida.
+  broad_location?: boolean;
 }
 interface Daily extends Vals {
   date: string; spend: number; impressions: number; clicks: number; ctr: number; cpm: number; reach: number;
@@ -629,6 +632,18 @@ export default function AccountDetail({
                           />
                         )}
                         <span style={{ maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.name}>{r.name}</span>
+                        {/* País inteiro sem recorte é o padrão de campanha
+                            duplicada onde ninguém trocou a localização — vale
+                            mais aparecer aqui, na aba que abre primeiro, do
+                            que só na Central de Alertas. */}
+                        {r.broad_location && (tab === "campaigns" || tab === "adsets") && (
+                          <span
+                            title="Este conjunto está rodando o país inteiro, sem cidade, região ou raio configurado. Confira se a localização foi mesmo definida — é o sintoma mais comum de campanha duplicada onde ninguém trocou o público."
+                            style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 7px", borderRadius: 999, fontSize: 10, fontWeight: 700, background: "#fef3c7", color: "#92400e", border: "1px solid #fcd34d", flexShrink: 0, cursor: "help" }}
+                          >
+                            ⚠ país inteiro
+                          </span>
+                        )}
                       </div>
                     </td>
                     <Td>{formatMoney(r.spend)}</Td><Td>{num(r.impressions)}</Td><Td>{num(r.clicks)}</Td><Td>{pct(r.ctr)}</Td>

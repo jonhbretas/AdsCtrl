@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import {
   listAdAccountsAll, getRejectedAds, getDailyMetrics, DailyMetric,
   AccountInsight, mapAccountStatus, centsToUnit, availableBalance, tokenByIndex,
-  isPrepaidAccount, unbilledAmount,
+  isPrepaidAccount, unbilledAmount, fetchBroadLocationAdSets,
 } from "@/lib/meta";
 import {
   getGoogleDailyMetrics, googleAdsConfigured, googleCustomerId, GoogleDailyMetric,
@@ -178,6 +178,7 @@ const ACTIONABLE_ALERTS: Alert["type"][] = [
   "payment_issue",
   "account_disabled",
   "rejected_creative",
+  "broad_location",
 ];
 
 // Abre tarefa para o que precisa de mão. Enquanto o problema durar, a coleta
@@ -340,7 +341,10 @@ async function runCollect(triggerSource: "manual" | "cron", platform: CollectSco
       return; // erro não vira zero e não resolve alertas existentes
     }
     try {
-      const rejected = await getRejectedAds(acc.id, token).catch(() => []);
+      const [rejected, broadLocation] = await Promise.all([
+        getRejectedAds(acc.id, token).catch(() => []),
+        fetchBroadLocationAdSets(acc.id, token).catch(() => []),
+      ]);
       const periods = await saveSnapshots(acc.account_id, "meta", daily);
       const toInsight = (value: ReturnType<typeof aggregate>): AccountInsight => ({
         account_id: acc.account_id, spend: value.spend, impressions: value.impressions,
@@ -353,6 +357,7 @@ async function runCollect(triggerSource: "manual" | "cron", platform: CollectSco
         insight7d: toInsight(periods.last_7d),
         insightPrev7d: toInsight(periods.prev_7d),
         rejected,
+        broadLocation,
       }));
     } catch (e: any) {
       failed++;

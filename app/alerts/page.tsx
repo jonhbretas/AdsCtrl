@@ -15,7 +15,7 @@ type AlertItem = { id: number; account_id: string; account_name: string; level: 
 type AlertSortKey = "level" | "account" | "alert" | "updated";
 const ALERT_SORT_KEYS: readonly AlertSortKey[] = ["level", "account", "alert", "updated"];
 const LEVEL: Record<AlertLevel, { label: string; variant: "destructive" | "warning" | "info" }> = { critical: { label: "Crítico", variant: "destructive" }, warning: { label: "Atenção", variant: "warning" }, info: { label: "Informativo", variant: "info" } };
-const TYPE_LABEL: Record<string, string> = { account_disabled: "status", payment_issue: "pagamento", low_balance: "saldo baixo", spend_drop: "queda de gasto", spend_spike: "pico de gasto", rejected_creative: "criativo reprovado", creative_issue: "erro de veiculação", no_spend: "sem gasto" };
+const TYPE_LABEL: Record<string, string> = { account_disabled: "status", payment_issue: "pagamento", low_balance: "saldo baixo", spend_drop: "queda de gasto", spend_spike: "pico de gasto", rejected_creative: "criativo reprovado", creative_issue: "erro de veiculação", no_spend: "sem gasto", broad_location: "localização ampla" };
 
 export default function AlertsPage() {
   const [active, setActive] = useState<AlertItem[]>([]);

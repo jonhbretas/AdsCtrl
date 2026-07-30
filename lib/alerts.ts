@@ -5,6 +5,7 @@ import {
   AdAccountRaw,
   AccountInsight,
   RejectedAd,
+  BroadLocationAdSet,
   mapAccountStatus,
   availableBalance,
   isPrepaidAccount,
@@ -24,7 +25,8 @@ export interface Alert {
     | "spend_spike"
     | "rejected_creative"
     | "creative_issue"
-    | "no_spend";
+    | "no_spend"
+    | "broad_location";
   title: string;
   detail: string;
   // O que o alerta encontrou, quando isso é uma lista de entidades. Existe para
@@ -38,12 +40,15 @@ interface BuildAlertsInput {
   insight7d: AccountInsight | null;
   insightPrev7d: AccountInsight | null; // 7 dias anteriores, para comparar quedas
   rejected: RejectedAd[];
+  // Conjuntos rodando o país inteiro sem recorte — marca de campanha
+  // duplicada onde a localização não foi trocada. Ver fetchBroadLocationAdSets.
+  broadLocation?: BroadLocationAdSet[];
   // limiar configurável de saldo baixo, na moeda da conta
   lowBalanceThreshold?: number;
 }
 
 export function buildAlertsForAccount(input: BuildAlertsInput): Alert[] {
-  const { account, insight7d, insightPrev7d, rejected } = input;
+  const { account, insight7d, insightPrev7d, rejected, broadLocation = [] } = input;
   const name = account.name;
   const id = account.account_id;
   const alerts: Alert[] = [];
@@ -184,6 +189,30 @@ export function buildAlertsForAccount(input: BuildAlertsInput): Alert[] {
       type: "no_spend",
       title: "Sem gasto nos últimos 7 dias",
       detail: "Conta ativa mas sem investimento no período.",
+    });
+  }
+
+  // 7. Conjunto ativo mirando o país inteiro, sem nenhum recorte de
+  // localização. Sintoma clássico de campanha duplicada onde ninguém trocou
+  // o público: a cópia nasce com o targeting da origem, e "país inteiro"
+  // sem cidade/região/raio é o padrão de quem nunca mexeu naquele campo —
+  // gasto correndo fora da praça do cliente é o tipo de coisa que só se
+  // percebe tarde demais se não houver aviso.
+  if (broadLocation.length > 0) {
+    const campanhas = [...new Set(broadLocation.map((b) => b.campaign_name).filter(Boolean))];
+    alerts.push({
+      account_id: id,
+      account_name: name,
+      level: "warning",
+      type: "broad_location",
+      title: `${campanhas.length} campanha(s) rodando o país inteiro, sem recorte de localização`,
+      detail:
+        campanhas.slice(0, 3).join(" · ") +
+        " — confira se a localização foi mesmo trocada; é o sintoma mais comum de duplicação esquecida.",
+      entities: {
+        adIds: broadLocation.map((b) => b.adset_id),
+        adNames: broadLocation.map((b) => b.adset_name),
+      },
     });
   }
 
