@@ -2,18 +2,26 @@
 // Página do Facebook e conta comercial do Instagram — o lado orgânico que o
 // relatório ainda não tem.
 //
-// BLOQUEIO CONHECIDO: a Meta só devolve dado de Página/Instagram para quem a
-// Página foi atribuída, na Business Manager, ao mesmo usuário de sistema que
-// gera META_ACCESS_TOKEN. Hoje ela não está — é o mesmo bloqueio já registrado
-// para criar criativo (ver memória do projeto: "Token de sistema sem
-// Páginas"). Enquanto isso não for resolvido na BM, toda chamada aqui volta
-// erro de permissão, e é exatamente esse erro que report-data.ts espera.
+// Testado ao vivo contra Página real (Prime Gourmet Cuiabá): os campos do nó
+// (fan_count, followers_count, media_count, username) funcionam com o token
+// de sistema direto. A edge /insights, de Página e de Instagram, recusa esse
+// token com "(#190) This method must be called with a Page Access Token" — a
+// Meta exige o token DA PÁGINA para insights, não o do usuário de sistema que
+// a administra. resolvePageAccessToken busca esse token, uma vez por Página,
+// e ele nunca sai do servidor: /api/meta/pages (o dropdown) não devolve token
+// nenhum ao navegador.
 //
-// Este arquivo não foi testado contra dado real — não há Página atribuída
-// para testar com. Os campos de nó (fan_count, followers_count, media_count)
-// são estáveis há anos na Graph API; a edge /insights muda de nome de métrica
-// com frequência, por isso cada métrica é buscada e falha isoladamente (ver
-// runMetric), do jeito que getGoogleReportExtras já faz para o Google.
+// Nomes de métrica de /insights mudam com frequência entre versões da Graph
+// API; por isso cada métrica é buscada e falha isoladamente (ver runMetric),
+// do jeito que getGoogleReportExtras já faz para o Google — uma métrica
+// descontinuada não derruba as demais.
+//
+// BLOQUEIO REAL RESTANTE: reach/profile_views/website_clicks do Instagram
+// voltam "(#10) Application does not have permission for this action" —
+// isso é permissão do APP (instagram_manage_insights), concedida por Revisão
+// do App na Meta, não algo que se resolve atribuindo Página na BM. Enquanto
+// isso não for aprovado, o Instagram só traz o que os campos do nó já dão
+// (seguidores, publicações, username) — que já são reais e conferidos.
 
 const GRAPH = "https://graph.facebook.com/v25.0";
 
@@ -79,35 +87,57 @@ export interface PageReport {
   fan_count: number | null;
   followers_count: number | null;
   // Somados no período pedido (since/until), não snapshot.
+  // impressions_unique: sempre 0 por ora — ver bloqueio de nome de métrica no
+  // topo do arquivo. Mantido no tipo para o dia em que a métrica for achada.
   impressions_unique: number;
   post_engagements: number;
   page_views: number;
   notes: string[];
 }
 
+// A Página tem o próprio token, distinto do token de sistema que a
+// administra — /insights só aceita o dela. Nunca devolvido ao navegador:
+// só circula servidor a servidor, dentro desta chamada.
+export async function resolvePageAccessToken(pageId: string, systemToken: string): Promise<string> {
+  const data = await fbGet<{ access_token?: string }>(pageId, { fields: "access_token" }, systemToken);
+  const token = (data.access_token || "").trim();
+  if (!token) throw new Error("Token da Página indisponível — confira se o usuário de sistema tem função de administrador nela.");
+  return token;
+}
+
 export async function fetchPageReport(
   pageId: string,
-  token: string,
+  systemToken: string,
   since: string,
   until: string
 ): Promise<PageReport> {
   const id = required("facebook_page_id", pageId);
   const notes: string[] = [];
 
+  const pageToken = await resolvePageAccessToken(id, systemToken).catch((e: any) => {
+    notes.push(`token da Página: ${e?.message || "falhou"}`);
+    return systemToken; // campos do nó ainda funcionam com o token de sistema
+  });
+
   // Campos do nó: estáveis, quase nunca mudam de nome.
   const summary = await fbGet<{ name?: string; fan_count?: number; followers_count?: number }>(
     id,
     { fields: "name,fan_count,followers_count" },
-    token
+    pageToken
   ).catch((e: any) => {
     notes.push(`dados da Página: ${e?.message || "falhou"}`);
     return {} as { name?: string; fan_count?: number; followers_count?: number };
   });
 
-  const [impressions, engagements, views] = await Promise.all([
-    runMetric(`${id}/insights`, "page_impressions_unique", since, until, token, notes),
-    runMetric(`${id}/insights`, "page_post_engagements", since, until, token, notes),
-    runMetric(`${id}/insights`, "page_views_total", since, until, token, notes),
+  // page_impressions/page_impressions_unique: testado ao vivo contra Página
+  // real (com token de Página correto) e a Meta recusa as duas com "(#100)
+  // The value must be a valid insights metric" — a métrica de impressão de
+  // Página parece ter sido descontinuada ou renomeada numa versão recente da
+  // Graph API. Fica de fora até alguém confirmar o nome atual na documentação;
+  // post_engagements e page_views já vieram certos (sem erro, valores reais).
+  const [engagements, views] = await Promise.all([
+    runMetric(`${id}/insights`, "page_post_engagements", since, until, pageToken, notes),
+    runMetric(`${id}/insights`, "page_views_total", since, until, pageToken, notes),
   ]);
 
   return {
@@ -115,7 +145,7 @@ export async function fetchPageReport(
     name: summary.name ?? null,
     fan_count: summary.fan_count ?? null,
     followers_count: summary.followers_count ?? null,
-    impressions_unique: sumSeries(impressions),
+    impressions_unique: 0,
     post_engagements: sumSeries(engagements),
     page_views: sumSeries(views),
     notes,
@@ -133,9 +163,12 @@ export interface InstagramReport {
   notes: string[];
 }
 
+// O Instagram Business não tem token próprio: as chamadas dele rodam com o
+// token da Página do Facebook a que está vinculado (por isso pageToken, não
+// um token do próprio Instagram — a Meta não emite um).
 export async function fetchInstagramReport(
   igUserId: string,
-  token: string,
+  pageToken: string,
   since: string,
   until: string
 ): Promise<InstagramReport> {
@@ -145,16 +178,16 @@ export async function fetchInstagramReport(
   const summary = await fbGet<{ username?: string; followers_count?: number; media_count?: number }>(
     id,
     { fields: "username,followers_count,media_count" },
-    token
+    pageToken
   ).catch((e: any) => {
     notes.push(`dados do Instagram: ${e?.message || "falhou"}`);
     return {} as { username?: string; followers_count?: number; media_count?: number };
   });
 
   const [reach, profileViews, websiteClicks] = await Promise.all([
-    runMetric(`${id}/insights`, "reach", since, until, token, notes),
-    runMetric(`${id}/insights`, "profile_views", since, until, token, notes),
-    runMetric(`${id}/insights`, "website_clicks", since, until, token, notes),
+    runMetric(`${id}/insights`, "reach", since, until, pageToken, notes),
+    runMetric(`${id}/insights`, "profile_views", since, until, pageToken, notes),
+    runMetric(`${id}/insights`, "website_clicks", since, until, pageToken, notes),
   ]);
 
   return {
@@ -167,6 +200,48 @@ export async function fetchInstagramReport(
     website_clicks: sumSeries(websiteClicks),
     notes,
   };
+}
+
+export interface AvailablePage {
+  page_id: string;
+  page_name: string;
+  instagram_business_id: string | null;
+  instagram_username: string | null;
+  // Token que enxergou esta Página — vários System Users (uma BM cada) podem
+  // estar configurados em META_ACCESS_TOKENS; sem isto não dá pra saber qual
+  // deles usar depois pra buscar os insights desta Página específica.
+  token_index: number;
+}
+
+// Páginas que o token de sistema já enxerga — é literalmente a lista que fica
+// vazia até alguém atribuir a Página na Business Manager. Uma lista vazia não
+// é erro: é o estado normal enquanto o bloqueio (ver topo do arquivo) não foi
+// resolvido, e a tela usa isso para orientar o que fazer.
+export async function listAvailablePages(token: string, tokenIndex: number): Promise<AvailablePage[]> {
+  const pages: AvailablePage[] = [];
+  let url = `${GRAPH}/me/accounts?fields=id,name,instagram_business_account{id,username}&limit=100&access_token=${token}`;
+  // /me/accounts pagina por cursor, não por offset — cada página de resultado
+  // já traz o link pronto da próxima em paging.next.
+  while (url) {
+    const res = await fetch(url, { cache: "no-store" });
+    const text = await res.text();
+    let json: any = {};
+    try { json = text ? JSON.parse(text) : {}; } catch { json = {}; }
+    if (!res.ok || json?.error) {
+      throw new Error(json?.error?.error_user_msg || json?.error?.message || `HTTP ${res.status}`);
+    }
+    for (const row of json.data || []) {
+      pages.push({
+        page_id: String(row.id),
+        page_name: row.name || row.id,
+        instagram_business_id: row.instagram_business_account?.id ? String(row.instagram_business_account.id) : null,
+        instagram_username: row.instagram_business_account?.username || null,
+        token_index: tokenIndex,
+      });
+    }
+    url = json.paging?.next || "";
+  }
+  return pages;
 }
 
 export interface SocialReport {
@@ -187,9 +262,19 @@ export async function fetchSocialReport(
   const instagramId = (opts.instagramBusinessId || "").trim();
   if (!facebookId && !instagramId) return null;
 
+  // O Instagram não tem token próprio — precisa do token da Página a que está
+  // vinculado. Resolvido uma vez aqui para não repetir a chamada.
+  const pageToken = facebookId ? await resolvePageAccessToken(facebookId, token).catch(() => token) : token;
+
   const [facebook, instagram] = await Promise.all([
     facebookId ? fetchPageReport(facebookId, token, since, until).catch(() => null) : Promise.resolve(null),
-    instagramId ? fetchInstagramReport(instagramId, token, since, until).catch(() => null) : Promise.resolve(null),
+    instagramId
+      ? (facebookId
+          ? fetchInstagramReport(instagramId, pageToken, since, until).catch(() => null)
+          // Instagram cadastrado sem a Página: sem como resolver o token dela,
+          // o melhor que dá é tentar com o de sistema mesmo, que provavelmente falha.
+          : fetchInstagramReport(instagramId, token, since, until).catch(() => null))
+      : Promise.resolve(null),
   ]);
   if (!facebook && !instagram) return null;
   return { facebook, instagram };

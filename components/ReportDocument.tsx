@@ -368,8 +368,8 @@ function SocialSection({ social }: { social: { facebook: any; instagram: any } }
             <Grid cols={2}>
               <Kpi label="Seguidores" value={num(facebook.followers_count ?? facebook.fan_count ?? 0)} />
               <Kpi label="Curtidas na Página" value={num(facebook.fan_count ?? 0)} />
-              <Kpi label="Alcance (período)" value={num(facebook.impressions_unique)} />
               <Kpi label="Interações com posts" value={num(facebook.post_engagements)} />
+              <Kpi label="Visualizações da Página" value={num(facebook.page_views)} />
             </Grid>
             {facebook.notes?.length > 0 && <p style={{ fontSize: 10, color: C.faint, marginTop: 6 }}>{facebook.notes.join(" · ")}</p>}
           </Card>

@@ -142,45 +142,18 @@ export default function ClientesPage() {
           )}
         </Collapsible>
 
-        {/* Orgânico: alimenta a seção de Facebook/Instagram no relatório. Fica
-            vazio de propósito até a Página estar atribuída ao usuário de
-            sistema na BM — ver lib/meta-social.ts. */}
+        {/* Orgânico: alimenta a seção de Facebook/Instagram no relatório.
+            O dropdown só lista o que o token de sistema já enxerga — fica
+            vazio até a Página ser atribuída na Business Manager. Escolher a
+            Página já traz o Instagram vinculado a ela de brinde. */}
         <Collapsible id="social" storageKey="clientes:organico"
           summary={<SectionHead icon="◑" title="Orgânico (Facebook/Instagram)" hint="Página e conta comercial, para o relatório trazer alcance e seguidores." meta={`${clients.filter((c) => c.facebook_page_id || c.instagram_business_id).length} configurado(s)`} />}>
-          <div className="space-y-2">
-            {sortedClients.map((client) => (
-              <div key={client.id} className="grid gap-2 p-3 rounded-lg border border-border/50 bg-card items-end" style={{ gridTemplateColumns: "minmax(160px,1fr) 1fr 1fr" }}>
-                <div className="text-sm font-semibold truncate min-w-0">{client.name}</div>
-                <Field label="ID da Página (Facebook)">
-                  <input
-                    key={`${client.id}-fb-${loadRevision}`}
-                    defaultValue={client.facebook_page_id ?? ""}
-                    placeholder="ex.: 102938475600"
-                    onBlur={(e) => {
-                      const value = e.target.value.trim();
-                      if (value === (client.facebook_page_id ?? "")) return;
-                      updateClientField(client, "facebook_page_id", value || null);
-                    }}
-                    style={compactInput}
-                  />
-                </Field>
-                <Field label="ID do Instagram (Business)">
-                  <input
-                    key={`${client.id}-ig-${loadRevision}`}
-                    defaultValue={client.instagram_business_id ?? ""}
-                    placeholder="ex.: 178234659021"
-                    onBlur={(e) => {
-                      const value = e.target.value.trim();
-                      if (value === (client.instagram_business_id ?? "")) return;
-                      updateClientField(client, "instagram_business_id", value || null);
-                    }}
-                    style={compactInput}
-                  />
-                </Field>
-              </div>
-            ))}
-            {!sortedClients.length && <div className="text-sm text-muted-foreground px-1">Nenhum cliente ativo.</div>}
-          </div>
+          <SocialPagesPanel
+            clients={sortedClients}
+            loadRevision={loadRevision}
+            onUpdate={updateClient}
+            onError={setError}
+          />
         </Collapsible>
 
         {/* Grupos */}
@@ -247,6 +220,122 @@ export default function ClientesPage() {
             <CampaignTemplateList />
           </div>
         </Collapsible>
+      </div>
+    </div>
+  );
+}
+
+interface AvailablePage { page_id: string; page_name: string; instagram_business_id: string | null; instagram_username: string | null; token_index: number; }
+
+// Dropdown de Página + Instagram vinculado, em vez de colar ID na mão.
+// Escolher a Página já grava o Instagram junto (quando ela tem um vinculado);
+// o campo de Instagram continua editável por baixo pra quando a conta comercial
+// não é a vinculada àquela Página no Graph, ou pra apagar sem trocar a Página.
+function SocialPagesPanel({
+  clients, loadRevision, onUpdate, onError,
+}: {
+  clients: ClientRecord[];
+  loadRevision: number;
+  onUpdate: (id: string, patch: Partial<ClientRecord>) => void;
+  onError: (message: string) => void;
+}) {
+  const [pages, setPages] = useState<AvailablePage[] | null>(null);
+  const [issues, setIssues] = useState<string[]>([]);
+  const [loadingPages, setLoadingPages] = useState(true);
+
+  async function loadPages() {
+    setLoadingPages(true);
+    try {
+      const r = await fetch("/api/meta/pages", { cache: "no-store" });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Falha ao listar Páginas.");
+      setPages(d.pages || []);
+      setIssues(d.issues || []);
+    } catch (e: any) {
+      setPages([]);
+      onError(e?.message || "Falha ao listar Páginas do Facebook.");
+    } finally {
+      setLoadingPages(false);
+    }
+  }
+  useEffect(() => { loadPages(); }, []);
+
+  function selectPage(client: ClientRecord, pageId: string) {
+    if (!pageId) { onUpdate(client.id, { facebook_page_id: null }); return; }
+    const page = (pages || []).find((p) => p.page_id === pageId);
+    onUpdate(client.id, {
+      facebook_page_id: pageId,
+      // Só sobrescreve o Instagram se a Página escolhida tiver um vinculado
+      // — assim trocar de Página não apaga um Instagram digitado à mão.
+      ...(page?.instagram_business_id ? { instagram_business_id: page.instagram_business_id } : {}),
+    });
+  }
+
+  const hasPages = Boolean(pages && pages.length > 0);
+
+  return (
+    <div className="space-y-3">
+      {!loadingPages && !hasPages && (
+        <Notice tone="warn">
+          Nenhuma Página encontrada no token de sistema. Atribua as Páginas dos clientes ao usuário de
+          sistema na Business Manager (Configurações do negócio › Páginas › Atribuir pessoas/sistemas) —
+          assim que aparecerem lá, elas aparecem aqui, sem precisar copiar ID nenhum.
+          {issues.length > 0 && <div className="mt-1 text-[11px] opacity-80">{issues.join(" · ")}</div>}
+        </Notice>
+      )}
+      <div className="space-y-2">
+        {clients.map((client) => {
+          const linkedPage = (pages || []).find((p) => p.page_id === client.facebook_page_id);
+          return (
+            <div key={client.id} className="grid gap-2 p-3 rounded-lg border border-border/50 bg-card items-end" style={{ gridTemplateColumns: "minmax(160px,1fr) 1fr 1fr" }}>
+              <div className="min-w-0">
+                <div className="text-sm font-semibold truncate">{client.name}</div>
+                {linkedPage?.instagram_username && (
+                  <div className="text-[11px] text-muted-foreground truncate">@{linkedPage.instagram_username}</div>
+                )}
+              </div>
+              <Field label="Página (Facebook)">
+                {hasPages ? (
+                  <select value={client.facebook_page_id ?? ""} onChange={(e) => selectPage(client, e.target.value)} style={compactInput}>
+                    <option value="">— não vinculada —</option>
+                    {pages!.map((p) => (
+                      <option key={p.page_id} value={p.page_id}>
+                        {p.page_name}{p.instagram_username ? ` (@${p.instagram_username})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    key={`${client.id}-fb-${loadRevision}`}
+                    defaultValue={client.facebook_page_id ?? ""}
+                    placeholder={loadingPages ? "carregando…" : "ID manual (ex.: 102938475600)"}
+                    disabled={loadingPages}
+                    onBlur={(e) => {
+                      const value = e.target.value.trim();
+                      if (value === (client.facebook_page_id ?? "")) return;
+                      onUpdate(client.id, { facebook_page_id: value || null });
+                    }}
+                    style={compactInput}
+                  />
+                )}
+              </Field>
+              <Field label="Instagram (ID, se precisar ajustar)">
+                <input
+                  key={`${client.id}-ig-${loadRevision}`}
+                  defaultValue={client.instagram_business_id ?? ""}
+                  placeholder="preenchido pela Página"
+                  onBlur={(e) => {
+                    const value = e.target.value.trim();
+                    if (value === (client.instagram_business_id ?? "")) return;
+                    onUpdate(client.id, { instagram_business_id: value || null });
+                  }}
+                  style={compactInput}
+                />
+              </Field>
+            </div>
+          );
+        })}
+        {!clients.length && <div className="text-sm text-muted-foreground px-1">Nenhum cliente ativo.</div>}
       </div>
     </div>
   );
