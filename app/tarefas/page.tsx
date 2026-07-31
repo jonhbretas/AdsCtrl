@@ -12,7 +12,7 @@ import { BrDateInput } from "@/components/BrDateInput";
 import { Plus, X, ArrowLeft, ArrowRight, ExternalLink, RefreshCw, AlertTriangle, CheckCircle2, MessageSquare, ListChecks, Calendar } from "lucide-react";
 
 // --- Types ---
-interface Task { id: string; title: string; notes: string | null; link: string | null; status: "todo" | "doing" | "done"; priority: "normal" | "high"; due_date: string | null; client_id: string | null; account_id: string | null; project_id: string | null; source: "manual" | "auto"; alert_type: string | null; alert_fingerprint: string | null; context: { ad_ids?: string[]; ad_names?: string[] } | null; created_at: string; done_at: string | null; comments_count?: number; check_done?: number; check_total?: number; }
+interface Task { id: string; title: string; notes: string | null; link: string | null; status: "todo" | "doing" | "done"; position?: number | null; priority: "normal" | "high"; due_date: string | null; client_id: string | null; account_id: string | null; project_id: string | null; source: "manual" | "auto"; alert_type: string | null; alert_fingerprint: string | null; context: { ad_ids?: string[]; ad_names?: string[] } | null; created_at: string; done_at: string | null; comments_count?: number; check_done?: number; check_total?: number; }
 interface GroupRef { name: string; color: string; }
 interface ClientRef { id: string; name: string; account_id: string | null; group?: GroupRef | null; }
 interface AccountRef { account_id: string; name: string; group?: GroupRef | null; }
@@ -88,6 +88,7 @@ export default function TasksPage() {
   const [creating, setCreating] = useState(false);
   const [projectFilter, setProjectFilter] = useState<string>("");
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
 
   async function load() {
     setLoading(true); setError(null);
@@ -114,6 +115,26 @@ export default function TasksPage() {
     setTasks((c) => c.map((t) => (t.id === id ? { ...t, ...(body as any) } : t)));
     try { const r = await fetch("/api/tasks", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, ...body }) }); const p = await r.json(); if (!r.ok || p.error) throw new Error(p.error || "Falha."); setTasks((c) => c.map((t) => (t.id === id ? p.task : t))); }
     catch { setTasks(prev); } finally { setBusy(null); }
+  }
+
+  async function persistBoard(items: Task[]) {
+    const payload = items.map((task, position) => ({ id: task.id, status: task.status, position }));
+    const r = await fetch("/api/tasks", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: "bulk", items: payload }) });
+    const p = await r.json(); if (!r.ok || p.error) throw new Error(p.error || "Falha ao salvar a ordem.");
+  }
+
+  function moveTask(taskId: string, targetStatus: Task["status"], beforeId?: string) {
+    const current = tasks.find((task) => task.id === taskId); if (!current) return;
+    const next = tasks.filter((task) => task.id !== taskId);
+    const moving = { ...current, status: targetStatus };
+    const siblings = next.filter((task) => task.status === targetStatus);
+    const beforeIndex = beforeId ? siblings.findIndex((task) => task.id === beforeId) : -1;
+    siblings.splice(beforeIndex < 0 ? siblings.length : beforeIndex, 0, moving);
+    const positions = new Map(siblings.map((task, position) => [task.id, position]));
+    const updated = next.filter((task) => task.status !== targetStatus);
+    updated.push(...siblings.map((task) => ({ ...task, position: positions.get(task.id) })));
+    setTasks(updated);
+    persistBoard(updated).catch((e: any) => { setError(e?.message || "Falha ao salvar a ordem."); load(); });
   }
 
   async function remove(task: Task) {
@@ -206,7 +227,7 @@ export default function TasksPage() {
                 <span className="text-xs text-muted-foreground">{col.hint}</span>
                 <span className="ml-auto text-xs font-semibold text-muted-foreground">{items.length}</span>
               </div>
-              <div className="p-3 space-y-2">
+              <div className="p-3 space-y-2 min-h-[100px]" onDragOver={(event) => event.preventDefault()} onDrop={() => { if (draggedTaskId) moveTask(draggedTaskId, col.key); setDraggedTaskId(null); }}>
                 {loading && items.length === 0 && <><Skeleton className="h-20 rounded-lg" /><Skeleton className="h-20 rounded-lg" /></>}
                 {!loading && items.length === 0 && (
                   <div className="text-center py-6 text-xs text-muted-foreground">
@@ -214,7 +235,7 @@ export default function TasksPage() {
                   </div>
                 )}
                 {items.map((task) => (
-                  <TaskCard key={task.id} task={task} owner={owner(task)} project={task.project_id ? projectById.get(task.project_id) || null : null} projects={projects} busy={busy === task.id}
+                  <TaskCard key={task.id} task={task} owner={owner(task)} project={task.project_id ? projectById.get(task.project_id) || null : null} projects={projects} busy={busy === task.id} onDragStart={() => setDraggedTaskId(task.id)} onDragEnd={() => setDraggedTaskId(null)} onDropBefore={() => { if (draggedTaskId && draggedTaskId !== task.id) moveTask(draggedTaskId, col.key, task.id); setDraggedTaskId(null); }}
                     onMove={(s) => patch(task.id, { status: s })} onProject={(id) => patch(task.id, { project_id: id || null })} onOpen={() => setOpenTaskId(task.id)} onRemove={() => remove(task)} />
                 ))}
               </div>
@@ -306,10 +327,11 @@ function ProjectsSection({ projects, tasks, clients, filter, loading, onFilter, 
   );
 }
 
-function TaskCard({ task, owner, project, projects, busy, onMove, onProject, onOpen, onRemove }: {
+function TaskCard({ task, owner, project, projects, busy, onMove, onProject, onOpen, onRemove, onDragStart, onDragEnd, onDropBefore }: {
   task: Task; owner: { label: string; href: string | null; group: GroupRef | null } | null;
   project: Project | null; projects: Project[]; busy: boolean;
   onMove: (s: Task["status"]) => void; onProject: (id: string) => void; onOpen: () => void; onRemove: () => void;
+  onDragStart: () => void; onDragEnd: () => void; onDropBefore: () => void;
 }) {
   const due = task.due_date ? dueLabel(task.due_date) : null;
   const idx = COLUMNS.findIndex((c) => c.key === task.status);
@@ -319,7 +341,7 @@ function TaskCard({ task, owner, project, projects, busy, onMove, onProject, onO
   const tone = task.priority === "high" ? "border-l-red-500" : task.source === "auto" ? "border-l-sky-500" : "border-l-transparent";
 
   return (
-    <div className={cn("rounded-lg border border-border/50 bg-card p-3 space-y-2 border-l-2 transition-all", tone, busy && "opacity-60", task.status === "done" && "bg-muted/20")}>
+    <div draggable={!busy} onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; onDragStart(); }} onDragEnd={onDragEnd} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); event.stopPropagation(); onDropBefore(); }} className={cn("cursor-grab rounded-lg border border-border/50 bg-card p-3 space-y-2 border-l-2 transition-all active:cursor-grabbing", tone, busy && "opacity-60", task.status === "done" && "bg-muted/20")}>
       <div className="flex items-start gap-2">
         {task.source === "auto" && <Badge variant="info" className="text-[9px] px-1 py-0">AUTO</Badge>}
         <h3 className="text-sm font-semibold flex-1 min-w-0">

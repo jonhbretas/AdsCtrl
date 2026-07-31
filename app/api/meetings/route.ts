@@ -8,8 +8,8 @@ export async function GET(req: Request) {
     if (supabaseEnvMissing()) return NextResponse.json({ error: "Supabase não configurado." }, { status: 503 });
     const params = new URL(req.url).searchParams; const from = params.get("from") || new Date().toISOString(); const until = params.get("until") || new Date(Date.now() + 31 * 86400000).toISOString(); const sb = getServiceClient();
     const [{ data: meetings, error: meetingsError }, { data: clients, error: clientsError }] = await Promise.all([
-      sb.from("client_meetings").select("*, clients(id,name)").gte("starts_at", from).lte("starts_at", until).order("starts_at"),
-      sb.from("clients").select("id,name").eq("status", "active").order("name"),
+      sb.from("client_meetings").select("*, clients(id,name,contact_email,billing_email)").gte("starts_at", from).lte("starts_at", until).order("starts_at"),
+      sb.from("clients").select("id,name,contact_email,billing_email").eq("status", "active").order("name"),
     ]);
     if (meetingsError || clientsError) throw meetingsError || clientsError;
     return NextResponse.json({ meetings: meetings || [], clients: clients || [] });

@@ -29,10 +29,21 @@ export function ThemeProvider({
   disableTransitionOnChange = false,
   ...props
 }: ThemeProviderProps) {
-  const [theme, setTheme] = useState<Theme>(defaultTheme);
+  const [theme, setThemeState] = useState<Theme>(defaultTheme);
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem("adsctrl:theme") as Theme | null;
+    if (saved === "dark" || saved === "light" || (enableSystem && saved === "system")) setThemeState(saved);
+  }, [enableSystem]);
+
+  const setTheme = (next: Theme) => {
+    setThemeState(next);
+    window.localStorage.setItem("adsctrl:theme", next);
+  };
 
   useEffect(() => {
     const root = document.documentElement;
+    root.style.colorScheme = theme === "light" ? "light" : "dark";
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
     if (disableTransitionOnChange) {

@@ -23,7 +23,13 @@ export async function GET(req: Request) {
       sb.from("clients").select("id,name").eq("status", "active").order("name"),
     ]);
     if (entriesError || categoriesError || clientsError) throw entriesError || categoriesError || clientsError;
-    const rows = entries || [];
+    const unique = new Map<string, any>();
+    for (const row of entries || []) {
+      const key = [row.client_id || "agency", row.kind, row.description.trim().toLowerCase(), row.amount, row.due_date].join("|");
+      const previous = unique.get(key);
+      if (!previous || (row.source === "recurring" && previous.source !== "recurring")) unique.set(key, row);
+    }
+    const rows = [...unique.values()];
     const sum = (predicate: (row: any) => boolean) => rows.filter(predicate).reduce((total, row) => total + Number(row.amount || 0), 0);
     const revenue = sum((row) => row.kind === "revenue");
     const expenses = sum((row) => row.kind === "expense");
@@ -65,4 +71,15 @@ export async function PATCH(req: Request) {
     const { data, error } = await getServiceClient().from("financial_entries").update(patch).eq("id", body.id).select("*").single();
     if (error) throw error; return NextResponse.json({ entry: data });
   } catch (error: any) { return NextResponse.json({ error: error?.message || "Falha ao atualizar lançamento." }, { status: 500 }); }
+}
+
+export async function DELETE(req: Request) {
+  try {
+    if (supabaseEnvMissing()) return NextResponse.json({ error: "Supabase não configurado." }, { status: 503 });
+    const id = new URL(req.url).searchParams.get("id");
+    if (!id) return NextResponse.json({ error: "Lançamento não informado." }, { status: 400 });
+    const { error } = await getServiceClient().from("financial_entries").delete().eq("id", id);
+    if (error) throw error;
+    return NextResponse.json({ ok: true });
+  } catch (error: any) { return NextResponse.json({ error: error?.message || "Falha ao excluir lançamento." }, { status: 500 }); }
 }

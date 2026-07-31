@@ -25,3 +25,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ rule: data, generated }, { status: 201 });
   } catch (error: any) { return NextResponse.json({ error: error?.message || "Falha ao criar recorrência." }, { status: 500 }); }
 }
+
+export async function DELETE(req: Request) {
+  try {
+    if (supabaseEnvMissing()) return NextResponse.json({ error: "Supabase não configurado." }, { status: 503 });
+    const id = new URL(req.url).searchParams.get("id");
+    if (!id) return NextResponse.json({ error: "Recorrência não informada." }, { status: 400 });
+    const sb = getServiceClient();
+    const { error: entriesError } = await sb.from("financial_entries").delete().eq("source", "recurring").like("external_id", `${id}:%`);
+    if (entriesError) throw entriesError;
+    const { error } = await sb.from("financial_recurring_rules").delete().eq("id", id);
+    if (error) throw error;
+    return NextResponse.json({ ok: true });
+  } catch (error: any) { return NextResponse.json({ error: error?.message || "Falha ao excluir recorrência." }, { status: 500 }); }
+}

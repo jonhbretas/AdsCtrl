@@ -23,6 +23,7 @@ const MISSING_TABLE = /relation .*tasks.* does not exist|could not find the tabl
 // Colunas que vieram na migração de projetos. Enquanto ela não rodar, a falha
 // precisa dizer QUAL arquivo rodar — "coluna não encontrada" não ajuda ninguém.
 const MISSING_PROJECT_COLUMN = /project_id|alert_type|'context'/i;
+const MISSING_ORDER_COLUMN = /position/i;
 
 function migrationNeeded() {
   return NextResponse.json(
@@ -36,6 +37,10 @@ function projectsMigrationNeeded() {
     { error: "Rode supabase-migration-projects.sql no SQL Editor do Supabase para usar projetos." },
     { status: 503 }
   );
+}
+
+function orderMigrationNeeded() {
+  return NextResponse.json({ error: "Rode supabase-migration-task-order.sql no SQL Editor do Supabase para habilitar a ordenação do quadro." }, { status: 503 });
 }
 
 function text(value: unknown, max: number): string | null {
@@ -63,10 +68,12 @@ export async function GET() {
       .from("tasks")
       .select("*")
       .or(`status.neq.done,done_at.gte.${cutoff}`)
+      .order("position", { ascending: true, nullsFirst: false })
       .order("due_date", { ascending: true, nullsFirst: false })
       .order("created_at", { ascending: false });
     if (error) {
       if (MISSING_TABLE.test(error.message || "")) return migrationNeeded();
+      if (MISSING_ORDER_COLUMN.test(error.message || "")) return orderMigrationNeeded();
       throw error;
     }
 
@@ -188,6 +195,8 @@ export async function POST(req: Request) {
       account_id: text(body.account_id, 64),
       source: "manual",
     };
+    const { data: lastInColumn } = await getServiceClient().from("tasks").select("position").eq("status", row.status).order("position", { ascending: false, nullsFirst: false }).limit(1).maybeSingle();
+    row.position = (lastInColumn?.position ?? -1) + 1;
     // Só entra no insert quando veio: assim o quadro continua criando tarefa
     // solta mesmo sem a migração de projetos.
     const projectId = text(body.project_id, 64);
@@ -196,6 +205,7 @@ export async function POST(req: Request) {
     const { data, error } = await getServiceClient().from("tasks").insert(row).select("*").maybeSingle();
     if (error) {
       if (MISSING_TABLE.test(error.message || "")) return migrationNeeded();
+      if (MISSING_ORDER_COLUMN.test(error.message || "")) return orderMigrationNeeded();
       if (MISSING_PROJECT_COLUMN.test(error.message || "")) return projectsMigrationNeeded();
       throw error;
     }
@@ -220,7 +230,12 @@ export async function PATCH(req: Request) {
       patch.status = body.status;
       // done_at é o que decide o que sai do quadro; precisa acompanhar o status.
       patch.done_at = body.status === "done" ? new Date().toISOString() : null;
+      if (body.position === undefined) {
+        const { data: lastInColumn } = await getServiceClient().from("tasks").select("position").eq("status", body.status).order("position", { ascending: false, nullsFirst: false }).limit(1).maybeSingle();
+        patch.position = (lastInColumn?.position ?? -1) + 1;
+      }
     }
+    if (body.position !== undefined && Number.isFinite(Number(body.position))) patch.position = Math.max(0, Math.floor(Number(body.position)));
     if (body.title !== undefined) {
       const title = text(body.title, 200);
       if (!title) return NextResponse.json({ error: "Descreva a tarefa." }, { status: 400 });
@@ -237,6 +252,16 @@ export async function PATCH(req: Request) {
     if (body.client_id !== undefined) patch.client_id = text(body.client_id, 64);
     if (body.project_id !== undefined) patch.project_id = text(body.project_id, 64);
 
+    if (Array.isArray(body.items)) {
+      const updates = body.items.filter((item: any) => item?.id && STATUSES.includes(item.status) && Number.isFinite(Number(item.position)));
+      if (!updates.length) return NextResponse.json({ error: "Nenhuma posição válida." }, { status: 400 });
+      const sb = getServiceClient();
+      const results = await Promise.all(updates.map((item: any) => sb.from("tasks").update({ status: item.status, position: Math.max(0, Math.floor(Number(item.position))), done_at: item.status === "done" ? new Date().toISOString() : null, updated_at: new Date().toISOString() }).eq("id", item.id)));
+      const failed = results.find((result) => result.error);
+      if (failed?.error) throw failed.error;
+      return NextResponse.json({ ok: true });
+    }
+
     const { data, error } = await getServiceClient()
       .from("tasks")
       .update(patch)
@@ -245,6 +270,7 @@ export async function PATCH(req: Request) {
       .maybeSingle();
     if (error) {
       if (MISSING_TABLE.test(error.message || "")) return migrationNeeded();
+      if (MISSING_ORDER_COLUMN.test(error.message || "")) return orderMigrationNeeded();
       if (MISSING_PROJECT_COLUMN.test(error.message || "")) return projectsMigrationNeeded();
       throw error;
     }
