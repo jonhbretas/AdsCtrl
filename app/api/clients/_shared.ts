@@ -6,6 +6,8 @@ export const CLIENT_OBJECTIVES = [
   "traffic",
   "engagement",
   "leads",
+  "messages",
+  "profile",
   "sales",
   "app",
   "other",
@@ -328,7 +330,7 @@ export async function fetchClients(
       if (a.platform !== b.platform) return String(a.platform).localeCompare(String(b.platform));
       return String(a.name).localeCompare(String(b.name));
     });
-    return { ...client, accounts: clientAccounts };
+    return { ...client, name: String(client.name || "").trim() || `Cliente sem nome · ${client.id}`, accounts: clientAccounts.map((account: any) => ({ ...account, name: String(account.name || "").trim() || `Conta sem nome · ${account.account_id}` })) };
   });
 
   return {
