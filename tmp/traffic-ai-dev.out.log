@@ -1,0 +1,14 @@
+
+> ads-dashboard@0.1.0 dev
+> next dev
+
+▲ Next.js 16.2.11 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://172.29.176.1:3000
+- Environments: .env.local
+✓ Ready in 365ms
+Creating turbopack project { dir: 'C:\\Users\\HP\\Desktop\\projetos\\AdsCtrl', testMode: true }
+
+ POST /api/ai/assistant 200 in 977ms (next.js: 186ms, proxy.ts: 108ms, application-code: 684ms)
+ POST /api/ai/assistant 200 in 432ms (next.js: 45ms, proxy.ts: 21ms, application-code: 365ms)
+[?25h
