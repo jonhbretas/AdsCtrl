@@ -27,6 +27,7 @@ const NAV_GROUPS: NavGroup[] = [
   { key: "start", label: "Comece aqui", hint: "prioridades do dia", icon: Target, items: [
     { href: "/", label: "Visão Geral", icon: LayoutDashboard },
     { href: "/today", label: "Cockpit Hoje", icon: Target },
+    { href: "/assertivus", label: "Assertivus IA", icon: BrainCircuit },
   ] },
   { key: "diagnosis", label: "Análise", hint: "resultado e oportunidades", icon: BarChart3, items: [
     { href: "/portfolio", label: "Portfólio", icon: Users },
