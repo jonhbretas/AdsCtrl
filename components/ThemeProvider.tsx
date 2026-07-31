@@ -29,7 +29,11 @@ export function ThemeProvider({
   disableTransitionOnChange = false,
   ...props
 }: ThemeProviderProps) {
-  const [theme, setThemeState] = useState<Theme>(defaultTheme);
+  const [theme, setThemeState] = useState<Theme>(() => {
+    if (typeof window === "undefined") return defaultTheme;
+    const saved = window.localStorage.getItem("adsctrl:theme") as Theme | null;
+    return saved === "dark" || saved === "light" || (enableSystem && saved === "system") ? saved : defaultTheme;
+  });
 
   useEffect(() => {
     const saved = window.localStorage.getItem("adsctrl:theme") as Theme | null;
@@ -43,7 +47,10 @@ export function ThemeProvider({
 
   useEffect(() => {
     const root = document.documentElement;
-    root.style.colorScheme = theme === "light" ? "light" : "dark";
+    const isDark = theme === "dark" || (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    root.classList.toggle("dark", isDark);
+    root.dataset.theme = isDark ? "dark" : "light";
+    root.style.colorScheme = isDark ? "dark" : "light";
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
     if (disableTransitionOnChange) {
@@ -51,15 +58,12 @@ export function ThemeProvider({
       setTimeout(() => root.classList.remove("no-transitions"), 0);
     }
 
-    if (theme === "system") {
-      root.classList.toggle("dark", mediaQuery.matches);
-    } else {
-      root.classList.toggle("dark", theme === "dark");
-    }
-
     const handler = () => {
       if (theme === "system") {
-        root.classList.toggle("dark", mediaQuery.matches);
+        const systemDark = mediaQuery.matches;
+        root.classList.toggle("dark", systemDark);
+        root.dataset.theme = systemDark ? "dark" : "light";
+        root.style.colorScheme = systemDark ? "dark" : "light";
       }
     };
     mediaQuery.addEventListener("change", handler);

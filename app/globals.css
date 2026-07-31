@@ -2,6 +2,9 @@
 
 @custom-variant dark (&:is(.dark *));
 
+:root { color-scheme: light; }
+:root.dark { color-scheme: dark; }
+
 @theme inline {
   --color-background: #f8fafc;
   --color-foreground: #0f172a;
