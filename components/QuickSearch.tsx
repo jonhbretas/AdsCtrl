@@ -14,7 +14,7 @@ const SCREENS: SearchResult[] = [
   { id: "screen:alerts", kind: "Tela", title: "Central de Alertas", subtitle: "Sinais operacionais agrupados", href: "/alerts" },
   { id: "screen:tasks", kind: "Tela", title: "Tarefas", subtitle: "Execução e acompanhamento", href: "/tarefas" },
   { id: "screen:finance", kind: "Tela", title: "Financeiro", subtitle: "DRE, caixa e régua financeira", href: "/financeiro" },
-  { id: "screen:clients", kind: "Tela", title: "Clientes", subtitle: "Metas, contas e perfil", href: "/clientes#clients" },
+  { id: "screen:clients", kind: "Tela", title: "Clientes", subtitle: "Metas, contas e perfil", href: "/clientes" },
   { id: "screen:reports", kind: "Tela", title: "Relatórios", subtitle: "Entregas e painéis", href: "/relatorios" },
 ];
 

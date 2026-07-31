@@ -177,7 +177,7 @@ export default function TodayPage() {
             Coleta {data.last_collection?.status === "success" ? "saudável" : data.last_collection?.status || "desconhecida"}
           </Badge>
           <Button variant="ghost" size="sm" onClick={load} disabled={loading}><RefreshCw className={cn("h-3.5 w-3.5 mr-1", loading && "animate-spin")} /> {loading ? "Atualizando…" : "Atualizar"}</Button>
-          <Link href="/clientes#clients"><Button variant="secondary" size="sm"><Settings className="h-3.5 w-3.5 mr-1" /> Metas</Button></Link>
+          <Link href="/clientes?tab=metas"><Button variant="secondary" size="sm"><Settings className="h-3.5 w-3.5 mr-1" /> Metas</Button></Link>
         </div>
       </div>
 

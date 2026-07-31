@@ -20,7 +20,7 @@ export async function GET(req: Request) {
     if (accountsError || clientsError) throw accountsError || clientsError;
     const results = [
       ...(accounts || []).map((account: any) => ({ id: `account:${account.account_id}`, kind: "Conta de anúncio", title: fallbackName(account.name, account.account_id, "Conta sem nome"), subtitle: `${account.platform === "google" ? "Google Ads" : "Meta Ads"} · ${account.account_id}${account.hidden ? " · ocultada" : ""}`, href: `/?account=${encodeURIComponent(account.account_id)}` })),
-      ...(clients || []).map((client: any) => ({ id: `client:${client.id}`, kind: "Cliente", title: fallbackName(client.name, client.id, "Cliente sem nome"), subtitle: client.status === "active" ? "Carteira ativa · metas e contas" : `Cliente ${client.status}`, href: "/clientes#clients" })),
+      ...(clients || []).map((client: any) => ({ id: `client:${client.id}`, kind: "Cliente", title: fallbackName(client.name, client.id, "Cliente sem nome"), subtitle: client.status === "active" ? "Carteira ativa · metas e contas" : `Cliente ${client.status}`, href: `/clientes?client=${encodeURIComponent(client.id)}&tab=metas` })),
     ];
     return NextResponse.json({ results });
   } catch (error: any) {

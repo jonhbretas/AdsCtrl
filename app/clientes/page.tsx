@@ -1,6 +1,9 @@
 "use client";
 
-// Clientes — metas, orçamento, grupos e contas de anúncio.
+// Clientes — mestre-detalhe: lista de clientes na lateral, abas de edição no
+// centro (Metas, Perfil, Contrato, ROI & Financeiro, Documentos, Orgânico).
+// Grupos, Contas e a comparação de ROI entre todos os clientes são "Catálogo"
+// — não são propriedade de um cliente só, então ganham uma visão própria.
 //
 // Saiu de /admin no redesenho: Config passou a guardar só o que é do sistema
 // (marca, e-mail, integrações). Aqui fica o cadastro que muda por cliente.
@@ -11,7 +14,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { compareSortValues, SortButton, usePersistentSort } from "@/components/SortableHeader";
 import { Button } from "@/components/ui/button";
-import { Input, Collapsible, Modal, Notice, PageHeader, WideScreenHint, Field } from "@/components/ui";
+import { Input, Modal, Notice, PageHeader, Segmented, WideScreenHint, Field } from "@/components/ui";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { CampaignTemplateList } from "@/components/CampaignTemplates";
@@ -23,21 +26,30 @@ import { RefreshCw, AlertTriangle, Plus, X, Mail, Phone, FolderOpen, ExternalLin
 interface Group { id: string; name: string; color: string; }
 interface Account { account_id: string; name: string; status: string; group_id: string | null; platform: "meta" | "google"; hidden?: boolean; linked_meta_account_id?: string | null; is_primary?: boolean; }
 interface ClientRecord { id: string; name: string; status: "active" | "paused" | "archived"; objective: string | null; result_family: string | null; brand_name?: string | null; primary_kpi: string | null; target_value: number | null; monthly_budget: number | null; monthly_conversion_goal: number | null; target_roas?: number | null; max_cpa?: number | null; max_daily_spend?: number | null; max_budget_change_percent?: number | null; automation_mode?: "observe" | "approval" | "autonomous" | null; currency: string; timezone: string; budget_start_day: number; track_sales?: boolean; facebook_page_id?: string | null; instagram_business_id?: string | null; legal_name?: string | null; cnpj?: string | null; person_type?: "fisica" | "juridica"; cpf?: string | null; address_street?: string | null; address_number?: string | null; address_complement?: string | null; address_neighborhood?: string | null; address_city?: string | null; address_state?: string | null; address_zip_code?: string | null; address_country?: string | null; state_registration?: string | null; municipal_registration?: string | null; legal_representative_name?: string | null; legal_representative_cpf?: string | null; legal_representative_role?: string | null; billing_email?: string | null; billing_phone?: string | null; contact_name?: string | null; contact_email?: string | null; contact_phone?: string | null; whatsapp_phone?: string | null; drive_folder_url?: string | null; contract_start_date?: string | null; contract_end_date?: string | null; contract_notice_days?: number; accounts: Account[]; }
-type ClientAdminSortKey = "name" | "objective" | "budget" | "result" | "kpi" | "target" | "cycle";
 type GroupSortKey = "name" | "accounts";
 type AccountAdminSortKey = "platform" | "name" | "status" | "client" | "group" | "visibility";
-const CLIENT_ADMIN_SORT_KEYS: readonly ClientAdminSortKey[] = ["name", "objective", "budget", "result", "kpi", "target", "cycle"];
 const GROUP_SORT_KEYS: readonly GroupSortKey[] = ["name", "accounts"];
 const ACCOUNT_ADMIN_SORT_KEYS: readonly AccountAdminSortKey[] = ["platform", "name", "status", "client", "group", "visibility"];
 const MONETARY_CLIENT_KPIS = new Set(["cpa", "cpl", "cpc", "cpm", "cost_per_result", "revenue", "custom"]);
 const PALETTE = ["#3987e5", "#16a34a", "#db2777", "#f59e0b", "#7c3aed", "#0891b2", "#dc2626", "#4b5563"];
-// A coluna de vendas reais entra no fim: é um sim/não, não uma meta.
-const CLIENT_GRID = "minmax(160px,1.2fr) 120px 130px 130px 120px 130px 80px 96px";
 const compactInput: React.CSSProperties = { width: "100%", height: 30, fontSize: 12, borderRadius: 8, border: "1px solid var(--color-border)", background: "transparent", padding: "0 8px" };
 const inputClass = "h-9 w-full rounded-lg border border-border bg-transparent px-3 text-sm outline-none focus:ring-1 focus:ring-ring";
 
+type TabKey = "metas" | "perfil" | "contrato" | "roi" | "documentos" | "organico";
+const TABS: { key: TabKey; label: string }[] = [
+  { key: "metas", label: "Metas" },
+  { key: "perfil", label: "Perfil" },
+  { key: "contrato", label: "Contrato" },
+  { key: "roi", label: "ROI & Financeiro" },
+  { key: "documentos", label: "Documentos" },
+  { key: "organico", label: "Orgânico" },
+];
+
 export default function ClientesPage() {
   const router = useRouter();
+  const [view, setViewState] = useState<"clients" | "catalog">("clients");
+  const [selectedClientId, setSelectedClientId] = useState("");
+  const [activeTab, setActiveTabState] = useState<TabKey>("metas");
   const [groups, setGroups] = useState<Group[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [clients, setClients] = useState<ClientRecord[]>([]);
@@ -48,7 +60,6 @@ export default function ClientesPage() {
   const [error, setError] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [clientQuery, setClientQuery] = useState("");
-  const [expandedProfiles, setExpandedProfiles] = useState<Set<string>>(new Set());
   const [newColor, setNewColor] = useState(PALETTE[0]);
   const [clientModal, setClientModal] = useState<ClientRecord | null | false>(false);
   const [clientForm, setClientForm] = useState<Record<string, string>>({});
@@ -56,7 +67,6 @@ export default function ClientesPage() {
   const [accountBusy, setAccountBusy] = useState<string | null>(null);
   const [driveBusy, setDriveBusy] = useState<string | null>(null);
   const [deleteBusy, setDeleteBusy] = useState<string | null>(null);
-  const [clientSort, setClientSort] = usePersistentSort<ClientAdminSortKey>("adsctrl:sort:admin-clients", { key: "name", direction: "asc" }, CLIENT_ADMIN_SORT_KEYS);
   const [groupSort, setGroupSort] = usePersistentSort<GroupSortKey>("adsctrl:sort:admin-groups", { key: "name", direction: "asc" }, GROUP_SORT_KEYS);
   const [accountSort, setAccountSort] = usePersistentSort<AccountAdminSortKey>("adsctrl:sort:admin-accounts", { key: "name", direction: "asc" }, ACCOUNT_ADMIN_SORT_KEYS);
 
@@ -64,17 +74,36 @@ export default function ClientesPage() {
   async function refreshClients() { try { const r = await fetch("/api/clients?status=active", { cache: "no-store" }); const d = JSON.parse(await r.text()); if (!r.ok || d.error) throw new Error(d.error || "Falha."); setClients(d.clients || []); setClientsUnavailable(null); } catch (e: any) { setError(e?.message); } }
   useEffect(() => { load(); }, []);
 
+  // Estado de seleção (cliente + aba + visão) espelha a URL pra virar link
+  // compartilhável, sem depender de useSearchParams (evita boundary de Suspense).
+  function updateUrl(patch: Record<string, string | null>) {
+    const params = new URLSearchParams(window.location.search);
+    for (const [key, value] of Object.entries(patch)) { if (value == null) params.delete(key); else params.set(key, value); }
+    const qs = params.toString();
+    router.replace(qs ? `/clientes?${qs}` : "/clientes", { scroll: false });
+  }
+  function selectClient(id: string) { setSelectedClientId(id); setViewState("clients"); updateUrl({ client: id, view: null }); }
+  function selectTab(tab: TabKey) { setActiveTabState(tab); updateUrl({ tab }); }
+  function selectView(next: "clients" | "catalog") { setViewState(next); updateUrl({ view: next === "catalog" ? "catalog" : null }); }
+
+  useEffect(() => {
+    if (!clients.length) return;
+    const params = new URLSearchParams(window.location.search);
+    const urlView = params.get("view");
+    const urlTab = params.get("tab") as TabKey | null;
+    const urlClient = params.get("client");
+    if (urlView === "catalog") setViewState("catalog");
+    if (urlTab && TABS.some((tab) => tab.key === urlTab)) setActiveTabState(urlTab);
+    if (urlClient && clients.some((client) => client.id === urlClient)) setSelectedClientId(urlClient);
+    else if (!selectedClientId) setSelectedClientId(clients[0].id);
+  }, [clients.length]);
+
   const countByGroup = useMemo(() => { const m: Record<string, number> = {}; for (const a of accounts) if (a.group_id) m[a.group_id] = (m[a.group_id] || 0) + 1; return m; }, [accounts]);
   const metaAccounts = useMemo(() => accounts.filter((a) => a.platform === "meta" && !a.hidden && a.status === "ACTIVE").sort((a, b) => a.name.localeCompare(b.name)), [accounts]);
 
-  const sortedClients = useMemo(() => {
-    const objLabel: Record<string, string> = { leads: "Leads", sales: "Vendas", traffic: "Tráfego", engagement: "Engajamento", awareness: "Reconhecimento", app: "Aplicativo", other: "Outro" };
-    const resLabel: Record<string, string> = { conversoes: "Conversões", vendas: "Vendas", leads: "Leads", mensagens: "Mensagens", cadastros: "Cadastros", cliques: "Cliques", lpv: "LPV", engajamento: "Engajamento" };
-    const kpiL: Record<string, string> = { cpa: "CPA", cpl: "CPL", roas: "ROAS", revenue: "Receita", conversions: "Conversões", ctr: "CTR", cpc: "CPC", cpm: "CPM", custom: "Custo / resultado" };
-    const val = (c: ClientRecord) => { switch (clientSort.key) { case "name": return c.name; case "objective": return c.objective ? objLabel[c.objective] || c.objective : null; case "budget": return c.monthly_budget; case "result": return c.result_family ? resLabel[c.result_family] || c.result_family : null; case "kpi": return c.primary_kpi ? kpiL[c.primary_kpi] || c.primary_kpi : null; case "target": return c.target_value; case "cycle": return c.budget_start_day; } };
-    return [...clients].sort((a, b) => { const av = val(a), bv = val(b); if (clientSort.key === "budget" || clientSort.key === "target") { const am = av == null || (typeof av === "number" && Number.isNaN(av)); const bm = bv == null || (typeof bv === "number" && Number.isNaN(bv)); if (am !== bm) return am ? 1 : -1; if (clientSort.key === "budget" && a.currency !== b.currency) return compareSortValues(a.currency, b.currency, "asc"); if (clientSort.key === "target" && a.primary_kpi !== b.primary_kpi) return compareSortValues(a.primary_kpi, b.primary_kpi, "asc"); if (clientSort.key === "target" && MONETARY_CLIENT_KPIS.has(a.primary_kpi || "") && a.currency !== b.currency) return compareSortValues(a.currency, b.currency, "asc"); } return compareSortValues(av, bv, clientSort.direction) || compareSortValues(a.name, b.name, "asc"); });
-  }, [clients, clientSort]);
+  const sortedClients = useMemo(() => [...clients].sort((a, b) => a.name.localeCompare(b.name)), [clients]);
   const visibleClients = useMemo(() => { const query = clientQuery.trim().toLocaleLowerCase(); return query ? sortedClients.filter((client) => [client.name, client.legal_name, client.cnpj, client.contact_name, client.contact_email].filter(Boolean).join(" ").toLocaleLowerCase().includes(query)) : sortedClients; }, [sortedClients, clientQuery]);
+  const selectedClient = clients.find((client) => client.id === selectedClientId) || null;
   const sortedGroups = useMemo(() => { const v = (g: Group) => groupSort.key === "name" ? g.name : countByGroup[g.id] || 0; return [...groups].sort((a, b) => compareSortValues(v(a), v(b), groupSort.direction) || compareSortValues(a.name, b.name, "asc")); }, [groups, groupSort, countByGroup]);
   const sortedAccounts = useMemo(() => { const ownerByAccount = new Map(clients.flatMap((client) => (client.accounts || []).map((account) => [account.account_id, client.name] as const))); const v = (a: Account) => { switch (accountSort.key) { case "platform": return a.platform; case "name": return a.name; case "status": return a.status; case "client": return ownerByAccount.get(a.account_id) || ""; case "group": return groups.find((g) => g.id === a.group_id)?.name || ""; case "visibility": return a.hidden ? 1 : 0; } }; return [...accounts].sort((a, b) => compareSortValues(v(a), v(b), accountSort.direction) || compareSortValues(a.name, b.name, "asc")); }, [accounts, accountSort, clients, groups]);
 
@@ -103,7 +132,7 @@ export default function ClientesPage() {
     try {
       await api(`/api/clients/${client.id}`, { method: "DELETE" });
       setClients((previous) => previous.filter((item) => item.id !== client.id));
-      setExpandedProfiles((previous) => { const next = new Set(previous); next.delete(client.id); return next; });
+      if (selectedClientId === client.id) setSelectedClientId("");
       if (clientModal && clientModal.id === client.id) setClientModal(false);
     } catch (e: any) { setError(e?.message || "Falha ao excluir cliente."); }
     finally { setDeleteBusy(null); }
@@ -129,7 +158,7 @@ export default function ClientesPage() {
       const editing = Boolean(clientModal);
       const result = await api(editing ? `/api/clients/${(clientModal as ClientRecord).id}` : "/api/clients", { method: editing ? "PATCH" : "POST", body: JSON.stringify(payload) });
       const savedClient = result.client as ClientRecord;
-      if (editing) setClients((previous) => previous.map((client) => client.id === (clientModal as ClientRecord).id ? { ...client, ...savedClient } : client)); else setClients((previous) => [...previous, savedClient]);
+      if (editing) setClients((previous) => previous.map((client) => client.id === (clientModal as ClientRecord).id ? { ...client, ...savedClient } : client)); else { setClients((previous) => [...previous, savedClient]); selectClient(savedClient.id); }
       setClientModal(false);
       if (openContract && savedClient?.id) router.push(`/contratos/${savedClient.id}`);
     } catch (e: any) { setError(e?.message); } finally { setBusy(false); }
@@ -137,248 +166,231 @@ export default function ClientesPage() {
 
   if (loading) return <div className="p-4 md:p-6 md:ml-56 pb-20 md:pb-6 space-y-4"><Skeleton className="h-8 w-48" /><Skeleton className="h-14 rounded-lg" /><Skeleton className="h-32 rounded-lg" /></div>;
 
+  const phone = selectedClient ? (selectedClient.whatsapp_phone || selectedClient.contact_phone || "").replace(/\D/g, "") : "";
+  const los = (selectedClient?.primary_kpi || "").toLowerCase();
+
   return (
     <div className="p-4 md:p-6 md:ml-56 pb-20 md:pb-6 space-y-4 animate-fade-in">
       <PageHeader
         title="Clientes"
         subtitle={`${clients.length} cliente${clients.length === 1 ? "" : "s"} ativo${clients.length === 1 ? "" : "s"} · ${accounts.length} contas no catálogo.`}
-        actions={<div className="flex items-center gap-2"><input value={clientQuery} onChange={(e) => setClientQuery(e.target.value)} placeholder="Buscar cliente, CNPJ ou contato…" className="h-9 w-64 rounded-lg border border-border bg-transparent px-3 text-xs outline-none focus:ring-1 focus:ring-ring" /><Button size="sm" onClick={() => openClientModal()}><Plus className="mr-1 h-3.5 w-3.5" /> Novo cliente</Button><Link href="/relatorios"><Button variant="ghost" size="sm"><Mail className="h-3.5 w-3.5 mr-1" /> Relatórios e painéis</Button></Link></div>}
+        actions={<div className="flex items-center gap-2">
+          <Segmented value={view} onChange={selectView} options={[{ value: "clients", label: "Clientes" }, { value: "catalog", label: "Catálogo" }]} />
+          <Link href="/relatorios"><Button variant="ghost" size="sm"><Mail className="h-3.5 w-3.5 mr-1" /> Relatórios e painéis</Button></Link>
+        </div>}
       />
-
-      <WideScreenHint>A tabela de metas é larga; no computador fica mais confortável.</WideScreenHint>
 
       {error && <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-red-500/20 bg-red-500/10 text-sm text-red-500"><AlertTriangle className="h-4 w-4 shrink-0" />{error}<button onClick={() => setError(null)} className="ml-auto bg-transparent border-none cursor-pointer text-xs font-semibold hover:underline">✕</button></div>}
 
-      <div className="space-y-4">
-        {/* Metas por cliente */}
-        <Collapsible id="clients" storageKey="clientes:metas" defaultOpen
-          summary={<SectionHead icon="◎" title="Metas e orçamento por cliente" hint="Objetivo, orçamento, KPI e ciclo." meta={`${clients.length} cliente${clients.length === 1 ? "" : "s"}`} />}>
-          {clientsUnavailable ? <Notice tone="warn">{clientsUnavailable}</Notice> : (
-            <div className="overflow-x-auto">
-              <div className="min-w-[1040px] space-y-2">
-                <div className="grid gap-2 px-3 py-2 rounded-lg border border-border/50 bg-muted/30 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider items-center" style={{ gridTemplateColumns: CLIENT_GRID }}>
-                  <SortButton column="name" sort={clientSort} onSort={setClientSort} align="left">Cliente</SortButton>
-                  <SortButton column="objective" sort={clientSort} onSort={setClientSort} align="left">Objetivo</SortButton>
-                  <SortButton column="budget" sort={clientSort} onSort={setClientSort} align="left" initialDirection="desc">Orçamento</SortButton>
-                  <SortButton column="result" sort={clientSort} onSort={setClientSort} align="left">Resultado</SortButton>
-                  <SortButton column="kpi" sort={clientSort} onSort={setClientSort} align="left">KPI</SortButton>
-                  <SortButton column="target" sort={clientSort} onSort={setClientSort} align="left" initialDirection="desc">Meta</SortButton>
-                  <SortButton column="cycle" sort={clientSort} onSort={setClientSort} align="left">Ciclo</SortButton>
-                  <span>Vendas reais</span>
-                </div>
-                {visibleClients.map((client) => {
-                  const los = (client.primary_kpi || "").toLowerCase();
-                  return (
-                    <div key={client.id} className="grid gap-2 p-3 rounded-lg border border-border/50 bg-card items-end" style={{ gridTemplateColumns: CLIENT_GRID }}>
-                      <div className="min-w-0">
-                        <div className="text-sm font-semibold truncate">{client.name}</div>
-                        <ClientAccounts client={client} accounts={accounts} busyAccount={accountBusy} onLink={linkClientAccount} onUnlink={unlinkClientAccount} />
-                      </div>
-                       <Field label="Objetivo"><select value={client.objective || ""} onChange={(e) => updateClientField(client, "objective", e.target.value || null)} style={compactInput}><option value="">—</option><option value="leads">Leads</option><option value="messages">Mensagens</option><option value="profile">Crescer perfil</option><option value="sales">Vendas</option><option value="traffic">Tráfego</option><option value="engagement">Engajamento</option><option value="awareness">Brand / Reconhecimento</option><option value="app">Aplicativo</option><option value="other">Outro</option></select></Field>
-                      <Field label={`Orçamento · ${client.currency}`}><input key={`${client.id}-b-${loadRevision}`} type="number" min="0" step="10" defaultValue={client.monthly_budget ?? ""} placeholder="0" onBlur={(e) => updateClientField(client, "monthly_budget", e.target.value ? Number(e.target.value) : null)} style={compactInput} /></Field>
-                      <Field label="Resultado"><select value={client.result_family || ""} onChange={(e) => updateClientField(client, "result_family", e.target.value || null)} style={compactInput}><option value="">Automático</option><option value="conversoes">Conversões</option><option value="vendas">Vendas</option><option value="leads">Leads</option><option value="mensagens">Mensagens</option><option value="cadastros">Cadastros</option><option value="cliques">Cliques</option><option value="lpv">LPV</option><option value="engajamento">Engajamento</option></select></Field>
-                      <Field label="KPI"><select value={client.primary_kpi || ""} onChange={(e) => updateClient(client.id, { primary_kpi: e.target.value || null, target_value: null })} style={compactInput}><option value="">—</option><option value="cpl">CPL</option><option value="cpa">CPA</option><option value="roas">ROAS</option><option value="revenue">Receita</option><option value="conversions">Conversões</option><option value="ctr">CTR</option><option value="cpc">CPC</option><option value="cpm">CPM</option><option value="custom">Custo / resultado</option></select></Field>
-                      <Field label={`Meta${MONETARY_CLIENT_KPIS.has(los) ? ` · ${client.currency}` : los === "ctr" ? " · %" : los === "roas" ? " · x" : ""}`}><input key={`${client.id}-t-${loadRevision}`} type="number" min="0" step="any" defaultValue={client.target_value ?? ""} placeholder="—" onBlur={(e) => updateClientField(client, "target_value", e.target.value ? Number(e.target.value) : null)} style={compactInput} /></Field>
-                      <Field label="Dia início"><select value={client.budget_start_day} onChange={(e) => updateClientField(client, "budget_start_day", Number(e.target.value))} style={compactInput}>{Array.from({ length: 28 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}º</option>)}</select></Field>
-                      {/* A plataforma reporta conversão, não venda: campanha de mensagem
-                          fecha no WhatsApp e nunca volta. Marcar aqui põe o cliente na
-                          tela de ROI para o valor ser informado à mão. */}
-                      <Field label="Acompanhar">
-                        <button
-                          onClick={() => updateClientField(client, "track_sales", !client.track_sales)}
-                          title="Coloca este cliente na tela de ROI por Cliente, para informar o valor vendido em cada mês"
-                          className={cn("h-[30px] w-full rounded-lg text-[11px] font-semibold border cursor-pointer transition-colors",
-                            client.track_sales ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600" : "border-border bg-transparent text-muted-foreground hover:text-foreground")}
-                        >
-                          {client.track_sales ? "✓ na tela de ROI" : "não acompanha"}
-                        </button>
-                      </Field>
-                    </div>
-                  );
-                })}
-                {!visibleClients.length && <div className="text-sm text-muted-foreground px-1">Nenhum cliente encontrado.</div>}
+      {view === "clients" && (
+        <div className="flex flex-col gap-4 lg:flex-row">
+          <aside className="w-full shrink-0 space-y-2 lg:w-64">
+            <div className="flex items-center gap-2">
+              <input value={clientQuery} onChange={(e) => setClientQuery(e.target.value)} placeholder="Buscar cliente…" className="h-9 flex-1 rounded-lg border border-border bg-transparent px-3 text-xs outline-none focus:ring-1 focus:ring-ring" />
+              <Button size="sm" onClick={() => openClientModal()} title="Novo cliente"><Plus className="h-3.5 w-3.5" /></Button>
+            </div>
+            {clientsUnavailable ? <Notice tone="warn">{clientsUnavailable}</Notice> : (
+              <div className="space-y-1 overflow-y-auto lg:max-h-[calc(100vh-220px)]">
+                {visibleClients.map((client) => (
+                  <button key={client.id} onClick={() => selectClient(client.id)} className={cn("flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors", client.id === selectedClientId ? "bg-primary/10 font-semibold text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground")}>
+                    <span className="min-w-0 flex-1 truncate">{client.name}</span>
+                    {client.track_sales && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" title="Acompanha vendas reais" />}
+                  </button>
+                ))}
+                {!visibleClients.length && <div className="px-3 py-2 text-xs text-muted-foreground">Nenhum cliente encontrado.</div>}
               </div>
-            </div>
-          )}
-        </Collapsible>
+            )}
+          </aside>
 
-        {/* ROI por cliente: receita real (informada à mão) vs. investido. */}
-        <Collapsible id="roi" storageKey="clientes:roi"
-          summary={<SectionHead icon="◐" title="ROI por Cliente" hint="Receita informada vs. investimento em mídia, mês a mês." meta={`${clients.filter((c) => c.track_sales).length} acompanhado(s)`} />}>
-          <RoiPorCliente />
-        </Collapsible>
+          <section className="min-w-0 flex-1 space-y-3">
+            {!selectedClient && <div className="rounded-lg border border-dashed border-border p-10 text-center text-sm text-muted-foreground">Selecione um cliente na lista para ver e editar os dados dele.</div>}
+            {selectedClient && <>
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/50 bg-card p-3">
+                <h2 className="text-base font-semibold">{selectedClient.name}</h2>
+                {selectedClient.contact_name && <span className="text-xs text-muted-foreground">· {selectedClient.contact_name}</span>}
+                <div className="ml-auto flex flex-wrap gap-1.5">
+                  <button type="button" onClick={() => openClientModal(selectedClient)} className="rounded-md border border-input px-2 py-1 text-[11px] font-semibold hover:bg-muted">Editar cadastro</button>
+                  <button type="button" onClick={() => deleteClient(selectedClient)} disabled={deleteBusy === selectedClient.id} className="rounded-md border border-red-500/30 px-2 py-1 text-[11px] font-semibold text-red-600 hover:bg-red-500/10 disabled:opacity-50">{deleteBusy === selectedClient.id ? "Excluindo…" : "Excluir cliente"}</button>
+                  {phone && <a href={`https://wa.me/${phone}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-emerald-500/25 bg-emerald-500/10 px-2 py-1 text-[11px] font-semibold text-emerald-600"><Phone className="h-3 w-3" /> WhatsApp</a>}
+                  {selectedClient.drive_folder_url && <a href={selectedClient.drive_folder_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-sky-500/25 bg-sky-500/10 px-2 py-1 text-[11px] font-semibold text-sky-600"><FolderOpen className="h-3 w-3" /> Drive</a>}
+                </div>
+              </div>
 
-        {/* Perfil operacional: dados que conectam o cliente à comunicação,
-            aos documentos e ao contrato. O Drive ainda pode ser colado
-            manualmente; a criação automática entra na próxima integração. */}
-        <Collapsible id="profile" storageKey="clientes:perfil-operacional"
-          summary={<SectionHead icon="◎" title="Perfil operacional" hint="Contato, WhatsApp, Drive e vigência do contrato." meta={`${clients.filter((c) => c.contract_end_date).length} contrato(s) com data`} />}>
-          <div className="space-y-4">
-            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-sky-500/20 bg-sky-500/5 px-3 py-2 text-xs">
-              <FolderOpen className="h-4 w-4 text-sky-600" />
-              <span className="text-muted-foreground">Para criar pastas automaticamente, conecte o Google Drive da agência.</span>
-              <a href="/api/integrations/google-drive/connect" className="ml-auto rounded-md border border-sky-500/30 px-2 py-1 text-[11px] font-semibold text-sky-600 hover:bg-sky-500/10">Conectar Drive</a>
-            </div>
-            {visibleClients.map((client) => {
-              const phone = (client.whatsapp_phone || client.contact_phone || "").replace(/\D/g, "");
-              const profileExpanded = expandedProfiles.has(client.id);
-              const contractDays = client.contract_end_date ? Math.ceil((Date.parse(`${client.contract_end_date}T23:59:59`) - Date.now()) / 86400000) : null;
-              const contractTone = contractDays != null && contractDays < 0 ? "text-red-500" : contractDays != null && contractDays <= (client.contract_notice_days ?? 30) ? "text-amber-500" : "text-muted-foreground";
-              return (
-                <div key={client.id} className="rounded-lg border border-border/50 bg-card p-3 space-y-3">
-                  <div className="flex flex-wrap items-center gap-2">
+              <div className="flex gap-1 overflow-x-auto border-b border-border/50">
+                {TABS.map((tab) => <button key={tab.key} onClick={() => selectTab(tab.key)} className={cn("whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-colors", activeTab === tab.key ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground")}>{tab.label}</button>)}
+              </div>
+
+              {activeTab === "metas" && <div className="space-y-3">
+                <div className="grid gap-3 rounded-lg border border-border/50 bg-card p-4 md:grid-cols-4">
+                  <Field label="Objetivo"><select value={selectedClient.objective || ""} onChange={(e) => updateClientField(selectedClient, "objective", e.target.value || null)} style={compactInput}><option value="">—</option><option value="leads">Leads</option><option value="messages">Mensagens</option><option value="profile">Crescer perfil</option><option value="sales">Vendas</option><option value="traffic">Tráfego</option><option value="engagement">Engajamento</option><option value="awareness">Brand / Reconhecimento</option><option value="app">Aplicativo</option><option value="other">Outro</option></select></Field>
+                  <Field label={`Orçamento · ${selectedClient.currency}`}><input key={`${selectedClient.id}-b-${loadRevision}`} type="number" min="0" step="10" defaultValue={selectedClient.monthly_budget ?? ""} placeholder="0" onBlur={(e) => updateClientField(selectedClient, "monthly_budget", e.target.value ? Number(e.target.value) : null)} style={compactInput} /></Field>
+                  <Field label="Resultado"><select value={selectedClient.result_family || ""} onChange={(e) => updateClientField(selectedClient, "result_family", e.target.value || null)} style={compactInput}><option value="">Automático</option><option value="conversoes">Conversões</option><option value="vendas">Vendas</option><option value="leads">Leads</option><option value="mensagens">Mensagens</option><option value="cadastros">Cadastros</option><option value="cliques">Cliques</option><option value="lpv">LPV</option><option value="engajamento">Engajamento</option></select></Field>
+                  <Field label="KPI"><select value={selectedClient.primary_kpi || ""} onChange={(e) => updateClient(selectedClient.id, { primary_kpi: e.target.value || null, target_value: null })} style={compactInput}><option value="">—</option><option value="cpl">CPL</option><option value="cpa">CPA</option><option value="roas">ROAS</option><option value="revenue">Receita</option><option value="conversions">Conversões</option><option value="ctr">CTR</option><option value="cpc">CPC</option><option value="cpm">CPM</option><option value="custom">Custo / resultado</option></select></Field>
+                  <Field label={`Meta${MONETARY_CLIENT_KPIS.has(los) ? ` · ${selectedClient.currency}` : los === "ctr" ? " · %" : los === "roas" ? " · x" : ""}`}><input key={`${selectedClient.id}-t-${loadRevision}`} type="number" min="0" step="any" defaultValue={selectedClient.target_value ?? ""} placeholder="—" onBlur={(e) => updateClientField(selectedClient, "target_value", e.target.value ? Number(e.target.value) : null)} style={compactInput} /></Field>
+                  <Field label="Dia início do ciclo"><select value={selectedClient.budget_start_day} onChange={(e) => updateClientField(selectedClient, "budget_start_day", Number(e.target.value))} style={compactInput}>{Array.from({ length: 28 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}º</option>)}</select></Field>
+                  <Field label="Acompanhar vendas reais" hint="Coloca este cliente na aba ROI & Financeiro, pra informar o valor vendido em cada mês.">
                     <button
-                      type="button"
-                      aria-expanded={profileExpanded}
-                      aria-label={`${profileExpanded ? "Recolher" : "Expandir"} dados de ${client.name}`}
-                      onClick={() => setExpandedProfiles((previous) => {
-                        const next = new Set(previous);
-                        if (next.has(client.id)) next.delete(client.id); else next.add(client.id);
-                        return next;
-                      })}
-                      className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border text-sm font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
+                      onClick={() => updateClientField(selectedClient, "track_sales", !selectedClient.track_sales)}
+                      className={cn("h-[30px] w-full rounded-lg text-[11px] font-semibold border cursor-pointer transition-colors",
+                        selectedClient.track_sales ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600" : "border-border bg-transparent text-muted-foreground hover:text-foreground")}
                     >
-                      {profileExpanded ? "−" : "+"}
+                      {selectedClient.track_sales ? "✓ acompanhando" : "não acompanha"}
                     </button>
-                    <span className="font-semibold text-sm">{client.name}</span>
-                    {client.contact_name && <span className="text-xs text-muted-foreground">· {client.contact_name}</span>}
-                    {!profileExpanded && <span className="text-[11px] text-muted-foreground">Clique em + para abrir os dados</span>}
-                    <div className="ml-auto flex flex-wrap gap-1.5">
-                      <button type="button" onClick={() => openClientModal(client)} className="rounded-md border border-input px-2 py-1 text-[11px] font-semibold hover:bg-muted">Editar cadastro</button>
-                      <button type="button" onClick={() => deleteClient(client)} disabled={deleteBusy === client.id} className="rounded-md border border-red-500/30 px-2 py-1 text-[11px] font-semibold text-red-600 hover:bg-red-500/10 disabled:opacity-50">{deleteBusy === client.id ? "Excluindo…" : "Excluir cliente"}</button>
-                      {phone && <a href={`https://wa.me/${phone}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-emerald-500/25 bg-emerald-500/10 px-2 py-1 text-[11px] font-semibold text-emerald-600"><Phone className="h-3 w-3" /> WhatsApp</a>}
-                      {client.drive_folder_url && <a href={client.drive_folder_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-sky-500/25 bg-sky-500/10 px-2 py-1 text-[11px] font-semibold text-sky-600"><FolderOpen className="h-3 w-3" /> Drive</a>}
-                    </div>
-                  </div>
-                  {profileExpanded && <div className="space-y-3">
-                  <div className="grid gap-3 md:grid-cols-4">
-                    <Field label="Razão social"><input key={`${client.id}-legal-${loadRevision}`} defaultValue={client.legal_name ?? ""} placeholder="Razão social" onBlur={(e) => updateClientField(client, "legal_name", e.target.value || null)} style={compactInput} /></Field>
-                    <Field label="CNPJ"><input key={`${client.id}-cnpj-${loadRevision}`} defaultValue={client.cnpj ?? ""} placeholder="00.000.000/0000-00" onBlur={(e) => updateClientField(client, "cnpj", e.target.value || null)} style={compactInput} /></Field>
-                    <Field label="Contato"><input key={`${client.id}-contact-${loadRevision}`} defaultValue={client.contact_name ?? ""} placeholder="Nome do contato" onBlur={(e) => updateClientField(client, "contact_name", e.target.value || null)} style={compactInput} /></Field>
-                    <Field label="E-mail"><input key={`${client.id}-email-${loadRevision}`} type="email" defaultValue={client.contact_email ?? ""} placeholder="contato@empresa.com" onBlur={(e) => updateClientField(client, "contact_email", e.target.value || null)} style={compactInput} /></Field>
-                    <Field label="WhatsApp"><input key={`${client.id}-wa-${loadRevision}`} defaultValue={client.whatsapp_phone ?? ""} placeholder="5511999999999" onBlur={(e) => updateClientField(client, "whatsapp_phone", e.target.value || null)} style={compactInput} /></Field>
-                    <Field label="Telefone"><input key={`${client.id}-phone-${loadRevision}`} defaultValue={client.contact_phone ?? ""} placeholder="Telefone alternativo" onBlur={(e) => updateClientField(client, "contact_phone", e.target.value || null)} style={compactInput} /></Field>
-                    <Field label="Pasta do Drive"><div className="flex gap-1"><input key={`${client.id}-drive-${loadRevision}`} type="url" defaultValue={client.drive_folder_url ?? ""} placeholder="Cole o link da pasta" onBlur={(e) => updateClientField(client, "drive_folder_url", e.target.value || null)} style={{ ...compactInput, minWidth: 0 }} />{client.drive_folder_url ? <a href={client.drive_folder_url} target="_blank" rel="noreferrer" className="inline-flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded border border-input text-muted-foreground hover:text-foreground"><ExternalLink className="h-3 w-3" /></a> : <button onClick={() => createDrive(client)} disabled={driveBusy === client.id} title="Cria a pasta e as subpastas padrão no Google Drive conectado" className="h-[30px] shrink-0 rounded border border-sky-500/30 px-2 text-[10px] font-semibold text-sky-600 hover:bg-sky-500/10 disabled:opacity-50">{driveBusy === client.id ? "…" : "Criar"}</button>}</div></Field>
-                    <Field label="Avisar antes (dias)"><input key={`${client.id}-notice-${loadRevision}`} type="number" min="0" max="365" defaultValue={client.contract_notice_days ?? 30} onBlur={(e) => updateClientField(client, "contract_notice_days", e.target.value ? Number(e.target.value) : 30)} style={compactInput} /></Field>
-                    <Field label="Início do contrato"><BrDateInput value={client.contract_start_date} onChange={(value) => updateClientField(client, "contract_start_date", value || null)} style={compactInput} /></Field>
-                    <Field label="Fim do contrato"><BrDateInput value={client.contract_end_date} onChange={(value) => updateClientField(client, "contract_end_date", value || null)} style={compactInput} /></Field>
-                    <div className="md:col-span-2 flex items-end gap-2 text-xs"><CalendarClock className={cn("h-4 w-4 mb-1", contractTone)} /><span className={contractTone}>{contractDays == null ? "Vigência ainda não configurada" : contractDays < 0 ? `Contrato vencido há ${Math.abs(contractDays)} dia(s)` : contractDays === 0 ? "Contrato vence hoje" : `Contrato vence em ${contractDays} dia(s)`}</span></div>
-                   </div>
-                   <ClientGuardrails client={client} loadRevision={loadRevision} onUpdate={updateClient} />
-                   <div className="border-t border-border/40 pt-3 space-y-3">
-                    <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Dados para contrato e faturamento</div>
-                    <div className="grid gap-3 md:grid-cols-5">
-                      <Field label="Tipo"><select value={client.person_type ?? "juridica"} onChange={(e) => updateClientField(client, "person_type", e.target.value)} style={compactInput}><option value="juridica">Pessoa jurídica</option><option value="fisica">Pessoa física</option></select></Field>
-                      <Field label={client.person_type === "fisica" ? "CPF" : "CPF do responsável"}><input key={`${client.id}-cpf-${loadRevision}`} defaultValue={client.cpf ?? ""} placeholder="000.000.000-00" onBlur={(e) => updateClientField(client, "cpf", e.target.value || null)} style={compactInput} /></Field>
-                      <Field label="Inscrição estadual"><input key={`${client.id}-ie-${loadRevision}`} defaultValue={client.state_registration ?? ""} placeholder="Opcional" onBlur={(e) => updateClientField(client, "state_registration", e.target.value || null)} style={compactInput} /></Field>
-                      <Field label="Inscrição municipal"><input key={`${client.id}-im-${loadRevision}`} defaultValue={client.municipal_registration ?? ""} placeholder="Opcional" onBlur={(e) => updateClientField(client, "municipal_registration", e.target.value || null)} style={compactInput} /></Field>
-                      <Field label="País"><input key={`${client.id}-country-${loadRevision}`} defaultValue={client.address_country ?? "Brasil"} onBlur={(e) => updateClientField(client, "address_country", e.target.value || null)} style={compactInput} /></Field>
-                      <Field label="Representante legal"><input key={`${client.id}-rep-${loadRevision}`} defaultValue={client.legal_representative_name ?? ""} placeholder="Nome completo" onBlur={(e) => updateClientField(client, "legal_representative_name", e.target.value || null)} style={compactInput} /></Field>
-                      <Field label="CPF do representante"><input key={`${client.id}-repcpf-${loadRevision}`} defaultValue={client.legal_representative_cpf ?? ""} placeholder="000.000.000-00" onBlur={(e) => updateClientField(client, "legal_representative_cpf", e.target.value || null)} style={compactInput} /></Field>
-                      <Field label="Cargo"><input key={`${client.id}-reprule-${loadRevision}`} defaultValue={client.legal_representative_role ?? ""} placeholder="Sócio, diretor..." onBlur={(e) => updateClientField(client, "legal_representative_role", e.target.value || null)} style={compactInput} /></Field>
-                      <Field label="E-mail financeiro"><input key={`${client.id}-billingemail-${loadRevision}`} type="email" defaultValue={client.billing_email ?? ""} placeholder="financeiro@empresa.com" onBlur={(e) => updateClientField(client, "billing_email", e.target.value || null)} style={compactInput} /></Field>
-                      <Field label="Telefone financeiro"><input key={`${client.id}-billingphone-${loadRevision}`} defaultValue={client.billing_phone ?? ""} placeholder="Telefone" onBlur={(e) => updateClientField(client, "billing_phone", e.target.value || null)} style={compactInput} /></Field>
-                    </div>
-                    <div className="grid gap-3 md:grid-cols-6">
-                      <Field label="CEP"><input key={`${client.id}-cep-${loadRevision}`} defaultValue={client.address_zip_code ?? ""} placeholder="00000-000" onBlur={(e) => updateClientField(client, "address_zip_code", e.target.value || null)} style={compactInput} /></Field>
-                      <Field label="Logradouro"><input key={`${client.id}-street-${loadRevision}`} defaultValue={client.address_street ?? ""} placeholder="Rua, avenida..." onBlur={(e) => updateClientField(client, "address_street", e.target.value || null)} style={compactInput} /></Field>
-                      <Field label="Número"><input key={`${client.id}-number-${loadRevision}`} defaultValue={client.address_number ?? ""} placeholder="123" onBlur={(e) => updateClientField(client, "address_number", e.target.value || null)} style={compactInput} /></Field>
-                      <Field label="Complemento"><input key={`${client.id}-complement-${loadRevision}`} defaultValue={client.address_complement ?? ""} placeholder="Sala, conjunto..." onBlur={(e) => updateClientField(client, "address_complement", e.target.value || null)} style={compactInput} /></Field>
-                      <Field label="Bairro"><input key={`${client.id}-neighborhood-${loadRevision}`} defaultValue={client.address_neighborhood ?? ""} onBlur={(e) => updateClientField(client, "address_neighborhood", e.target.value || null)} style={compactInput} /></Field>
-                      <Field label="Cidade / UF"><div className="flex gap-1"><input key={`${client.id}-city-${loadRevision}`} defaultValue={client.address_city ?? ""} placeholder="Cidade" onBlur={(e) => updateClientField(client, "address_city", e.target.value || null)} style={{ ...compactInput, minWidth: 0 }} /><input key={`${client.id}-state-${loadRevision}`} defaultValue={client.address_state ?? ""} placeholder="UF" maxLength={2} onBlur={(e) => updateClientField(client, "address_state", e.target.value.toUpperCase() || null)} style={{ ...compactInput, width: 52 }} /></div></Field>
-                    </div>
-                  </div>
-                  <ClientOnboarding clientId={client.id} />
-                  <ClientApprovals clientId={client.id} />
-                  <ClientBilling clientId={client.id} defaultValue={client.monthly_budget} />
-                  <ClientDocuments clientId={client.id} />
-                  </div>}
+                  </Field>
                 </div>
-              );
-            })}
-            {!visibleClients.length && <div className="text-sm text-muted-foreground">Nenhum cliente encontrado.</div>}
-          </div>
-        </Collapsible>
+                <div className="rounded-lg border border-border/50 bg-card p-4">
+                  <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Contas de anúncio vinculadas</div>
+                  <ClientAccounts client={selectedClient} accounts={accounts} busyAccount={accountBusy} onLink={linkClientAccount} onUnlink={unlinkClientAccount} />
+                </div>
+                <ClientGuardrails client={selectedClient} loadRevision={loadRevision} onUpdate={updateClient} />
+              </div>}
 
-        {/* Orgânico: alimenta a seção de Facebook/Instagram no relatório.
-            O dropdown só lista o que o token de sistema já enxerga — fica
-            vazio até a Página ser atribuída na Business Manager. Escolher a
-            Página já traz o Instagram vinculado a ela de brinde. */}
-        <Collapsible id="social" storageKey="clientes:organico"
-          summary={<SectionHead icon="◑" title="Orgânico (Facebook/Instagram)" hint="Página e conta comercial, para o relatório trazer alcance e seguidores." meta={`${clients.filter((c) => c.facebook_page_id || c.instagram_business_id).length} configurado(s)`} />}>
-          <SocialPagesPanel
-            clients={visibleClients}
-            loadRevision={loadRevision}
-            onUpdate={updateClient}
-            onError={setError}
-          />
-        </Collapsible>
+              {activeTab === "perfil" && <div className="space-y-3 rounded-lg border border-border/50 bg-card p-4">
+                <div className="grid gap-3 md:grid-cols-4">
+                  <Field label="Razão social"><input key={`${selectedClient.id}-legal-${loadRevision}`} defaultValue={selectedClient.legal_name ?? ""} placeholder="Razão social" onBlur={(e) => updateClientField(selectedClient, "legal_name", e.target.value || null)} style={compactInput} /></Field>
+                  <Field label="CNPJ"><input key={`${selectedClient.id}-cnpj-${loadRevision}`} defaultValue={selectedClient.cnpj ?? ""} placeholder="00.000.000/0000-00" onBlur={(e) => updateClientField(selectedClient, "cnpj", e.target.value || null)} style={compactInput} /></Field>
+                  <Field label="Contato"><input key={`${selectedClient.id}-contact-${loadRevision}`} defaultValue={selectedClient.contact_name ?? ""} placeholder="Nome do contato" onBlur={(e) => updateClientField(selectedClient, "contact_name", e.target.value || null)} style={compactInput} /></Field>
+                  <Field label="E-mail"><input key={`${selectedClient.id}-email-${loadRevision}`} type="email" defaultValue={selectedClient.contact_email ?? ""} placeholder="contato@empresa.com" onBlur={(e) => updateClientField(selectedClient, "contact_email", e.target.value || null)} style={compactInput} /></Field>
+                  <Field label="WhatsApp"><input key={`${selectedClient.id}-wa-${loadRevision}`} defaultValue={selectedClient.whatsapp_phone ?? ""} placeholder="5511999999999" onBlur={(e) => updateClientField(selectedClient, "whatsapp_phone", e.target.value || null)} style={compactInput} /></Field>
+                  <Field label="Telefone"><input key={`${selectedClient.id}-phone-${loadRevision}`} defaultValue={selectedClient.contact_phone ?? ""} placeholder="Telefone alternativo" onBlur={(e) => updateClientField(selectedClient, "contact_phone", e.target.value || null)} style={compactInput} /></Field>
+                </div>
+                <div className="border-t border-border/40 pt-3 space-y-3">
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Dados para contrato e faturamento</div>
+                  <div className="grid gap-3 md:grid-cols-5">
+                    <Field label="Tipo"><select value={selectedClient.person_type ?? "juridica"} onChange={(e) => updateClientField(selectedClient, "person_type", e.target.value)} style={compactInput}><option value="juridica">Pessoa jurídica</option><option value="fisica">Pessoa física</option></select></Field>
+                    <Field label={selectedClient.person_type === "fisica" ? "CPF" : "CPF do responsável"}><input key={`${selectedClient.id}-cpf-${loadRevision}`} defaultValue={selectedClient.cpf ?? ""} placeholder="000.000.000-00" onBlur={(e) => updateClientField(selectedClient, "cpf", e.target.value || null)} style={compactInput} /></Field>
+                    <Field label="Inscrição estadual"><input key={`${selectedClient.id}-ie-${loadRevision}`} defaultValue={selectedClient.state_registration ?? ""} placeholder="Opcional" onBlur={(e) => updateClientField(selectedClient, "state_registration", e.target.value || null)} style={compactInput} /></Field>
+                    <Field label="Inscrição municipal"><input key={`${selectedClient.id}-im-${loadRevision}`} defaultValue={selectedClient.municipal_registration ?? ""} placeholder="Opcional" onBlur={(e) => updateClientField(selectedClient, "municipal_registration", e.target.value || null)} style={compactInput} /></Field>
+                    <Field label="País"><input key={`${selectedClient.id}-country-${loadRevision}`} defaultValue={selectedClient.address_country ?? "Brasil"} onBlur={(e) => updateClientField(selectedClient, "address_country", e.target.value || null)} style={compactInput} /></Field>
+                    <Field label="Representante legal"><input key={`${selectedClient.id}-rep-${loadRevision}`} defaultValue={selectedClient.legal_representative_name ?? ""} placeholder="Nome completo" onBlur={(e) => updateClientField(selectedClient, "legal_representative_name", e.target.value || null)} style={compactInput} /></Field>
+                    <Field label="CPF do representante"><input key={`${selectedClient.id}-repcpf-${loadRevision}`} defaultValue={selectedClient.legal_representative_cpf ?? ""} placeholder="000.000.000-00" onBlur={(e) => updateClientField(selectedClient, "legal_representative_cpf", e.target.value || null)} style={compactInput} /></Field>
+                    <Field label="Cargo"><input key={`${selectedClient.id}-reprule-${loadRevision}`} defaultValue={selectedClient.legal_representative_role ?? ""} placeholder="Sócio, diretor..." onBlur={(e) => updateClientField(selectedClient, "legal_representative_role", e.target.value || null)} style={compactInput} /></Field>
+                    <Field label="E-mail financeiro"><input key={`${selectedClient.id}-billingemail-${loadRevision}`} type="email" defaultValue={selectedClient.billing_email ?? ""} placeholder="financeiro@empresa.com" onBlur={(e) => updateClientField(selectedClient, "billing_email", e.target.value || null)} style={compactInput} /></Field>
+                    <Field label="Telefone financeiro"><input key={`${selectedClient.id}-billingphone-${loadRevision}`} defaultValue={selectedClient.billing_phone ?? ""} placeholder="Telefone" onBlur={(e) => updateClientField(selectedClient, "billing_phone", e.target.value || null)} style={compactInput} /></Field>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-6">
+                    <Field label="CEP"><input key={`${selectedClient.id}-cep-${loadRevision}`} defaultValue={selectedClient.address_zip_code ?? ""} placeholder="00000-000" onBlur={(e) => updateClientField(selectedClient, "address_zip_code", e.target.value || null)} style={compactInput} /></Field>
+                    <Field label="Logradouro"><input key={`${selectedClient.id}-street-${loadRevision}`} defaultValue={selectedClient.address_street ?? ""} placeholder="Rua, avenida..." onBlur={(e) => updateClientField(selectedClient, "address_street", e.target.value || null)} style={compactInput} /></Field>
+                    <Field label="Número"><input key={`${selectedClient.id}-number-${loadRevision}`} defaultValue={selectedClient.address_number ?? ""} placeholder="123" onBlur={(e) => updateClientField(selectedClient, "address_number", e.target.value || null)} style={compactInput} /></Field>
+                    <Field label="Complemento"><input key={`${selectedClient.id}-complement-${loadRevision}`} defaultValue={selectedClient.address_complement ?? ""} placeholder="Sala, conjunto..." onBlur={(e) => updateClientField(selectedClient, "address_complement", e.target.value || null)} style={compactInput} /></Field>
+                    <Field label="Bairro"><input key={`${selectedClient.id}-neighborhood-${loadRevision}`} defaultValue={selectedClient.address_neighborhood ?? ""} onBlur={(e) => updateClientField(selectedClient, "address_neighborhood", e.target.value || null)} style={compactInput} /></Field>
+                    <Field label="Cidade / UF"><div className="flex gap-1"><input key={`${selectedClient.id}-city-${loadRevision}`} defaultValue={selectedClient.address_city ?? ""} placeholder="Cidade" onBlur={(e) => updateClientField(selectedClient, "address_city", e.target.value || null)} style={{ ...compactInput, minWidth: 0 }} /><input key={`${selectedClient.id}-state-${loadRevision}`} defaultValue={selectedClient.address_state ?? ""} placeholder="UF" maxLength={2} onBlur={(e) => updateClientField(selectedClient, "address_state", e.target.value.toUpperCase() || null)} style={{ ...compactInput, width: 52 }} /></div></Field>
+                  </div>
+                </div>
+                <ClientOnboarding clientId={selectedClient.id} />
+                <ClientApprovals clientId={selectedClient.id} />
+              </div>}
 
-        {/* Grupos */}
-        <Collapsible id="groups" storageKey="clientes:grupos" summary={<SectionHead icon="◈" title="Grupos" hint="Agrupam contas e clientes." meta={`${groups.length} grupo${groups.length === 1 ? "" : "s"}`} />}>
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <Input value={newName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewName(e.target.value)} placeholder="Nome do grupo" className="flex-[1_1_200px]" />
-              <div className="flex gap-1">{PALETTE.map((c) => <button key={c} onClick={() => setNewColor(c)} className={cn("w-6 h-6 rounded-full border-2 transition-all cursor-pointer", newColor === c ? "border-foreground scale-110" : "border-transparent")} style={{ backgroundColor: c }} />)}</div>
-              <Button onClick={createGroup} disabled={busy || !newName.trim()} size="sm"><Plus className="h-3.5 w-3.5 mr-1" /> Criar grupo</Button>
+              {activeTab === "contrato" && <div className="space-y-3 rounded-lg border border-border/50 bg-card p-4">
+                {(() => {
+                  const contractDays = selectedClient.contract_end_date ? Math.ceil((Date.parse(`${selectedClient.contract_end_date}T23:59:59`) - Date.now()) / 86400000) : null;
+                  const contractTone = contractDays != null && contractDays < 0 ? "text-red-500" : contractDays != null && contractDays <= (selectedClient.contract_notice_days ?? 30) ? "text-amber-500" : "text-muted-foreground";
+                  return <div className="grid gap-3 md:grid-cols-4">
+                    <Field label="Início da vigência"><BrDateInput value={selectedClient.contract_start_date} onChange={(value) => updateClientField(selectedClient, "contract_start_date", value || null)} style={compactInput} /></Field>
+                    <Field label="Fim da vigência"><BrDateInput value={selectedClient.contract_end_date} onChange={(value) => updateClientField(selectedClient, "contract_end_date", value || null)} style={compactInput} /></Field>
+                    <Field label="Avisar antes (dias)"><input key={`${selectedClient.id}-notice-${loadRevision}`} type="number" min="0" max="365" defaultValue={selectedClient.contract_notice_days ?? 30} onBlur={(e) => updateClientField(selectedClient, "contract_notice_days", e.target.value ? Number(e.target.value) : 30)} style={compactInput} /></Field>
+                    <div className="flex items-end gap-2 text-xs"><CalendarClock className={cn("h-4 w-4 mb-1.5", contractTone)} /><span className={contractTone}>{contractDays == null ? "Vigência ainda não configurada" : contractDays < 0 ? `Vencido há ${Math.abs(contractDays)} dia(s)` : contractDays === 0 ? "Vence hoje" : `Vence em ${contractDays} dia(s)`}</span></div>
+                  </div>;
+                })()}
+                <ClientDocuments clientId={selectedClient.id} filterKind="contract" />
+              </div>}
+
+              {activeTab === "roi" && <div className="space-y-3">
+                <ClientBilling clientId={selectedClient.id} defaultValue={selectedClient.monthly_budget} />
+                <RoiPorCliente clientId={selectedClient.id} />
+              </div>}
+
+              {activeTab === "documentos" && <div className="space-y-3 rounded-lg border border-border/50 bg-card p-4">
+                <div className="grid gap-3 md:grid-cols-1">
+                  <Field label="Pasta do Drive"><div className="flex gap-1"><input key={`${selectedClient.id}-drive-${loadRevision}`} type="url" defaultValue={selectedClient.drive_folder_url ?? ""} placeholder="Cole o link da pasta" onBlur={(e) => updateClientField(selectedClient, "drive_folder_url", e.target.value || null)} style={{ ...compactInput, minWidth: 0 }} />{selectedClient.drive_folder_url ? <a href={selectedClient.drive_folder_url} target="_blank" rel="noreferrer" className="inline-flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded border border-input text-muted-foreground hover:text-foreground"><ExternalLink className="h-3 w-3" /></a> : <button onClick={() => createDrive(selectedClient)} disabled={driveBusy === selectedClient.id} title="Cria a pasta e as subpastas padrão no Google Drive conectado" className="h-[30px] shrink-0 rounded border border-sky-500/30 px-2 text-[10px] font-semibold text-sky-600 hover:bg-sky-500/10 disabled:opacity-50">{driveBusy === selectedClient.id ? "…" : "Criar"}</button>}</div></Field>
+                </div>
+                <ClientDocuments clientId={selectedClient.id} filterKind="document" />
+              </div>}
+
+              {activeTab === "organico" && <div className="rounded-lg border border-border/50 bg-card p-4">
+                <SocialPagesPanel clients={[selectedClient]} loadRevision={loadRevision} onUpdate={updateClient} onError={setError} />
+              </div>}
+            </>}
+          </section>
+        </div>
+      )}
+
+      {view === "catalog" && (
+        <div className="space-y-4">
+          <WideScreenHint>A tabela de contas é larga; no computador fica mais confortável.</WideScreenHint>
+
+          <section className="rounded-lg border border-border/50 bg-card p-4">
+            <div className="mb-3 flex items-center justify-between"><h2 className="text-sm font-semibold">ROI por Cliente — comparação geral</h2></div>
+            <RoiPorCliente />
+          </section>
+
+          <section className="rounded-lg border border-border/50 bg-card p-4">
+            <div className="mb-3 flex items-center justify-between"><h2 className="text-sm font-semibold">Grupos</h2><span className="text-xs text-muted-foreground">{groups.length} grupo{groups.length === 1 ? "" : "s"}</span></div>
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Input value={newName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewName(e.target.value)} placeholder="Nome do grupo" className="flex-[1_1_200px]" />
+                <div className="flex gap-1">{PALETTE.map((c) => <button key={c} onClick={() => setNewColor(c)} className={cn("w-6 h-6 rounded-full border-2 transition-all cursor-pointer", newColor === c ? "border-foreground scale-110" : "border-transparent")} style={{ backgroundColor: c }} />)}</div>
+                <Button onClick={createGroup} disabled={busy || !newName.trim()} size="sm"><Plus className="h-3.5 w-3.5 mr-1" /> Criar grupo</Button>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs min-w-[500px]">
+                  <thead><tr className="border-b border-border text-muted-foreground uppercase tracking-wider"><th className="text-left p-2 font-semibold"><SortButton column="name" sort={groupSort} onSort={setGroupSort} align="left">Grupo</SortButton></th><th className="text-right p-2 font-semibold"><SortButton column="accounts" sort={groupSort} onSort={setGroupSort} initialDirection="desc">Contas</SortButton></th><th className="p-2 w-16" /></tr></thead>
+                  <tbody>{sortedGroups.map((g) => (
+                    <tr key={g.id} className="border-b border-border/30"><td className="p-2"><span className="inline-flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: g.color }} /><input defaultValue={g.name} onBlur={(e) => { if (e.target.value.trim() && e.target.value.trim() !== g.name) renameGroup(g.id, e.target.value.trim()); }} className="text-xs font-semibold bg-transparent border-none outline-none focus:ring-1 focus:ring-ring rounded px-1" /></span></td><td className="p-2 text-right text-muted-foreground">{countByGroup[g.id] || 0}</td><td className="p-2 text-right"><Button variant="ghost" size="sm" onClick={() => removeGroup(g.id)} disabled={busy} className="h-7 text-xs text-muted-foreground hover:text-destructive"><X className="h-3 w-3" /></Button></td></tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <section className="rounded-lg border border-border/50 bg-card p-4">
+            <div className="mb-3 flex items-center justify-between"><h2 className="text-sm font-semibold">Contas</h2><span className="text-xs text-muted-foreground">{collectingCount} ativa{collectingCount === 1 ? "" : "s"} de {accounts.length}</span></div>
+            <div className="flex flex-wrap items-center gap-2 mb-3">
+              <span className="text-xs text-muted-foreground">Sincronizar:</span>
+              <Button variant="secondary" size="sm" onClick={() => sync("meta")}><RefreshCw className="h-3 w-3 mr-1" /> Meta</Button>
+              <Button variant="secondary" size="sm" onClick={() => sync("google")}><RefreshCw className="h-3 w-3 mr-1" /> Google</Button>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-xs min-w-[500px]">
-                <thead><tr className="border-b border-border text-muted-foreground uppercase tracking-wider"><th className="text-left p-2 font-semibold"><SortButton column="name" sort={groupSort} onSort={setGroupSort} align="left">Grupo</SortButton></th><th className="text-right p-2 font-semibold"><SortButton column="accounts" sort={groupSort} onSort={setGroupSort} initialDirection="desc">Contas</SortButton></th><th className="p-2 w-16" /></tr></thead>
-                <tbody>{sortedGroups.map((g) => (
-                  <tr key={g.id} className="border-b border-border/30"><td className="p-2"><span className="inline-flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: g.color }} /><input defaultValue={g.name} onBlur={(e) => { if (e.target.value.trim() && e.target.value.trim() !== g.name) renameGroup(g.id, e.target.value.trim()); }} className="text-xs font-semibold bg-transparent border-none outline-none focus:ring-1 focus:ring-ring rounded px-1" /></span></td><td className="p-2 text-right text-muted-foreground">{countByGroup[g.id] || 0}</td><td className="p-2 text-right"><Button variant="ghost" size="sm" onClick={() => removeGroup(g.id)} disabled={busy} className="h-7 text-xs text-muted-foreground hover:text-destructive"><X className="h-3 w-3" /></Button></td></tr>
-                ))}</tbody>
-              </table>
-            </div>
-          </div>
-        </Collapsible>
-
-        {/* Contas */}
-        <Collapsible id="accounts" storageKey="clientes:contas" summary={<SectionHead icon="◫" title="Contas" hint="Ativar/ocultar, vincular Google a Meta e definir grupo." meta={`${collectingCount} ativa${collectingCount === 1 ? "" : "s"} de ${accounts.length}`} />}>
-          <div className="flex flex-wrap items-center gap-2 mb-3">
-            <span className="text-xs text-muted-foreground">Sincronizar:</span>
-            <Button variant="secondary" size="sm" onClick={() => sync("meta")}><RefreshCw className="h-3 w-3 mr-1" /> Meta</Button>
-            <Button variant="secondary" size="sm" onClick={() => sync("google")}><RefreshCw className="h-3 w-3 mr-1" /> Google</Button>
-          </div>
-          <div className="overflow-x-auto">
-            <div className="min-w-[800px] space-y-1">
-              <div className="grid gap-2 px-3 py-2 rounded-lg border border-border/50 bg-muted/30 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider items-center" style={{ gridTemplateColumns: "60px 1.5fr 80px 1fr 1.2fr 110px 130px" }}>
-                <SortButton column="platform" sort={accountSort} onSort={setAccountSort} align="left">Plat.</SortButton>
-                <SortButton column="name" sort={accountSort} onSort={setAccountSort} align="left">Nome</SortButton>
-                <SortButton column="status" sort={accountSort} onSort={setAccountSort} align="left">Status</SortButton>
-                <SortButton column="client" sort={accountSort} onSort={setAccountSort} align="left">Cliente</SortButton>
-                <SortButton column="group" sort={accountSort} onSort={setAccountSort} align="left">Grupo</SortButton>
-                <SortButton column="visibility" sort={accountSort} onSort={setAccountSort} align="center">Visível</SortButton>
-                <span>Vincular Google</span>
-              </div>
-              {sortedAccounts.map((a) => (
-                <div key={a.account_id} className="grid gap-2 px-3 py-2 rounded-lg border border-border/30 bg-card text-xs items-center" style={{ gridTemplateColumns: "60px 1.5fr 80px 1fr 1.2fr 110px 130px" }}>
-                  <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded text-center", a.platform === "google" ? "bg-sky-500/10 text-sky-600" : "bg-blue-500/10 text-blue-600")}>{a.platform}</span>
-                  <span className="font-medium truncate" title={a.name}>{a.name}</span>
-                  <span className={cn("text-[10px] font-semibold", a.status === "ACTIVE" ? "text-emerald-500" : "text-muted-foreground")}>{a.status}</span>
-                  <span className="text-muted-foreground truncate">{clients.flatMap((client) => client.accounts || []).find((account) => account.account_id === a.account_id) ? clients.find((client) => (client.accounts || []).some((account) => account.account_id === a.account_id))?.name || "—" : "—"}</span>
-                  <select value={a.group_id || ""} onChange={(e) => setGroup(a.account_id, e.target.value || null)} className="text-xs rounded border border-input bg-transparent px-1 py-1" style={{ fontSize: 11 }}>
-                    <option value="">sem grupo</option>{groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-                  </select>
-                  <div className="flex justify-center">
-                    <button onClick={() => toggleHidden(a.account_id, !a.hidden)} className={cn("px-2 py-0.5 rounded text-[10px] font-semibold border-none cursor-pointer transition-colors", a.hidden ? "bg-muted text-muted-foreground hover:text-foreground" : "bg-primary/10 text-primary hover:bg-primary/20")}>{a.hidden ? "oculto" : "ativo"}</button>
-                  </div>
-                  <div className="flex justify-end">
-                    {a.platform === "google" ? (
-                      <select value={a.linked_meta_account_id || ""} onChange={(e) => linkGoogle(a.account_id, e.target.value)} className="text-[10px] rounded border border-input bg-transparent px-1 py-1 w-full max-w-[120px]" title="Vincular a uma conta Meta">
-                        <option value="">—</option>{metaAccounts.map((m) => <option key={m.account_id} value={m.account_id}>{m.name}</option>)}
-                      </select>
-                    ) : <span className="text-[10px] text-muted-foreground">—</span>}
-                  </div>
+              <div className="min-w-[800px] space-y-1">
+                <div className="grid gap-2 px-3 py-2 rounded-lg border border-border/50 bg-muted/30 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider items-center" style={{ gridTemplateColumns: "60px 1.5fr 80px 1fr 1.2fr 110px 130px" }}>
+                  <SortButton column="platform" sort={accountSort} onSort={setAccountSort} align="left">Plat.</SortButton>
+                  <SortButton column="name" sort={accountSort} onSort={setAccountSort} align="left">Nome</SortButton>
+                  <SortButton column="status" sort={accountSort} onSort={setAccountSort} align="left">Status</SortButton>
+                  <SortButton column="client" sort={accountSort} onSort={setAccountSort} align="left">Cliente</SortButton>
+                  <SortButton column="group" sort={accountSort} onSort={setAccountSort} align="left">Grupo</SortButton>
+                  <SortButton column="visibility" sort={accountSort} onSort={setAccountSort} align="center">Visível</SortButton>
+                  <span>Vincular Google</span>
                 </div>
-              ))}
+                {sortedAccounts.map((a) => (
+                  <div key={a.account_id} className="grid gap-2 px-3 py-2 rounded-lg border border-border/30 bg-card text-xs items-center" style={{ gridTemplateColumns: "60px 1.5fr 80px 1fr 1.2fr 110px 130px" }}>
+                    <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded text-center", a.platform === "google" ? "bg-sky-500/10 text-sky-600" : "bg-blue-500/10 text-blue-600")}>{a.platform}</span>
+                    <span className="font-medium truncate" title={a.name}>{a.name}</span>
+                    <span className={cn("text-[10px] font-semibold", a.status === "ACTIVE" ? "text-emerald-500" : "text-muted-foreground")}>{a.status}</span>
+                    <span className="text-muted-foreground truncate">{clients.flatMap((client) => client.accounts || []).find((account) => account.account_id === a.account_id) ? clients.find((client) => (client.accounts || []).some((account) => account.account_id === a.account_id))?.name || "—" : "—"}</span>
+                    <select value={a.group_id || ""} onChange={(e) => setGroup(a.account_id, e.target.value || null)} className="text-xs rounded border border-input bg-transparent px-1 py-1" style={{ fontSize: 11 }}>
+                      <option value="">sem grupo</option>{groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+                    </select>
+                    <div className="flex justify-center">
+                      <button onClick={() => toggleHidden(a.account_id, !a.hidden)} className={cn("px-2 py-0.5 rounded text-[10px] font-semibold border-none cursor-pointer transition-colors", a.hidden ? "bg-muted text-muted-foreground hover:text-foreground" : "bg-primary/10 text-primary hover:bg-primary/20")}>{a.hidden ? "oculto" : "ativo"}</button>
+                    </div>
+                    <div className="flex justify-end">
+                      {a.platform === "google" ? (
+                        <select value={a.linked_meta_account_id || ""} onChange={(e) => linkGoogle(a.account_id, e.target.value)} className="text-[10px] rounded border border-input bg-transparent px-1 py-1 w-full max-w-[120px]" title="Vincular a uma conta Meta">
+                          <option value="">—</option>{metaAccounts.map((m) => <option key={m.account_id} value={m.account_id}>{m.name}</option>)}
+                        </select>
+                      ) : <span className="text-[10px] text-muted-foreground">—</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-          <div className="mt-3 border-t border-border/50 pt-3 px-1">
-            <CampaignTemplateList />
-          </div>
-        </Collapsible>
-      </div>
+            <div className="mt-3 border-t border-border/50 pt-3 px-1">
+              <CampaignTemplateList />
+            </div>
+          </section>
+        </div>
+      )}
+
       {clientModal !== false && <Modal title={clientModal ? `Editar cliente: ${clientModal.name}` : "Novo cliente"} onClose={() => setClientModal(false)} wide>
         <div className="space-y-5">
           <p className="text-xs text-muted-foreground">Preencha os dados uma única vez. Eles serão usados no cadastro, no faturamento e na geração da minuta contratual.</p>
@@ -458,7 +470,7 @@ function ClientAccounts({ client, accounts, busyAccount, onLink, onUnlink }: { c
   const linked = client.accounts || [];
   const linkedIds = new Set(linked.map((account) => account.account_id));
   const available = accounts.filter((account) => !linkedIds.has(account.account_id) && !account.hidden);
-  return <div className="mt-1.5 space-y-1.5"><div className="text-[10px] font-semibold text-muted-foreground">Contas vinculadas ({linked.length})</div><div className="flex gap-1 flex-wrap">{linked.map((account) => <span key={account.account_id} title={account.name} className={cn("inline-flex max-w-[150px] items-center gap-1 truncate rounded px-1.5 py-0.5 text-[9px] font-bold", account.platform === "google" ? "bg-sky-500/10 text-sky-600" : "bg-blue-500/10 text-blue-600")}><span className="truncate">{account.name}</span><button type="button" onClick={() => onUnlink(client, account.account_id)} disabled={busyAccount === `${client.id}:${account.account_id}`} className="text-current opacity-60 hover:opacity-100" title="Desvincular conta">×</button></span>)}{!linked.length && <span className="text-[10px] text-muted-foreground">Nenhuma conta vinculada</span>}</div>{available.length > 0 && <select value="" onChange={(event) => onLink(client, event.target.value)} disabled={Boolean(busyAccount)} className="h-7 max-w-full rounded border border-input bg-transparent px-1 text-[10px]"><option value="">+ Vincular conta de anúncio</option>{available.map((account) => <option key={account.account_id} value={account.account_id}>{account.platform} · {account.name}</option>)}</select>}</div>;
+  return <div className="space-y-1.5"><div className="text-[10px] font-semibold text-muted-foreground">Contas vinculadas ({linked.length})</div><div className="flex gap-1 flex-wrap">{linked.map((account) => <span key={account.account_id} title={account.name} className={cn("inline-flex max-w-[150px] items-center gap-1 truncate rounded px-1.5 py-0.5 text-[9px] font-bold", account.platform === "google" ? "bg-sky-500/10 text-sky-600" : "bg-blue-500/10 text-blue-600")}><span className="truncate">{account.name}</span><button type="button" onClick={() => onUnlink(client, account.account_id)} disabled={busyAccount === `${client.id}:${account.account_id}`} className="text-current opacity-60 hover:opacity-100" title="Desvincular conta">×</button></span>)}{!linked.length && <span className="text-[10px] text-muted-foreground">Nenhuma conta vinculada</span>}</div>{available.length > 0 && <select value="" onChange={(event) => onLink(client, event.target.value)} disabled={Boolean(busyAccount)} className="h-7 max-w-full rounded border border-input bg-transparent px-1 text-[10px]"><option value="">+ Vincular conta de anúncio</option>{available.map((account) => <option key={account.account_id} value={account.account_id}>{account.platform} · {account.name}</option>)}</select>}</div>;
 }
 
 function SocialPagesPanel({
@@ -571,24 +583,10 @@ function SocialPagesPanel({
   );
 }
 
-function SectionHead({ icon, title, hint, meta }: { icon: string; title: string; hint: string; meta: string }) {
-  return (
-    <div className="flex items-center gap-3 flex-1 min-w-0">
-      <span className="text-base">{icon}</span>
-      <div className="min-w-0">
-        <span className="text-sm font-semibold">{title}</span>
-        <span className="text-xs text-muted-foreground ml-2">{hint}</span>
-      </div>
-      <span className="ml-auto text-xs font-semibold text-muted-foreground shrink-0">{meta}</span>
-    </div>
-  );
-}
-
-function ClientDocuments({ clientId }: { clientId: string }) {
+function ClientDocuments({ clientId, filterKind }: { clientId: string; filterKind: "contract" | "document" }) {
   const [data, setData] = useState<{ contracts: any[]; documents: any[] }>({ contracts: [], documents: [] });
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
-  const [kind, setKind] = useState<"contract" | "document">("contract");
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -612,7 +610,7 @@ function ClientDocuments({ clientId }: { clientId: string }) {
     if (!name.trim()) return;
     setBusy(true); setError(null);
     try {
-      const r = await fetch(`/api/clients/${clientId}/documents`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind, name, drive_file_url: url || null, end_date: kind === "contract" ? endDate || null : null, expires_at: kind === "document" ? endDate || null : null, category }) });
+      const r = await fetch(`/api/clients/${clientId}/documents`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: filterKind, name, drive_file_url: url || null, end_date: filterKind === "contract" ? endDate || null : null, expires_at: filterKind === "document" ? endDate || null : null, category }) });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "Falha ao salvar.");
       setName(""); setUrl(""); setEndDate(""); setOpen(false); await load();
@@ -626,7 +624,7 @@ function ClientDocuments({ clientId }: { clientId: string }) {
     try {
       const form = new FormData();
       form.append("file", file);
-      form.append("category", kind === "contract" ? "contract" : category);
+      form.append("category", filterKind === "contract" ? "contract" : category);
       const r = await fetch(`/api/clients/${clientId}/drive/upload`, { method: "POST", body: form });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "Falha ao enviar arquivo.");
@@ -648,24 +646,25 @@ function ClientDocuments({ clientId }: { clientId: string }) {
   }
 
   const latestContract = data.contracts[0];
+  const documentList = filterKind === "document" ? data.documents : [];
   return (
     <div className="border-t border-border/40 pt-3 space-y-2">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"><FileText className="inline h-3.5 w-3.5 mr-1" />Contratos e documentos</span>
-        {latestContract && <span className="text-[11px] text-muted-foreground">· contrato: {latestContract.title}{latestContract.end_date ? ` até ${brDate(latestContract.end_date)}` : ""}</span>}
-        {latestContract && <button onClick={renew} disabled={busy} className="rounded-md border border-amber-500/30 px-2 py-1 text-[11px] font-semibold text-amber-600 hover:bg-amber-500/10 disabled:opacity-50">Renovar</button>}
-        <Link href={`/contratos/${clientId}`} className="rounded-md border border-primary/30 px-2 py-1 text-[11px] font-semibold text-primary hover:bg-primary/10">Gerar minuta</Link>
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"><FileText className="inline h-3.5 w-3.5 mr-1" />{filterKind === "contract" ? "Contratos" : "Documentos"}</span>
+        {filterKind === "contract" && latestContract && <span className="text-[11px] text-muted-foreground">· contrato: {latestContract.title}{latestContract.end_date ? ` até ${brDate(latestContract.end_date)}` : ""}</span>}
+        {filterKind === "contract" && latestContract && <button onClick={renew} disabled={busy} className="rounded-md border border-amber-500/30 px-2 py-1 text-[11px] font-semibold text-amber-600 hover:bg-amber-500/10 disabled:opacity-50">Renovar</button>}
+        {filterKind === "contract" && <Link href={`/contratos/${clientId}`} className="rounded-md border border-primary/30 px-2 py-1 text-[11px] font-semibold text-primary hover:bg-primary/10">Gerar minuta</Link>}
         <button onClick={() => setOpen((v) => !v)} className="ml-auto inline-flex items-center gap-1 rounded-md border border-input px-2 py-1 text-[11px] font-semibold hover:bg-muted"><Plus className="h-3 w-3" /> Adicionar</button>
       </div>
-      {data.documents.length > 0 && <div className="flex flex-wrap gap-1.5">{data.documents.slice(0, 5).map((doc) => doc.drive_file_url ? <a key={doc.id} href={doc.drive_file_url} target="_blank" rel="noreferrer" className="rounded-md bg-muted px-2 py-1 text-[11px] hover:text-primary">{doc.name}</a> : <span key={doc.id} className="rounded-md bg-muted px-2 py-1 text-[11px]">{doc.name}</span>)}</div>}
+      {filterKind === "contract" && data.contracts.length > 0 && <div className="flex flex-wrap gap-1.5">{data.contracts.slice(0, 5).map((doc) => doc.drive_file_url ? <a key={doc.id} href={doc.drive_file_url} target="_blank" rel="noreferrer" className="rounded-md bg-muted px-2 py-1 text-[11px] hover:text-primary">{doc.title || doc.name}</a> : <span key={doc.id} className="rounded-md bg-muted px-2 py-1 text-[11px]">{doc.title || doc.name}</span>)}</div>}
+      {filterKind === "document" && documentList.length > 0 && <div className="flex flex-wrap gap-1.5">{documentList.slice(0, 10).map((doc) => doc.drive_file_url ? <a key={doc.id} href={doc.drive_file_url} target="_blank" rel="noreferrer" className="rounded-md bg-muted px-2 py-1 text-[11px] hover:text-primary">{doc.name}</a> : <span key={doc.id} className="rounded-md bg-muted px-2 py-1 text-[11px]">{doc.name}</span>)}</div>}
       {loading && <span className="text-[11px] text-muted-foreground">Carregando acervo…</span>}
       {error && <div className="text-[11px] text-red-500">{error}</div>}
-      {open && <div className="grid gap-2 rounded-md border border-border/50 bg-muted/20 p-2 md:grid-cols-6">
-        <select value={kind} onChange={(e) => setKind(e.target.value as "contract" | "document")} style={compactInput}><option value="contract">Contrato</option><option value="document">Documento</option></select>
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder={kind === "contract" ? "Contrato de prestação de serviços" : "Nome do documento"} style={compactInput} />
+      {open && <div className="grid gap-2 rounded-md border border-border/50 bg-muted/20 p-2 md:grid-cols-5">
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder={filterKind === "contract" ? "Contrato de prestação de serviços" : "Nome do documento"} style={compactInput} />
         <input value={url} onChange={(e) => setUrl(e.target.value)} type="url" placeholder="Link do arquivo no Drive" style={compactInput} />
-        <input value={endDate} onChange={(e) => setEndDate(e.target.value)} type="date" title={kind === "contract" ? "Vencimento do contrato" : "Validade do documento"} style={compactInput} />
-        {kind === "document" && <select value={category} onChange={(e) => setCategory(e.target.value)} style={compactInput}><option value="other">Outro</option><option value="invoice">Nota fiscal</option><option value="briefing">Briefing</option><option value="addendum">Aditivo</option><option value="proof">Comprovante</option></select>}
+        <input value={endDate} onChange={(e) => setEndDate(e.target.value)} type="date" title={filterKind === "contract" ? "Vencimento do contrato" : "Validade do documento"} style={compactInput} />
+        {filterKind === "document" && <select value={category} onChange={(e) => setCategory(e.target.value)} style={compactInput}><option value="other">Outro</option><option value="invoice">Nota fiscal</option><option value="briefing">Briefing</option><option value="addendum">Aditivo</option><option value="proof">Comprovante</option></select>}
         <button onClick={add} disabled={busy || !name.trim()} className="rounded-md bg-primary px-3 py-1 text-[11px] font-semibold text-primary-foreground disabled:opacity-50">{busy ? "Salvando…" : "Salvar"}</button>
         <input type="file" onChange={(e) => setFile(e.target.files?.[0] || null)} className="text-[11px] file:mr-2 file:rounded file:border-0 file:bg-muted file:px-2 file:py-1 file:text-[11px]" />
         <button onClick={upload} disabled={busy || !file} className="rounded-md border border-sky-500/30 px-3 py-1 text-[11px] font-semibold text-sky-600 disabled:opacity-50">{busy ? "Enviando…" : "Enviar ao Drive"}</button>
@@ -708,7 +707,7 @@ function ClientBilling({ clientId, defaultValue }: { clientId: string; defaultVa
 
   const active = data.subscriptions.find((item) => item.status === "ACTIVE") || data.subscriptions[0];
   const latest = data.charges[0];
-  return <div className="border-t border-border/40 pt-3 space-y-2">
+  return <div className="rounded-lg border border-border/50 bg-card p-4 space-y-2">
     <div className="flex flex-wrap items-center gap-2"><span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Financeiro / Asaas</span>{active && <span className="text-[11px] text-emerald-600">assinatura {active.status}</span>}{latest && <span className={cn("text-[11px]", latest.status === "OVERDUE" ? "text-red-500" : "text-muted-foreground")}>última cobrança: {latest.status}</span>}</div>
     {!active && <div className="grid gap-2 md:grid-cols-4"><input value={value} onChange={(e) => setValue(e.target.value)} type="number" min="1" step="0.01" placeholder="Mensalidade" style={compactInput} /><input value={dueDate} onChange={(e) => setDueDate(e.target.value)} type="date" title="Primeiro vencimento" style={compactInput} /><select value={billingType} onChange={(e) => setBillingType(e.target.value)} style={compactInput}><option value="UNDEFINED">Cliente escolhe</option><option value="PIX">Pix</option><option value="BOLETO">Boleto</option><option value="CREDIT_CARD">Cartão</option></select><button onClick={createSubscription} disabled={busy || !value} className="rounded-md border border-emerald-500/30 px-2 py-1 text-[11px] font-semibold text-emerald-600 disabled:opacity-50">{busy ? "Criando…" : "Criar cobrança recorrente"}</button></div>}
     {message && <div className="text-[11px] text-muted-foreground">{message}</div>}

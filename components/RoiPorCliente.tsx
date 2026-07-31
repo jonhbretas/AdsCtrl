@@ -84,7 +84,7 @@ function paraTexto(valor: number | null, emEdicao: boolean): string { if (valor 
 const ticketMedio = (r: number | null, o: number | null) => r != null && o != null && o > 0 ? r / o : null;
 const custoPorVenda = (s: number, o: number | null) => o != null && o > 0 && s > 0 ? s / o : null;
 
-export function RoiPorCliente() {
+export function RoiPorCliente({ clientId }: { clientId?: string } = {}) {
   const [data, setData] = useState<Payload | null>(null);
   const [meses, setMeses] = useState(6);
   const [carregando, setCarregando] = useState(true);
@@ -130,9 +130,10 @@ export function RoiPorCliente() {
 
   const linhasFiltradas = useMemo(() => {
     if (!data) return [];
-    if (grupoFiltro === "all") return data.rows;
-    return data.rows.filter((r) => r.group?.name === grupoFiltro);
-  }, [data, grupoFiltro]);
+    const rows = clientId ? data.rows.filter((r) => r.client_id === clientId) : data.rows;
+    if (grupoFiltro === "all") return rows;
+    return rows.filter((r) => r.group?.name === grupoFiltro);
+  }, [data, grupoFiltro, clientId]);
 
   const totalsGrupo = useMemo(() => {
     if (!data || grupos.length === 0) return [];
@@ -151,8 +152,8 @@ export function RoiPorCliente() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">Receita real informada vs. investimento em mídia, mês a mês.</p>
         <div className="flex items-center gap-2 flex-wrap">
-          {data && <Badge variant="secondary" className="text-[11px]">{linhasFiltradas.length} cliente(s)</Badge>}
-          {grupos.length > 0 && (
+          {data && !clientId && <Badge variant="secondary" className="text-[11px]">{linhasFiltradas.length} cliente(s)</Badge>}
+          {!clientId && grupos.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
               <button onClick={() => setGrupoFiltro("all")}
                 className={cn("px-3 py-1.5 text-xs font-medium rounded-full border transition-colors", grupoFiltro === "all" ? "bg-primary/10 border-primary/30 text-primary" : "border-border/50 text-muted-foreground hover:text-foreground hover:bg-accent/50")}>Todos</button>
@@ -182,6 +183,13 @@ export function RoiPorCliente() {
           <p className="text-lg mb-1">◷</p>
           <p className="font-semibold text-foreground">Nenhum cliente marcado para acompanhar vendas</p>
           <p className="text-xs mt-1">Acima, em "Metas e orçamento por cliente", marque "Acompanhar vendas reais" em cada cliente.</p>
+        </CardContent></Card>
+      )}
+      {!semClientes && clientId && data && linhasFiltradas.length === 0 && (
+        <Card><CardContent className="p-8 text-center text-sm text-muted-foreground">
+          <p className="text-lg mb-1">◷</p>
+          <p className="font-semibold text-foreground">Este cliente não acompanha vendas reais</p>
+          <p className="text-xs mt-1">Na aba Metas, marque "Acompanhar vendas reais" para liberar o lançamento aqui.</p>
         </CardContent></Card>
       )}
 
@@ -359,7 +367,7 @@ export function RoiPorCliente() {
       )}
 
       {/* Group summary */}
-      {data && linhasFiltradas.length > 0 && totalsGrupo.length > 1 && (
+      {!clientId && data && linhasFiltradas.length > 0 && totalsGrupo.length > 1 && (
         <Card><CardContent className="p-4">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Resumo por grupo</h3>
           <div className="overflow-x-auto">
