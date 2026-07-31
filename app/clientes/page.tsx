@@ -10,7 +10,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { compareSortValues, SortButton, usePersistentSort } from "@/components/SortableHeader";
 import { Button } from "@/components/ui/button";
-import { Input, Collapsible, Notice, PageHeader, WideScreenHint, Field } from "@/components/ui";
+import { Input, Collapsible, Modal, Notice, PageHeader, WideScreenHint, Field } from "@/components/ui";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { CampaignTemplateList } from "@/components/CampaignTemplates";
@@ -32,6 +32,7 @@ const PALETTE = ["#3987e5", "#16a34a", "#db2777", "#f59e0b", "#7c3aed", "#0891b2
 // A coluna de vendas reais entra no fim: é um sim/não, não uma meta.
 const CLIENT_GRID = "minmax(160px,1.2fr) 120px 130px 130px 120px 130px 80px 96px";
 const compactInput: React.CSSProperties = { width: "100%", height: 30, fontSize: 12, borderRadius: 8, border: "1px solid var(--color-border)", background: "transparent", padding: "0 8px" };
+const inputClass = "h-9 w-full rounded-lg border border-border bg-transparent px-3 text-sm outline-none focus:ring-1 focus:ring-ring";
 
 export default function ClientesPage() {
   const [groups, setGroups] = useState<Group[]>([]);
@@ -46,6 +47,8 @@ export default function ClientesPage() {
   const [clientQuery, setClientQuery] = useState("");
   const [expandedProfiles, setExpandedProfiles] = useState<Set<string>>(new Set());
   const [newColor, setNewColor] = useState(PALETTE[0]);
+  const [clientModal, setClientModal] = useState<ClientRecord | null | false>(false);
+  const [clientForm, setClientForm] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [driveBusy, setDriveBusy] = useState<string | null>(null);
   const [clientSort, setClientSort] = usePersistentSort<ClientAdminSortKey>("adsctrl:sort:admin-clients", { key: "name", direction: "asc" }, CLIENT_ADMIN_SORT_KEYS);
@@ -90,6 +93,8 @@ export default function ClientesPage() {
   }
   async function updateClient(id: string, patch: Partial<ClientRecord>) { setClients((prev) => prev.map((c) => c.id === id ? { ...c, ...patch } : c)); try { const r = await api(`/api/clients/${id}`, { method: "PATCH", body: JSON.stringify(patch) }); const confirmed = Object.keys(patch).reduce((n, k) => { const f = k as keyof ClientRecord; (n as any)[f] = r.client?.[f] ?? patch[f]; return n; }, {} as Partial<ClientRecord>); setClients((prev) => prev.map((c) => c.id === id ? { ...c, ...confirmed } : c)); } catch (e: any) { await load(); setError(e?.message); } }
   function updateClientField(client: ClientRecord, field: string, value: any) { const patch: any = {}; patch[field] = value; updateClient(client.id, patch); }
+  function openClientModal(client?: ClientRecord) { const fields = ["name", "legal_name", "cnpj", "contact_name", "contact_email", "whatsapp_phone", "monthly_budget", "contract_start_date", "contract_end_date", "address_zip_code", "address_street", "address_number", "address_city", "address_state"]; const next: Record<string, string> = {}; for (const field of fields) next[field] = client ? String((client as any)[field] ?? "") : field === "contract_notice_days" ? "30" : ""; setClientForm(next); setClientModal(client || null); }
+  async function saveClientModal() { setBusy(true); try { const payload = { ...clientForm, monthly_budget: clientForm.monthly_budget ? Number(clientForm.monthly_budget) : null }; const editing = Boolean(clientModal); const result = await api(editing ? `/api/clients/${(clientModal as ClientRecord).id}` : "/api/clients", { method: editing ? "PATCH" : "POST", body: JSON.stringify(payload) }); if (editing) setClients((previous) => previous.map((client) => client.id === (clientModal as ClientRecord).id ? { ...client, ...result.client } : client)); else setClients((previous) => [...previous, result.client]); setClientModal(false); } catch (e: any) { setError(e?.message); } finally { setBusy(false); } }
 
   if (loading) return <div className="p-4 md:p-6 md:ml-56 pb-20 md:pb-6 space-y-4"><Skeleton className="h-8 w-48" /><Skeleton className="h-14 rounded-lg" /><Skeleton className="h-32 rounded-lg" /></div>;
 
@@ -98,7 +103,7 @@ export default function ClientesPage() {
       <PageHeader
         title="Clientes"
         subtitle={`${clients.length} cliente${clients.length === 1 ? "" : "s"} ativo${clients.length === 1 ? "" : "s"} · ${accounts.length} contas no catálogo.`}
-        actions={<div className="flex items-center gap-2"><input value={clientQuery} onChange={(e) => setClientQuery(e.target.value)} placeholder="Buscar cliente, CNPJ ou contato…" className="h-9 w-64 rounded-lg border border-border bg-transparent px-3 text-xs outline-none focus:ring-1 focus:ring-ring" /><Link href="/relatorios"><Button variant="ghost" size="sm"><Mail className="h-3.5 w-3.5 mr-1" /> Relatórios e painéis</Button></Link></div>}
+        actions={<div className="flex items-center gap-2"><input value={clientQuery} onChange={(e) => setClientQuery(e.target.value)} placeholder="Buscar cliente, CNPJ ou contato…" className="h-9 w-64 rounded-lg border border-border bg-transparent px-3 text-xs outline-none focus:ring-1 focus:ring-ring" /><Button size="sm" onClick={() => openClientModal()}><Plus className="mr-1 h-3.5 w-3.5" /> Novo cliente</Button><Link href="/relatorios"><Button variant="ghost" size="sm"><Mail className="h-3.5 w-3.5 mr-1" /> Relatórios e painéis</Button></Link></div>}
       />
 
       <WideScreenHint>A tabela de metas é larga; no computador fica mais confortável.</WideScreenHint>
@@ -194,6 +199,7 @@ export default function ClientesPage() {
                     {client.contact_name && <span className="text-xs text-muted-foreground">· {client.contact_name}</span>}
                     {!profileExpanded && <span className="text-[11px] text-muted-foreground">Clique em + para abrir os dados</span>}
                     <div className="ml-auto flex flex-wrap gap-1.5">
+                      <button type="button" onClick={() => openClientModal(client)} className="rounded-md border border-input px-2 py-1 text-[11px] font-semibold hover:bg-muted">Editar cadastro</button>
                       {phone && <a href={`https://wa.me/${phone}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-emerald-500/25 bg-emerald-500/10 px-2 py-1 text-[11px] font-semibold text-emerald-600"><Phone className="h-3 w-3" /> WhatsApp</a>}
                       {client.drive_folder_url && <a href={client.drive_folder_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-sky-500/25 bg-sky-500/10 px-2 py-1 text-[11px] font-semibold text-sky-600"><FolderOpen className="h-3 w-3" /> Drive</a>}
                     </div>
@@ -326,6 +332,9 @@ export default function ClientesPage() {
           </div>
         </Collapsible>
       </div>
+      {clientModal !== false && <Modal title={clientModal ? `Editar cliente: ${clientModal.name}` : "Novo cliente"} onClose={() => setClientModal(false)} wide>
+        <div className="space-y-4"><p className="text-xs text-muted-foreground">Cadastre os dados principais do cliente. O restante do perfil operacional continua disponível ao expandir o cartão.</p><div className="grid gap-3 md:grid-cols-3"><Field label="Nome do cliente"><input value={clientForm.name || ""} onChange={(e) => setClientForm((old) => ({ ...old, name: e.target.value }))} placeholder="Nome fantasia" className={inputClass} /></Field><Field label="Razão social"><input value={clientForm.legal_name || ""} onChange={(e) => setClientForm((old) => ({ ...old, legal_name: e.target.value }))} placeholder="Razão social" className={inputClass} /></Field><Field label="CNPJ"><input value={clientForm.cnpj || ""} onChange={(e) => setClientForm((old) => ({ ...old, cnpj: e.target.value }))} placeholder="00.000.000/0000-00" className={inputClass} /></Field><Field label="Contato"><input value={clientForm.contact_name || ""} onChange={(e) => setClientForm((old) => ({ ...old, contact_name: e.target.value }))} placeholder="Nome do responsável" className={inputClass} /></Field><Field label="E-mail"><input type="email" value={clientForm.contact_email || ""} onChange={(e) => setClientForm((old) => ({ ...old, contact_email: e.target.value }))} placeholder="contato@empresa.com" className={inputClass} /></Field><Field label="WhatsApp"><input value={clientForm.whatsapp_phone || ""} onChange={(e) => setClientForm((old) => ({ ...old, whatsapp_phone: e.target.value }))} placeholder="5511999999999" className={inputClass} /></Field><Field label="Mensalidade / orçamento"><input type="number" min="0" step="0.01" value={clientForm.monthly_budget || ""} onChange={(e) => setClientForm((old) => ({ ...old, monthly_budget: e.target.value }))} placeholder="R$ 0,00" className={inputClass} /></Field><Field label="Início do contrato"><BrDateInput value={clientForm.contract_start_date} onChange={(value) => setClientForm((old) => ({ ...old, contract_start_date: value }))} className={inputClass} /></Field><Field label="Fim do contrato"><BrDateInput value={clientForm.contract_end_date} onChange={(value) => setClientForm((old) => ({ ...old, contract_end_date: value }))} className={inputClass} /></Field><Field label="CEP"><input value={clientForm.address_zip_code || ""} onChange={(e) => setClientForm((old) => ({ ...old, address_zip_code: e.target.value }))} placeholder="00000-000" className={inputClass} /></Field><Field label="Endereço"><input value={clientForm.address_street || ""} onChange={(e) => setClientForm((old) => ({ ...old, address_street: e.target.value }))} placeholder="Rua, avenida..." className={inputClass} /></Field><Field label="Número"><input value={clientForm.address_number || ""} onChange={(e) => setClientForm((old) => ({ ...old, address_number: e.target.value }))} placeholder="123" className={inputClass} /></Field><Field label="Cidade"><input value={clientForm.address_city || ""} onChange={(e) => setClientForm((old) => ({ ...old, address_city: e.target.value }))} placeholder="Cidade" className={inputClass} /></Field><Field label="UF"><input maxLength={2} value={clientForm.address_state || ""} onChange={(e) => setClientForm((old) => ({ ...old, address_state: e.target.value.toUpperCase() }))} placeholder="SP" className={inputClass} /></Field></div><div className="flex justify-end gap-2"><Button variant="secondary" size="sm" onClick={() => setClientModal(false)}>Cancelar</Button><Button size="sm" onClick={saveClientModal} disabled={busy || !clientForm.name?.trim()}>{busy ? "Salvando…" : clientModal ? "Salvar alterações" : "Cadastrar cliente"}</Button></div></div>
+      </Modal>}
     </div>
   );
 }

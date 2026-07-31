@@ -219,6 +219,15 @@ export function Field({
   );
 }
 
+export function Modal({ title, children, onClose, wide = false }: { title: string; children: React.ReactNode; onClose: () => void; wide?: boolean }) {
+  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-label={title} onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <div className={cn("max-h-[90vh] w-full overflow-y-auto rounded-xl border border-border bg-card p-5 shadow-2xl", wide ? "max-w-4xl" : "max-w-xl")}>
+      <div className="mb-4 flex items-center justify-between gap-3"><h2 className="text-base font-semibold">{title}</h2><button type="button" onClick={onClose} className="rounded-md px-2 py-1 text-lg text-muted-foreground hover:bg-muted" aria-label="Fechar">×</button></div>
+      {children}
+    </div>
+  </div>;
+}
+
 export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
   function Input(props, ref) {
     return (
