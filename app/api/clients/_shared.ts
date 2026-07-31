@@ -134,6 +134,27 @@ export function clientPatchFromBody(body: unknown, creating = false): Record<str
     }
   }
 
+  for (const field of ["target_roas", "max_cpa", "max_daily_spend"] as const) {
+    if (Object.prototype.hasOwnProperty.call(input, field)) {
+      patch[field] = nullableNonNegativeNumber(input[field], field);
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(input, "max_budget_change_percent")) {
+    const value = Number(input.max_budget_change_percent);
+    if (!Number.isFinite(value) || value < 0 || value > 100) {
+      throw new ClientInputError("max_budget_change_percent deve ficar entre 0 e 100.");
+    }
+    patch.max_budget_change_percent = value;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(input, "automation_mode")) {
+    if (!["observe", "approval", "autonomous"].includes(String(input.automation_mode))) {
+      throw new ClientInputError("automation_mode deve ser observe, approval ou autonomous.");
+    }
+    patch.automation_mode = input.automation_mode;
+  }
+
   if (Object.prototype.hasOwnProperty.call(input, "currency")) {
     if (typeof input.currency !== "string" || !/^[A-Za-z]{3}$/.test(input.currency.trim())) {
       throw new ClientInputError("currency deve ser um código ISO de três letras, como BRL ou USD.");

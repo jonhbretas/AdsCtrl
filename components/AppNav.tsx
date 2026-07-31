@@ -43,6 +43,10 @@ const NAV_GROUPS = [
     items: [
       { href: "/", label: "Visão Geral", icon: LayoutDashboard },
       { href: "/today", label: "Cockpit Hoje", icon: Target },
+      { href: "/decisoes", label: "Decisões", icon: CheckSquare2 },
+      { href: "/portfolio", label: "Portfólio", icon: Users },
+      { href: "/funil", label: "Funil 360", icon: BarChart3 },
+      { href: "/proximos-passos", label: "Próximos passos", icon: Target },
       { href: "/creatives", label: "Criativos", icon: Palette },
       { href: "/meta-assets", label: "Raio-X", icon: Search },
       { href: "/alerts", label: "Alertas", icon: Bell },

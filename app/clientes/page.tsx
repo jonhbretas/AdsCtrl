@@ -20,7 +20,7 @@ import { RefreshCw, AlertTriangle, Plus, X, Mail, Phone, FolderOpen, ExternalLin
 
 interface Group { id: string; name: string; color: string; }
 interface Account { account_id: string; name: string; status: string; group_id: string | null; platform: "meta" | "google"; hidden?: boolean; linked_meta_account_id?: string | null; is_primary?: boolean; }
-interface ClientRecord { id: string; name: string; status: "active" | "paused" | "archived"; objective: string | null; result_family: string | null; brand_name?: string | null; primary_kpi: string | null; target_value: number | null; monthly_budget: number | null; monthly_conversion_goal: number | null; currency: string; timezone: string; budget_start_day: number; track_sales?: boolean; facebook_page_id?: string | null; instagram_business_id?: string | null; legal_name?: string | null; cnpj?: string | null; person_type?: "fisica" | "juridica"; cpf?: string | null; address_street?: string | null; address_number?: string | null; address_complement?: string | null; address_neighborhood?: string | null; address_city?: string | null; address_state?: string | null; address_zip_code?: string | null; address_country?: string | null; state_registration?: string | null; municipal_registration?: string | null; legal_representative_name?: string | null; legal_representative_cpf?: string | null; legal_representative_role?: string | null; billing_email?: string | null; billing_phone?: string | null; contact_name?: string | null; contact_email?: string | null; contact_phone?: string | null; whatsapp_phone?: string | null; drive_folder_url?: string | null; contract_start_date?: string | null; contract_end_date?: string | null; contract_notice_days?: number; accounts: Account[]; }
+interface ClientRecord { id: string; name: string; status: "active" | "paused" | "archived"; objective: string | null; result_family: string | null; brand_name?: string | null; primary_kpi: string | null; target_value: number | null; monthly_budget: number | null; monthly_conversion_goal: number | null; target_roas?: number | null; max_cpa?: number | null; max_daily_spend?: number | null; max_budget_change_percent?: number | null; automation_mode?: "observe" | "approval" | "autonomous" | null; currency: string; timezone: string; budget_start_day: number; track_sales?: boolean; facebook_page_id?: string | null; instagram_business_id?: string | null; legal_name?: string | null; cnpj?: string | null; person_type?: "fisica" | "juridica"; cpf?: string | null; address_street?: string | null; address_number?: string | null; address_complement?: string | null; address_neighborhood?: string | null; address_city?: string | null; address_state?: string | null; address_zip_code?: string | null; address_country?: string | null; state_registration?: string | null; municipal_registration?: string | null; legal_representative_name?: string | null; legal_representative_cpf?: string | null; legal_representative_role?: string | null; billing_email?: string | null; billing_phone?: string | null; contact_name?: string | null; contact_email?: string | null; contact_phone?: string | null; whatsapp_phone?: string | null; drive_folder_url?: string | null; contract_start_date?: string | null; contract_end_date?: string | null; contract_notice_days?: number; accounts: Account[]; }
 type ClientAdminSortKey = "name" | "objective" | "budget" | "result" | "kpi" | "target" | "cycle";
 type GroupSortKey = "name" | "accounts";
 type AccountAdminSortKey = "platform" | "name" | "status" | "client" | "group" | "visibility";
@@ -220,8 +220,9 @@ export default function ClientesPage() {
                     <Field label="Início do contrato"><BrDateInput value={client.contract_start_date} onChange={(value) => updateClientField(client, "contract_start_date", value || null)} style={compactInput} /></Field>
                     <Field label="Fim do contrato"><BrDateInput value={client.contract_end_date} onChange={(value) => updateClientField(client, "contract_end_date", value || null)} style={compactInput} /></Field>
                     <div className="md:col-span-2 flex items-end gap-2 text-xs"><CalendarClock className={cn("h-4 w-4 mb-1", contractTone)} /><span className={contractTone}>{contractDays == null ? "Vigência ainda não configurada" : contractDays < 0 ? `Contrato vencido há ${Math.abs(contractDays)} dia(s)` : contractDays === 0 ? "Contrato vence hoje" : `Contrato vence em ${contractDays} dia(s)`}</span></div>
-                  </div>
-                  <div className="border-t border-border/40 pt-3 space-y-3">
+                   </div>
+                   <ClientGuardrails client={client} loadRevision={loadRevision} onUpdate={updateClient} />
+                   <div className="border-t border-border/40 pt-3 space-y-3">
                     <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Dados para contrato e faturamento</div>
                     <div className="grid gap-3 md:grid-cols-5">
                       <Field label="Tipo"><select value={client.person_type ?? "juridica"} onChange={(e) => updateClientField(client, "person_type", e.target.value)} style={compactInput}><option value="juridica">Pessoa jurídica</option><option value="fisica">Pessoa física</option></select></Field>
@@ -340,6 +341,22 @@ export default function ClientesPage() {
       </Modal>}
     </div>
   );
+}
+
+function ClientGuardrails({ client, loadRevision, onUpdate }: { client: ClientRecord; loadRevision: number; onUpdate: (id: string, patch: Partial<ClientRecord>) => void }) {
+  return <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 space-y-2">
+    <div>
+      <div className="text-[11px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-300">Metas e travas da operação</div>
+      <div className="text-[11px] text-muted-foreground">Servem para o monitoramento sugerir ações e impedir mudanças fora do combinado.</div>
+    </div>
+    <div className="grid gap-3 md:grid-cols-5">
+      <Field label="ROAS alvo"><input key={`${client.id}-guard-roas-${loadRevision}`} type="number" min="0" step="0.1" defaultValue={client.target_roas ?? ""} placeholder="ex.: 3" onBlur={(e) => onUpdate(client.id, { target_roas: e.target.value ? Number(e.target.value) : null })} style={compactInput} /></Field>
+      <Field label={`CPA máximo · ${client.currency}`}><input key={`${client.id}-guard-cpa-${loadRevision}`} type="number" min="0" step="0.01" defaultValue={client.max_cpa ?? ""} placeholder="sem limite" onBlur={(e) => onUpdate(client.id, { max_cpa: e.target.value ? Number(e.target.value) : null })} style={compactInput} /></Field>
+      <Field label={`Gasto diário máximo · ${client.currency}`}><input key={`${client.id}-guard-spend-${loadRevision}`} type="number" min="0" step="0.01" defaultValue={client.max_daily_spend ?? ""} placeholder="sem limite" onBlur={(e) => onUpdate(client.id, { max_daily_spend: e.target.value ? Number(e.target.value) : null })} style={compactInput} /></Field>
+      <Field label="Variação de orçamento"><div className="flex items-center gap-1"><input key={`${client.id}-guard-change-${loadRevision}`} type="number" min="0" max="100" step="1" defaultValue={client.max_budget_change_percent ?? 20} onBlur={(e) => onUpdate(client.id, { max_budget_change_percent: Number(e.target.value || 20) })} style={compactInput} /><span className="text-xs text-muted-foreground">%</span></div></Field>
+      <Field label="Modo de automação"><select value={client.automation_mode ?? "approval"} onChange={(e) => onUpdate(client.id, { automation_mode: e.target.value as ClientRecord["automation_mode"] })} style={compactInput}><option value="observe">Observar</option><option value="approval">Exigir aprovação</option><option value="autonomous">Autônomo</option></select></Field>
+    </div>
+  </div>;
 }
 
 interface AvailablePage { page_id: string; page_name: string; instagram_business_id: string | null; instagram_username: string | null; token_index: number; }

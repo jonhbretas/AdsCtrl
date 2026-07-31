@@ -23,6 +23,8 @@ export interface Alert {
     | "low_balance"
     | "spend_drop"
     | "spend_spike"
+    | "cpa_spike"
+    | "roas_drop"
     | "rejected_creative"
     | "creative_issue"
     | "no_spend"
@@ -45,6 +47,7 @@ interface BuildAlertsInput {
   broadLocation?: BroadLocationAdSet[];
   // limiar configurável de saldo baixo, na moeda da conta
   lowBalanceThreshold?: number;
+  guardrails?: { target_roas?: number | null; max_cpa?: number | null; max_daily_spend?: number | null };
 }
 
 export function buildAlertsForAccount(input: BuildAlertsInput): Alert[] {
@@ -213,6 +216,32 @@ export function buildAlertsForAccount(input: BuildAlertsInput): Alert[] {
         adIds: broadLocation.map((b) => b.adset_id),
         adNames: broadLocation.map((b) => b.adset_name),
       },
+    });
+  }
+
+  const guardrails = input.guardrails;
+  const guardedAverageDailySpend = (insight7d?.spend || 0) / 7;
+  if (guardrails?.max_daily_spend != null && guardedAverageDailySpend > guardrails.max_daily_spend) {
+    alerts.push({
+      account_id: id, account_name: name, level: "warning", type: "spend_spike",
+      title: "Gasto diário acima do limite do cliente",
+      detail: `Média de ${guardedAverageDailySpend.toFixed(2)} por dia; limite configurado de ${guardrails.max_daily_spend.toFixed(2)} (${account.currency}).`,
+    });
+  }
+  if (guardrails?.max_cpa != null && insight7d && insight7d.conversions > 0) {
+    const cpa = insight7d.spend / insight7d.conversions;
+    if (cpa > guardrails.max_cpa) alerts.push({
+      account_id: id, account_name: name, level: "warning", type: "cpa_spike",
+      title: "CPA acima do limite do cliente",
+      detail: `CPA atual de ${cpa.toFixed(2)}; limite configurado de ${guardrails.max_cpa.toFixed(2)} (${account.currency}).`,
+    });
+  }
+  if (guardrails?.target_roas != null && insight7d && insight7d.spend > 0 && insight7d.purchaseValue > 0) {
+    const roas = insight7d.purchaseValue / insight7d.spend;
+    if (roas < guardrails.target_roas) alerts.push({
+      account_id: id, account_name: name, level: "warning", type: "roas_drop",
+      title: "ROAS abaixo da meta do cliente",
+      detail: `ROAS atual de ${roas.toFixed(2)}x; meta configurada de ${guardrails.target_roas.toFixed(2)}x.`,
     });
   }
 

@@ -37,6 +37,12 @@ type UnifiedDaily = {
   conversions: number; purchaseValue: number; results: Record<string, number>;
 };
 
+type ClientGuardrails = {
+  target_roas?: number | null;
+  max_cpa?: number | null;
+  max_daily_spend?: number | null;
+};
+
 function aggregate(daily: UnifiedDaily[], since: string, until: string) {
   let spend = 0, impressions = 0, clicks = 0, conversions = 0, purchaseValue = 0;
   const results: Record<string, number> = {};
@@ -118,7 +124,8 @@ async function saveSnapshots(accountId: string, platform: "meta" | "google", dai
 function performanceAlerts(
   account: { account_id: string; name: string; currency: string; status: string },
   current: ReturnType<typeof aggregate>,
-  previous: ReturnType<typeof aggregate>
+  previous: ReturnType<typeof aggregate>,
+  guardrails?: ClientGuardrails
 ): Alert[] {
   const alerts: Alert[] = [];
   if (account.status !== "ACTIVE") {
@@ -134,6 +141,52 @@ function performanceAlerts(
       account_id: account.account_id, account_name: account.name, level: "warning",
       type: "spend_drop", title: `Queda de gasto de ${Math.round(drop * 100)}%`,
       detail: `De ${previous.spend.toFixed(2)} para ${current.spend.toFixed(2)} (${account.currency}).`,
+    });
+    const spike = current.spend / previous.spend - 1;
+    if (spike >= 0.5) alerts.push({
+      account_id: account.account_id, account_name: account.name, level: "warning",
+      type: "spend_spike", title: `Pico de gasto de ${Math.round(spike * 100)}%`,
+      detail: `De ${previous.spend.toFixed(2)} para ${current.spend.toFixed(2)} (${account.currency}).`,
+    });
+  }
+  if (previous.conversions > 0 && current.conversions > 0) {
+    const previousCpa = previous.spend / previous.conversions;
+    const currentCpa = current.spend / current.conversions;
+    if (currentCpa >= previousCpa * 1.4) alerts.push({
+      account_id: account.account_id, account_name: account.name, level: "warning",
+      type: "cpa_spike", title: `CPA subiu ${Math.round((currentCpa / previousCpa - 1) * 100)}%`,
+      detail: `De ${previousCpa.toFixed(2)} para ${currentCpa.toFixed(2)} por conversão (${account.currency}).`,
+    });
+  }
+  if (previous.purchaseValue > 0 && current.purchaseValue > 0 && previous.spend > 0 && current.spend > 0) {
+    const previousRoas = previous.purchaseValue / previous.spend;
+    const currentRoas = current.purchaseValue / current.spend;
+    if (currentRoas <= previousRoas * 0.6) alerts.push({
+      account_id: account.account_id, account_name: account.name, level: "warning",
+      type: "roas_drop", title: `ROAS caiu ${Math.round((1 - currentRoas / previousRoas) * 100)}%`,
+      detail: `De ${previousRoas.toFixed(2)}x para ${currentRoas.toFixed(2)}x no período comparado.`,
+    });
+  }
+  const averageDailySpend = current.spend / 7;
+  if (guardrails?.max_daily_spend != null && averageDailySpend > guardrails.max_daily_spend) alerts.push({
+    account_id: account.account_id, account_name: account.name, level: "warning",
+    type: "spend_spike", title: "Gasto diário acima do limite do cliente",
+    detail: `Média de ${averageDailySpend.toFixed(2)} por dia; limite configurado de ${guardrails.max_daily_spend.toFixed(2)} (${account.currency}).`,
+  });
+  if (guardrails?.max_cpa != null && current.conversions > 0) {
+    const cpa = current.spend / current.conversions;
+    if (cpa > guardrails.max_cpa) alerts.push({
+      account_id: account.account_id, account_name: account.name, level: "warning",
+      type: "cpa_spike", title: "CPA acima do limite do cliente",
+      detail: `CPA atual de ${cpa.toFixed(2)}; limite configurado de ${guardrails.max_cpa.toFixed(2)} (${account.currency}).`,
+    });
+  }
+  if (guardrails?.target_roas != null && current.spend > 0 && current.purchaseValue > 0) {
+    const roas = current.purchaseValue / current.spend;
+    if (roas < guardrails.target_roas) alerts.push({
+      account_id: account.account_id, account_name: account.name, level: "warning",
+      type: "roas_drop", title: "ROAS abaixo da meta do cliente",
+      detail: `ROAS atual de ${roas.toFixed(2)}x; meta configurada de ${guardrails.target_roas.toFixed(2)}x.`,
     });
   }
   if (account.status === "ACTIVE" && current.spend === 0) alerts.push({
@@ -260,6 +313,22 @@ async function runCollect(triggerSource: "manual" | "cron", platform: CollectSco
   if (platform !== "all") accountQuery = accountQuery.eq("platform", platform);
   const { data: selected, error } = await accountQuery;
   if (error) throw error;
+  const guardrailsByAccount = new Map<string, ClientGuardrails>();
+  try {
+    const [{ data: links, error: linksError }, { data: clients, error: clientsError }] = await Promise.all([
+      sb.from("client_ad_accounts").select("account_id,client_id"),
+      sb.from("clients").select("id,target_roas,max_cpa,max_daily_spend"),
+    ]);
+    if (!linksError && !clientsError) {
+      const guardrailsByClient = new Map((clients || []).map((client: any) => [client.id, client]));
+      for (const link of links || []) {
+        const policy = guardrailsByClient.get(link.client_id);
+        if (policy) guardrailsByAccount.set(link.account_id, policy);
+      }
+    }
+  } catch {
+    // A coleta continua funcionando mesmo antes da migração de metas/travas.
+  }
   const staleBefore = new Date(Date.now() - 15 * 60 * 1000).toISOString();
   await sb.from("collection_runs").update({
     status: "error",
@@ -356,9 +425,10 @@ async function runCollect(triggerSource: "manual" | "cron", platform: CollectSco
         account: acc,
         insight7d: toInsight(periods.last_7d),
         insightPrev7d: toInsight(periods.prev_7d),
-        rejected,
-        broadLocation,
-      }));
+       rejected,
+       broadLocation,
+        guardrails: guardrailsByAccount.get(acc.account_id),
+       }));
     } catch (e: any) {
       failed++;
       failedAccountIds.add(acc.account_id);
@@ -411,7 +481,7 @@ async function runCollect(triggerSource: "manual" | "cron", platform: CollectSco
           conversions: d.conversions, purchaseValue: d.conversionValue, results: d.results,
         }));
         const periods = await saveSnapshots(local.account_id, "google", daily);
-        alerts.push(...performanceAlerts(local, periods.last_7d, periods.prev_7d));
+       alerts.push(...performanceAlerts(local, periods.last_7d, periods.prev_7d, guardrailsByAccount.get(local.account_id)));
         await sb.from("ad_accounts").update({ updated_at: new Date().toISOString() }).eq("account_id", local.account_id);
       } catch (e: any) {
         failed++;
