@@ -10,17 +10,21 @@ export const AI_NEED_LABELS: Record<AiNeed, string> = {
   creative: "Criativos e copy",
 };
 
+// Fallback gratuito (Zen "-free"): só entra quando o Go pago falhar por
+// qualquer motivo (quota do bloco, erro de região, etc).
 const ZEN_MODELS: Record<RoutedNeed, string> = {
-  fast: "gpt-5.6-luna",
-  analysis: "gpt-5.6-terra",
-  strategic: "gpt-5.6-sol",
-  creative: "gpt-5.6-terra",
+  fast: "deepseek-v4-flash-free",
+  analysis: "nemotron-3-ultra-free",
+  strategic: "nemotron-3-ultra-free",
+  creative: "ling-3.0-flash-free",
 };
 
+// deepseek-v4-flash exige opt-in de hospedagem na China (RegionError) —
+// aceito manualmente em opencode.ai/workspace/.../go antes de usar aqui.
 const GO_MODELS: Record<RoutedNeed, string> = {
   fast: "deepseek-v4-flash",
-  analysis: "deepseek-v4-flash",
-  strategic: "qwen3.7-plus",
+  analysis: "qwen3.7-plus",
+  strategic: "glm-5.2",
   creative: "qwen3.7-plus",
 };
 
