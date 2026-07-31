@@ -17,6 +17,13 @@ const ZEN_MODELS: Record<RoutedNeed, string> = {
   creative: "gpt-5.6-terra",
 };
 
+const GO_MODELS: Record<RoutedNeed, string> = {
+  fast: "gpt-5.6-luna",
+  analysis: "deepseek-v4-flash",
+  strategic: "qwen3.7-plus",
+  creative: "qwen3.7-plus",
+};
+
 const ENV_SUFFIX: Record<RoutedNeed, string> = {
   fast: "FAST",
   analysis: "ANALYSIS",
@@ -46,21 +53,57 @@ function chatText(payload: any): string | null {
   return null;
 }
 
-export type AiProviderResult = { answer: string; provider: "opencode-zen" | "openrouter" | "openai"; model: string };
+function messageText(payload: any): string | null {
+  const content = payload?.content;
+  if (typeof content === "string" && content.trim()) return content.trim();
+  if (Array.isArray(content)) return content.map((item) => item?.text || "").join("\n").trim() || null;
+  return null;
+}
+
+function openCodeEndpoint(base: string, model: string): { endpoint: string; shape: "responses" | "messages" | "chat" } {
+  if (model.startsWith("gpt-")) return { endpoint: `${base}/responses`, shape: "responses" };
+  if (model.startsWith("qwen") || model.startsWith("minimax")) return { endpoint: `${base}/messages`, shape: "messages" };
+  return { endpoint: `${base}/chat/completions`, shape: "chat" };
+}
+
+async function askOpenCode(prompt: string, key: string, model: string, base: string) {
+  const { endpoint, shape } = openCodeEndpoint(base, model);
+  const body =
+    shape === "responses"
+      ? { model, input: prompt, store: false }
+      : shape === "messages"
+        ? { model, max_tokens: 1200, messages: [{ role: "user", content: prompt }] }
+        : { model, messages: [{ role: "user", content: prompt }] };
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(60_000),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) return null;
+  if (shape === "responses") return responseText(payload);
+  if (shape === "messages") return messageText(payload);
+  return chatText(payload);
+}
+
+export type AiProviderResult = { answer: string; provider: "opencode-go" | "opencode-zen" | "openrouter" | "openai"; model: string };
 
 export async function askAiProvider(prompt: string, need: RoutedNeed): Promise<AiProviderResult | null> {
+  const goKey = process.env.OPENCODE_GO_API_KEY?.trim();
+  if (goKey) {
+    try {
+      const model = process.env[`OPENCODE_GO_MODEL_${ENV_SUFFIX[need]}`]?.trim() || process.env[`OPENCODE_MODEL_${ENV_SUFFIX[need]}`]?.trim() || GO_MODELS[need];
+      const answer = await askOpenCode(prompt, goKey, model, "https://opencode.ai/zen/go/v1");
+      if (answer) return { answer, provider: "opencode-go", model };
+    } catch {}
+  }
+
   const zenKey = process.env.OPENCODE_ZEN_API_KEY?.trim();
   if (zenKey) {
     try {
       const model = process.env[`OPENCODE_MODEL_${ENV_SUFFIX[need]}`]?.trim() || ZEN_MODELS[need];
-      const response = await fetch("https://opencode.ai/zen/v1/responses", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${zenKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ model, input: prompt, store: false }),
-        signal: AbortSignal.timeout(60_000),
-      });
-      const payload = await response.json().catch(() => ({}));
-      const answer = response.ok ? responseText(payload) : null;
+      const answer = await askOpenCode(prompt, zenKey, model, "https://opencode.ai/zen/v1");
       if (answer) return { answer, provider: "opencode-zen", model };
     } catch {}
   }

@@ -68,7 +68,8 @@ NEXT_PUBLIC_APP_BRAND_NAME     # Nome da sua agência (ex: "Assertivus Dash")
 META_ACCESS_TOKEN              # Token de System User (não expira)
 NEXT_PUBLIC_SUPABASE_URL       # URL do seu projeto Supabase
 SUPABASE_SERVICE_ROLE_KEY       # service_role key do Supabase
-OPENCODE_ZEN_API_KEY            # Provedor principal da Assertivus IA
+OPENCODE_GO_API_KEY             # Recomendado: OpenCode Go para a Assertivus IA
+OPENCODE_ZEN_API_KEY            # Opcional: OpenCode Zen pay-as-you-go
 OPENROUTER_API_KEY              # Opcional: fallback e modelos adicionais
 CRON_SECRET                     # String aleatória para o cron
 GOOGLE_ADS_CLIENT_ID            # OAuth client ID
@@ -107,6 +108,11 @@ vercel
 Adicione as mesmas variáveis de ambiente no painel da Vercel.
 O `vercel.json` agenda a coleta 1×/dia (`0 10 * * *` = 07:00 BRT), compatível
 com o plano Hobby. No plano Pro dá para usar `*/30 * * * *` (a cada 30 min).
+
+Para ligar a Assertivus IA com o plano OpenCode Go, adicione
+`OPENCODE_GO_API_KEY` em Vercel › Project Settings › Environment Variables.
+Depois faça um redeploy. O router usa Go primeiro; se faltar a chave, tenta
+`OPENCODE_ZEN_API_KEY`, depois `OPENROUTER_API_KEY` e por fim `OPENAI_API_KEY`.
 
 ## Estrutura do projeto
 
