@@ -15,6 +15,7 @@ import { Input, Collapsible, Modal, Notice, PageHeader, WideScreenHint, Field } 
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { CampaignTemplateList } from "@/components/CampaignTemplates";
+import { RoiPorCliente } from "@/components/RoiPorCliente";
 import { BrDateInput } from "@/components/BrDateInput";
 import { brDate } from "@/lib/format";
 import { RefreshCw, AlertTriangle, Plus, X, Mail, Phone, FolderOpen, ExternalLink, CalendarClock, FileText } from "lucide-react";
@@ -199,6 +200,12 @@ export default function ClientesPage() {
               </div>
             </div>
           )}
+        </Collapsible>
+
+        {/* ROI por cliente: receita real (informada à mão) vs. investido. */}
+        <Collapsible id="roi" storageKey="clientes:roi"
+          summary={<SectionHead icon="◐" title="ROI por Cliente" hint="Receita informada vs. investimento em mídia, mês a mês." meta={`${clients.filter((c) => c.track_sales).length} acompanhado(s)`} />}>
+          <RoiPorCliente />
         </Collapsible>
 
         {/* Perfil operacional: dados que conectam o cliente à comunicação,

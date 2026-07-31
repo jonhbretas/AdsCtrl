@@ -28,7 +28,7 @@ const NAV_GROUPS: NavGroup[] = [
     { href: "/", label: "Visão Geral", icon: LayoutDashboard },
     { href: "/today", label: "Cockpit Hoje", icon: Target },
   ] },
-  { key: "diagnosis", label: "Acompanhe campanhas", hint: "resultado e oportunidades", icon: BarChart3, items: [
+  { key: "diagnosis", label: "Análise", hint: "resultado e oportunidades", icon: BarChart3, items: [
     { href: "/portfolio", label: "Portfólio", icon: Users },
     { href: "/funil", label: "Funil 360", icon: BarChart3 },
     { href: "/creatives", label: "Criativos", icon: Palette },
@@ -40,9 +40,8 @@ const NAV_GROUPS: NavGroup[] = [
     { href: "/agenda", label: "Agenda", icon: CalendarDays },
     { href: "/relatorios", label: "Relatórios", icon: Mail },
   ] },
-  { key: "business", label: "Financeiro e clientes", hint: "caixa e carteira", icon: DollarSign, items: [
+  { key: "business", label: "Financeiro", hint: "caixa e carteira", icon: DollarSign, items: [
     { href: "/financeiro", label: "Financeiro", icon: TrendingUp },
-    { href: "/vendas", label: "ROI por Cliente", icon: DollarSign },
     { href: "/negocio", label: "Visão do Negócio", icon: BarChart3 },
     { href: "/saude", label: "Saúde da Carteira", icon: HeartPulse },
     { href: "/clientes", label: "Clientes", icon: Users },
