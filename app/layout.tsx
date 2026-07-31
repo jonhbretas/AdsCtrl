@@ -37,6 +37,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const { brand_name } = await getSettings();
   return (
     <html lang="pt-BR" className={`${inter.variable} ${jetbrains.variable}`} suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem("adsctrl:theme");var d=t==="light"?false:t==="system"?matchMedia("(prefers-color-scheme: dark)").matches:true;var r=document.documentElement;r.classList.toggle("dark",d);r.dataset.theme=d?"dark":"light";r.style.colorScheme=d?"dark":"light";}catch(e){}})();`,
+          }}
+        />
+      </head>
       <body className="min-h-screen bg-background font-sans antialiased">
         <ThemeProvider
           attribute="class"
