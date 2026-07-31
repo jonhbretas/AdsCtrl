@@ -49,6 +49,7 @@ Em um projeto novo (ou existente) no Supabase, execute os arquivos SQL abaixo
 | 27 | Sem migration | Saúde da carteira calculada a partir de contrato, cobrança e onboarding |
 | 28 | `supabase-migration-client-approvals.sql` | Aprovações e solicitações de entregas por cliente |
 | 29 | `supabase-migration-meetings.sql` | Agenda e reuniões por cliente |
+| 30 | `supabase-migration-financial-recurring.sql` | Receitas e despesas recorrentes manuais |
 
 **Importante:** para um projeto novo, rode do 1 ao 18 sequencialmente.
 Para atualizar um projeto existente, rode apenas as migrations que faltam,

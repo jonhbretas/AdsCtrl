@@ -41,6 +41,8 @@ export default function ClientesPage() {
   const [loadRevision, setLoadRevision] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
+  const [clientQuery, setClientQuery] = useState("");
+  const [expandedProfiles, setExpandedProfiles] = useState<Set<string>>(new Set());
   const [newColor, setNewColor] = useState(PALETTE[0]);
   const [busy, setBusy] = useState(false);
   const [driveBusy, setDriveBusy] = useState<string | null>(null);
@@ -62,6 +64,7 @@ export default function ClientesPage() {
     const val = (c: ClientRecord) => { switch (clientSort.key) { case "name": return c.name; case "objective": return c.objective ? objLabel[c.objective] || c.objective : null; case "budget": return c.monthly_budget; case "result": return c.result_family ? resLabel[c.result_family] || c.result_family : null; case "kpi": return c.primary_kpi ? kpiL[c.primary_kpi] || c.primary_kpi : null; case "target": return c.target_value; case "cycle": return c.budget_start_day; } };
     return [...clients].sort((a, b) => { const av = val(a), bv = val(b); if (clientSort.key === "budget" || clientSort.key === "target") { const am = av == null || (typeof av === "number" && Number.isNaN(av)); const bm = bv == null || (typeof bv === "number" && Number.isNaN(bv)); if (am !== bm) return am ? 1 : -1; if (clientSort.key === "budget" && a.currency !== b.currency) return compareSortValues(a.currency, b.currency, "asc"); if (clientSort.key === "target" && a.primary_kpi !== b.primary_kpi) return compareSortValues(a.primary_kpi, b.primary_kpi, "asc"); if (clientSort.key === "target" && MONETARY_CLIENT_KPIS.has(a.primary_kpi || "") && a.currency !== b.currency) return compareSortValues(a.currency, b.currency, "asc"); } return compareSortValues(av, bv, clientSort.direction) || compareSortValues(a.name, b.name, "asc"); });
   }, [clients, clientSort]);
+  const visibleClients = useMemo(() => { const query = clientQuery.trim().toLocaleLowerCase(); return query ? sortedClients.filter((client) => [client.name, client.legal_name, client.cnpj, client.contact_name, client.contact_email].filter(Boolean).join(" ").toLocaleLowerCase().includes(query)) : sortedClients; }, [sortedClients, clientQuery]);
   const sortedGroups = useMemo(() => { const v = (g: Group) => groupSort.key === "name" ? g.name : countByGroup[g.id] || 0; return [...groups].sort((a, b) => compareSortValues(v(a), v(b), groupSort.direction) || compareSortValues(a.name, b.name, "asc")); }, [groups, groupSort, countByGroup]);
   const sortedAccounts = useMemo(() => { const clientById = new Map(clients.map((c) => [c.id, c])); const v = (a: Account) => { switch (accountSort.key) { case "platform": return a.platform; case "name": return a.name; case "status": return a.status; case "client": return clientById.get(a.group_id || "")?.name || ""; case "group": return groups.find((g) => g.id === a.group_id)?.name || ""; case "visibility": return a.hidden ? 1 : 0; } }; return [...accounts].sort((a, b) => compareSortValues(v(a), v(b), accountSort.direction) || compareSortValues(a.name, b.name, "asc")); }, [accounts, accountSort, clients, groups]);
 
@@ -93,7 +96,7 @@ export default function ClientesPage() {
       <PageHeader
         title="Clientes"
         subtitle={`${clients.length} cliente${clients.length === 1 ? "" : "s"} ativo${clients.length === 1 ? "" : "s"} · ${accounts.length} contas no catálogo.`}
-        actions={<Link href="/relatorios"><Button variant="ghost" size="sm"><Mail className="h-3.5 w-3.5 mr-1" /> Relatórios e painéis</Button></Link>}
+        actions={<div className="flex items-center gap-2"><input value={clientQuery} onChange={(e) => setClientQuery(e.target.value)} placeholder="Buscar cliente, CNPJ ou contato…" className="h-9 w-64 rounded-lg border border-border bg-transparent px-3 text-xs outline-none focus:ring-1 focus:ring-ring" /><Link href="/relatorios"><Button variant="ghost" size="sm"><Mail className="h-3.5 w-3.5 mr-1" /> Relatórios e painéis</Button></Link></div>}
       />
 
       <WideScreenHint>A tabela de metas é larga; no computador fica mais confortável.</WideScreenHint>
@@ -117,7 +120,7 @@ export default function ClientesPage() {
                   <SortButton column="cycle" sort={clientSort} onSort={setClientSort} align="left">Ciclo</SortButton>
                   <span>Vendas reais</span>
                 </div>
-                {sortedClients.map((client) => {
+                {visibleClients.map((client) => {
                   const los = (client.primary_kpi || "").toLowerCase();
                   return (
                     <div key={client.id} className="grid gap-2 p-3 rounded-lg border border-border/50 bg-card items-end" style={{ gridTemplateColumns: CLIENT_GRID }}>
@@ -147,7 +150,7 @@ export default function ClientesPage() {
                     </div>
                   );
                 })}
-                {!sortedClients.length && <div className="text-sm text-muted-foreground px-1">Nenhum cliente ativo.</div>}
+                {!visibleClients.length && <div className="text-sm text-muted-foreground px-1">Nenhum cliente encontrado.</div>}
               </div>
             </div>
           )}
@@ -164,20 +167,36 @@ export default function ClientesPage() {
               <span className="text-muted-foreground">Para criar pastas automaticamente, conecte o Google Drive da agência.</span>
               <a href="/api/integrations/google-drive/connect" className="ml-auto rounded-md border border-sky-500/30 px-2 py-1 text-[11px] font-semibold text-sky-600 hover:bg-sky-500/10">Conectar Drive</a>
             </div>
-            {sortedClients.map((client) => {
+            {visibleClients.map((client) => {
               const phone = (client.whatsapp_phone || client.contact_phone || "").replace(/\D/g, "");
+              const profileExpanded = expandedProfiles.has(client.id);
               const contractDays = client.contract_end_date ? Math.ceil((Date.parse(`${client.contract_end_date}T23:59:59`) - Date.now()) / 86400000) : null;
               const contractTone = contractDays != null && contractDays < 0 ? "text-red-500" : contractDays != null && contractDays <= (client.contract_notice_days ?? 30) ? "text-amber-500" : "text-muted-foreground";
               return (
                 <div key={client.id} className="rounded-lg border border-border/50 bg-card p-3 space-y-3">
                   <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      aria-expanded={profileExpanded}
+                      aria-label={`${profileExpanded ? "Recolher" : "Expandir"} dados de ${client.name}`}
+                      onClick={() => setExpandedProfiles((previous) => {
+                        const next = new Set(previous);
+                        if (next.has(client.id)) next.delete(client.id); else next.add(client.id);
+                        return next;
+                      })}
+                      className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border text-sm font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
+                    >
+                      {profileExpanded ? "−" : "+"}
+                    </button>
                     <span className="font-semibold text-sm">{client.name}</span>
                     {client.contact_name && <span className="text-xs text-muted-foreground">· {client.contact_name}</span>}
+                    {!profileExpanded && <span className="text-[11px] text-muted-foreground">Clique em + para abrir os dados</span>}
                     <div className="ml-auto flex flex-wrap gap-1.5">
                       {phone && <a href={`https://wa.me/${phone}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-emerald-500/25 bg-emerald-500/10 px-2 py-1 text-[11px] font-semibold text-emerald-600"><Phone className="h-3 w-3" /> WhatsApp</a>}
                       {client.drive_folder_url && <a href={client.drive_folder_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-sky-500/25 bg-sky-500/10 px-2 py-1 text-[11px] font-semibold text-sky-600"><FolderOpen className="h-3 w-3" /> Drive</a>}
                     </div>
                   </div>
+                  {profileExpanded && <div className="space-y-3">
                   <div className="grid gap-3 md:grid-cols-4">
                     <Field label="Razão social"><input key={`${client.id}-legal-${loadRevision}`} defaultValue={client.legal_name ?? ""} placeholder="Razão social" onBlur={(e) => updateClientField(client, "legal_name", e.target.value || null)} style={compactInput} /></Field>
                     <Field label="CNPJ"><input key={`${client.id}-cnpj-${loadRevision}`} defaultValue={client.cnpj ?? ""} placeholder="00.000.000/0000-00" onBlur={(e) => updateClientField(client, "cnpj", e.target.value || null)} style={compactInput} /></Field>
@@ -218,10 +237,11 @@ export default function ClientesPage() {
                   <ClientApprovals clientId={client.id} />
                   <ClientBilling clientId={client.id} defaultValue={client.monthly_budget} />
                   <ClientDocuments clientId={client.id} />
+                  </div>}
                 </div>
               );
             })}
-            {!sortedClients.length && <div className="text-sm text-muted-foreground">Nenhum cliente ativo.</div>}
+            {!visibleClients.length && <div className="text-sm text-muted-foreground">Nenhum cliente encontrado.</div>}
           </div>
         </Collapsible>
 
@@ -232,7 +252,7 @@ export default function ClientesPage() {
         <Collapsible id="social" storageKey="clientes:organico"
           summary={<SectionHead icon="◑" title="Orgânico (Facebook/Instagram)" hint="Página e conta comercial, para o relatório trazer alcance e seguidores." meta={`${clients.filter((c) => c.facebook_page_id || c.instagram_business_id).length} configurado(s)`} />}>
           <SocialPagesPanel
-            clients={sortedClients}
+            clients={visibleClients}
             loadRevision={loadRevision}
             onUpdate={updateClient}
             onError={setError}
