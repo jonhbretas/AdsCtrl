@@ -34,6 +34,7 @@ export default function TrafficAI() {
   const [aiStatus, setAiStatus] = useState<AiStatus | null>(null);
   const [messages, setMessages] = useState<Message[]>([{ role: "assistant", content: "Estou conectada ao contexto do Assertivus Dash. Selecione uma conta ou consulte toda a operação para começar." }]);
   const endRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const queryAccount = new URLSearchParams(window.location.search).get("account") || "";
@@ -76,15 +77,20 @@ export default function TrafficAI() {
     if (!question || busy) return;
     const nextMessages: Message[] = [...messages, { role: "user", content: question }];
     setMessages(nextMessages); setInput(""); setBusy(true);
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
-      const response = await fetch("/api/ai/assistant", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: question, pathname, account_id: accountId || null, need, history: messages.slice(-6) }) });
+      const response = await fetch("/api/ai/assistant", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: question, pathname, account_id: accountId || null, need, history: messages.slice(-6) }), signal: controller.signal });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Falha ao consultar a Assertivus IA.");
       setMessages((current) => [...current, { role: "assistant", content: data.answer, mode: data.mode, routing: data.routing, diagnostics: data.diagnostics }]);
     } catch (error: any) {
-      setMessages((current) => [...current, { role: "assistant", content: error?.message || "Não consegui concluir esta análise agora." }]);
-    } finally { setBusy(false); }
+      if (error?.name === "AbortError") setMessages((current) => [...current, { role: "assistant", content: "Consulta interrompida." }]);
+      else setMessages((current) => [...current, { role: "assistant", content: error?.message || "Não consegui concluir esta análise agora." }]);
+    } finally { setBusy(false); abortRef.current = null; }
   }
+
+  function stop() { abortRef.current?.abort(); }
 
   function submit(event: FormEvent) { event.preventDefault(); ask(); }
   const selected = accounts.find((account) => account.account_id === accountId);
@@ -102,7 +108,7 @@ export default function TrafficAI() {
             <div className="flex items-center gap-3">
               <div className="grid h-9 w-9 place-items-center rounded-xl border border-amber-300/25 bg-amber-300/10 text-amber-300"><BrainCircuit className="h-5 w-5" /></div>
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2"><span className="font-semibold">Assertivus IA</span><span className={cn("h-1.5 w-1.5 rounded-full", aiStatus == null ? "bg-slate-500" : aiStatus.active ? "animate-pulse bg-emerald-400" : "bg-red-400")} /></div>
+                <div className="flex items-center gap-2"><span className="font-semibold">Assertivus IA</span><span style={{ animationDuration: "2400ms", animationTimingFunction: "ease-in-out" }} className={cn("h-1.5 w-1.5 rounded-full", aiStatus == null ? "bg-slate-500" : aiStatus.active ? "animate-pulse bg-emerald-400" : "bg-red-400")} /></div>
                 <div className="truncate text-[10px] text-slate-400">{aiStatus == null ? "Verificando conexão…" : aiStatus.active ? `Conectada · ${aiStatus.activeLabel}` : "Sem provedor externo · usando diagnóstico interno"}</div>
               </div>
               <button type="button" onClick={() => setExpanded((value) => !value)} className="hidden rounded-lg p-2 text-slate-400 hover:bg-white/5 hover:text-white md:block">{expanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}</button>
@@ -129,7 +135,17 @@ export default function TrafficAI() {
                 {message.role === "assistant" && message.mode === "internal" && message.diagnostics?.some((item) => item.configured) && <div className="mt-1 text-[9px] normal-case tracking-normal text-red-400/80">{message.diagnostics.filter((item) => item.configured).map((item) => `${item.provider}: ${item.reason || "falhou"}`).join(" · ")}</div>}
               </div>
             </div>)}
-            {busy && <div className="flex items-center gap-2.5"><div className="grid h-7 w-7 place-items-center rounded-lg border border-amber-300/20 bg-amber-300/10 text-amber-300"><Bot className="h-3.5 w-3.5" /></div><div className="flex gap-1 rounded-2xl rounded-tl-md border border-white/8 bg-white/[0.035] px-4 py-3"><span className="h-1.5 w-1.5 animate-bounce rounded-full bg-amber-300" /><span className="h-1.5 w-1.5 animate-bounce rounded-full bg-amber-300 [animation-delay:120ms]" /><span className="h-1.5 w-1.5 animate-bounce rounded-full bg-amber-300 [animation-delay:240ms]" /></div></div>}
+            {busy && <div className="flex items-center gap-2.5">
+              <div className="grid h-7 w-7 place-items-center rounded-lg border border-amber-300/20 bg-amber-300/10 text-amber-300"><Bot className="h-3.5 w-3.5" /></div>
+              <div className="flex items-center gap-2 rounded-2xl rounded-tl-md border border-white/8 bg-white/[0.035] px-4 py-3">
+                <div className="flex gap-1">
+                  <span style={{ animationDuration: "1100ms" }} className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-300/80" />
+                  <span style={{ animationDuration: "1100ms", animationDelay: "220ms" }} className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-300/80" />
+                  <span style={{ animationDuration: "1100ms", animationDelay: "440ms" }} className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-300/80" />
+                </div>
+                <button type="button" onClick={stop} className="text-[10px] font-semibold text-slate-500 underline decoration-dotted hover:text-slate-300">parar</button>
+              </div>
+            </div>}
             <div ref={endRef} />
           </div>
 
