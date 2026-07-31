@@ -39,8 +39,15 @@ export async function PATCH(req: Request, { params }: RouteContext) {
   try {
     if (supabaseEnvMissing()) return NextResponse.json({ error: "Supabase não configurado." }, { status: 503 });
     const { id } = await params; const body = await req.json().catch(() => null); if (!body?.item_id) return NextResponse.json({ error: "Item não informado." }, { status: 400 });
-    const status = ["pending", "in_progress", "done", "blocked"].includes(body.status) ? body.status : null; if (!status) return NextResponse.json({ error: "Status inválido." }, { status: 400 });
-    const { data, error } = await getServiceClient().from("client_onboarding_items").update({ status, notes: body.notes ?? undefined, completed_at: status === "done" ? new Date().toISOString() : null, updated_at: new Date().toISOString() }).eq("id", body.item_id).eq("client_id", id).select("*").single();
+    const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (body.status !== undefined) {
+      if (!["pending", "in_progress", "done", "blocked"].includes(body.status)) return NextResponse.json({ error: "Status inválido." }, { status: 400 });
+      update.status = body.status; update.completed_at = body.status === "done" ? new Date().toISOString() : null;
+    }
+    if (body.notes !== undefined) update.notes = body.notes || null;
+    if (body.due_date !== undefined) update.due_date = body.due_date || null;
+    if (Object.keys(update).length === 1) return NextResponse.json({ error: "Nada para atualizar." }, { status: 400 });
+    const { data, error } = await getServiceClient().from("client_onboarding_items").update(update).eq("id", body.item_id).eq("client_id", id).select("*").single();
     if (error) throw error; return NextResponse.json({ item: data });
   } catch (error: any) { return NextResponse.json({ error: error?.message || "Falha ao atualizar onboarding." }, { status: 500 }); }
 }

@@ -21,7 +21,7 @@ import { CampaignTemplateList } from "@/components/CampaignTemplates";
 import { RoiPorCliente } from "@/components/RoiPorCliente";
 import { BrDateInput } from "@/components/BrDateInput";
 import { brDate } from "@/lib/format";
-import { RefreshCw, AlertTriangle, Plus, X, Mail, Phone, FolderOpen, ExternalLink, CalendarClock, FileText } from "lucide-react";
+import { RefreshCw, AlertTriangle, Plus, X, Mail, Phone, FolderOpen, ExternalLink, CalendarClock, FileText, Wallet, KeyRound, ClipboardList, Palette, Target, Rocket, BarChart3, Link2, Check, Clock } from "lucide-react";
 
 interface Group { id: string; name: string; color: string; }
 interface Account { account_id: string; name: string; status: string; group_id: string | null; platform: "meta" | "google"; hidden?: boolean; linked_meta_account_id?: string | null; is_primary?: boolean; }
@@ -35,13 +35,15 @@ const PALETTE = ["#3987e5", "#16a34a", "#db2777", "#f59e0b", "#7c3aed", "#0891b2
 const compactInput: React.CSSProperties = { width: "100%", height: 30, fontSize: 12, borderRadius: 8, border: "1px solid var(--color-border)", background: "transparent", padding: "0 8px" };
 const inputClass = "h-9 w-full rounded-lg border border-border bg-transparent px-3 text-sm outline-none focus:ring-1 focus:ring-ring";
 
-type TabKey = "metas" | "perfil" | "contrato" | "roi" | "documentos" | "organico";
+type TabKey = "metas" | "perfil" | "onboarding" | "contrato" | "roi" | "documentos" | "aprovacoes" | "organico";
 const TABS: { key: TabKey; label: string }[] = [
   { key: "metas", label: "Metas" },
   { key: "perfil", label: "Perfil" },
+  { key: "onboarding", label: "Onboarding" },
   { key: "contrato", label: "Contrato" },
   { key: "roi", label: "ROI & Financeiro" },
   { key: "documentos", label: "Documentos" },
+  { key: "aprovacoes", label: "Aprovações" },
   { key: "organico", label: "Orgânico" },
 ];
 
@@ -277,9 +279,11 @@ export default function ClientesPage() {
                     <Field label="Cidade / UF"><div className="flex gap-1"><input key={`${selectedClient.id}-city-${loadRevision}`} defaultValue={selectedClient.address_city ?? ""} placeholder="Cidade" onBlur={(e) => updateClientField(selectedClient, "address_city", e.target.value || null)} style={{ ...compactInput, minWidth: 0 }} /><input key={`${selectedClient.id}-state-${loadRevision}`} defaultValue={selectedClient.address_state ?? ""} placeholder="UF" maxLength={2} onBlur={(e) => updateClientField(selectedClient, "address_state", e.target.value.toUpperCase() || null)} style={{ ...compactInput, width: 52 }} /></div></Field>
                   </div>
                 </div>
-                <ClientOnboarding clientId={selectedClient.id} />
-                <ClientApprovals clientId={selectedClient.id} />
               </div>}
+
+              {activeTab === "onboarding" && <ClientOnboarding clientId={selectedClient.id} />}
+
+              {activeTab === "aprovacoes" && <ClientApprovals clientId={selectedClient.id} dashboardLinkHref={`/api/clients/${selectedClient.id}/dashboard-link`} />}
 
               {activeTab === "contrato" && <div className="space-y-3 rounded-lg border border-border/50 bg-card p-4">
                 {(() => {
@@ -717,21 +721,147 @@ function ClientBilling({ clientId, defaultValue }: { clientId: string; defaultVa
   </div>;
 }
 
+const ONBOARDING_ICONS: Record<string, typeof FileText> = {
+  contract: FileText, billing: Wallet, access_meta: KeyRound, access_google: KeyRound,
+  briefing: ClipboardList, brand: Palette, tracking: Target, campaign: Rocket, report: BarChart3,
+};
+
 function ClientOnboarding({ clientId }: { clientId: string }) {
   const [data, setData] = useState<{ items: any[]; progress: { done: number; total: number; percent: number } } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notesDraft, setNotesDraft] = useState<Record<string, string>>({});
   async function load() { try { const r = await fetch(`/api/clients/${clientId}/onboarding`, { cache: "no-store" }); const d = await r.json(); if (!r.ok) throw new Error(d.error || "Falha ao carregar onboarding."); setData(d); } catch (e: any) { setError(e?.message || "Falha ao carregar onboarding."); } }
   useEffect(() => { load(); }, [clientId]);
-  async function setStatus(item: any, status: string) { try { const r = await fetch(`/api/clients/${clientId}/onboarding`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ item_id: item.id, status }) }); if (!r.ok) { const d = await r.json(); throw new Error(d.error || "Falha ao atualizar."); } await load(); } catch (e: any) { setError(e?.message || "Falha ao atualizar onboarding."); } }
-  return <div className="border-t border-border/40 pt-3 space-y-2"><div className="flex flex-wrap items-center gap-2"><span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Onboarding</span>{data && <span className="text-[11px] text-muted-foreground">{data.progress.done}/{data.progress.total} concluídos · {data.progress.percent}%</span>}</div>{data && <div className="h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${data.progress.percent}%` }} /></div>}{data && <div className="grid gap-1 md:grid-cols-2">{data.items.map((item) => <div key={item.id} className="flex items-center gap-2 rounded border border-border/30 px-2 py-1.5"><select value={item.status} onChange={(e) => setStatus(item, e.target.value)} className={cn("w-[105px] rounded border border-input bg-transparent px-1 py-1 text-[10px] font-semibold", item.status === "done" ? "text-emerald-600" : item.status === "blocked" ? "text-red-500" : "text-muted-foreground")}><option value="pending">Pendente</option><option value="in_progress">Em andamento</option><option value="done">Concluído</option><option value="blocked">Bloqueado</option></select><span className={cn("text-[11px]", item.status === "done" && "line-through text-muted-foreground")}>{item.title}</span></div>)}</div>}{error && <div className="text-[11px] text-red-500">{error}</div>}</div>;
+  async function patchItem(item: any, patch: Record<string, unknown>) { try { const r = await fetch(`/api/clients/${clientId}/onboarding`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ item_id: item.id, ...patch }) }); if (!r.ok) { const d = await r.json(); throw new Error(d.error || "Falha ao atualizar."); } await load(); } catch (e: any) { setError(e?.message || "Falha ao atualizar onboarding."); } }
+
+  const overdue = data?.items.filter((item) => item.due_date && item.status !== "done" && item.due_date < new Date().toISOString().slice(0, 10)).length || 0;
+  return <div className="space-y-3">
+    <div className="rounded-lg border border-border/50 bg-card p-4 space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <h3 className="text-sm font-semibold">Checklist de entrada</h3>
+        {data && <span className="text-[11px] text-muted-foreground">{data.progress.done}/{data.progress.total} concluídos</span>}
+        {overdue > 0 && <span className="rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-bold text-red-600">{overdue} atrasado(s)</span>}
+        {data && <span className="ml-auto text-sm font-bold text-emerald-600">{data.progress.percent}%</span>}
+      </div>
+      {data && <div className="h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${data.progress.percent}%` }} /></div>}
+      {error && <div className="text-[11px] text-red-500">{error}</div>}
+    </div>
+    {data && <div className="space-y-2">{data.items.map((item) => {
+      const Icon = ONBOARDING_ICONS[item.code] || ClipboardList;
+      const isOverdue = item.due_date && item.status !== "done" && item.due_date < new Date().toISOString().slice(0, 10);
+      const notesKey = `${item.id}`;
+      return <div key={item.id} className={cn("rounded-lg border bg-card p-3 space-y-2", item.status === "done" ? "border-emerald-500/25 bg-emerald-500/[0.03]" : isOverdue ? "border-red-500/30" : "border-border/50")}>
+        <div className="flex items-start gap-2.5">
+          <span className={cn("mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg", item.status === "done" ? "bg-emerald-500/10 text-emerald-600" : item.status === "blocked" ? "bg-red-500/10 text-red-600" : "bg-primary/10 text-primary")}><Icon className="h-4 w-4" /></span>
+          <div className="min-w-0 flex-1">
+            <span className={cn("text-sm font-semibold", item.status === "done" && "text-muted-foreground line-through")}>{item.title}</span>
+            {item.description && <div className="text-[11px] text-muted-foreground">{item.description}</div>}
+          </div>
+          <select value={item.status} onChange={(e) => patchItem(item, { status: e.target.value })} className={cn("w-[110px] shrink-0 rounded border border-input bg-transparent px-1 py-1 text-[10px] font-semibold", item.status === "done" ? "text-emerald-600" : item.status === "blocked" ? "text-red-500" : "text-muted-foreground")}><option value="pending">Pendente</option><option value="in_progress">Em andamento</option><option value="done">Concluído</option><option value="blocked">Bloqueado</option></select>
+        </div>
+        <div className="grid gap-2 pl-[42px] sm:grid-cols-2">
+          <Field label="Prazo"><BrDateInput value={item.due_date} onChange={(value) => patchItem(item, { due_date: value || null })} style={compactInput} /></Field>
+          <Field label="Observações"><input value={notesDraft[notesKey] ?? (item.notes || "")} onChange={(e) => setNotesDraft((prev) => ({ ...prev, [notesKey]: e.target.value }))} onBlur={(e) => { if (e.target.value !== (item.notes || "")) patchItem(item, { notes: e.target.value }); }} placeholder="Nenhuma" style={compactInput} /></Field>
+        </div>
+        {item.status === "done" && item.completed_at && <div className="pl-[42px] text-[10px] text-emerald-600">Concluído em {brDate(item.completed_at.slice(0, 10))}</div>}
+        {isOverdue && <div className="pl-[42px] text-[10px] text-red-500">Prazo vencido em {brDate(item.due_date)}</div>}
+      </div>;
+    })}</div>}
+  </div>;
 }
 
-function ClientApprovals({ clientId }: { clientId: string }) {
-  const [items, setItems] = useState<any[]>([]); const [open, setOpen] = useState(false); const [title, setTitle] = useState(""); const [description, setDescription] = useState(""); const [fileUrl, setFileUrl] = useState(""); const [message, setMessage] = useState<string | null>(null);
+const APPROVAL_KINDS = [
+  { value: "request", label: "Solicitação geral" },
+  { value: "creative", label: "Criativo" },
+  { value: "copy", label: "Copy / texto" },
+  { value: "budget", label: "Orçamento" },
+  { value: "other", label: "Outro" },
+];
+
+function ClientApprovals({ clientId, dashboardLinkHref }: { clientId: string; dashboardLinkHref: string }) {
+  const [items, setItems] = useState<any[]>([]);
+  const [open, setOpen] = useState(false);
+  const [title, setTitle] = useState(""); const [description, setDescription] = useState(""); const [fileUrl, setFileUrl] = useState(""); const [dueDate, setDueDate] = useState(""); const [kind, setKind] = useState("request");
+  const [message, setMessage] = useState<string | null>(null);
+  const [respondingId, setRespondingId] = useState<string | null>(null);
+  const [responseNote, setResponseNote] = useState("");
+  const [linkBusy, setLinkBusy] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
+
   async function load() { try { const r = await fetch(`/api/clients/${clientId}/approvals`, { cache: "no-store" }); const d = await r.json(); if (!r.ok) throw new Error(d.error || "Falha ao carregar aprovações."); setItems(d.approvals || []); } catch (e: any) { setMessage(e?.message || "Falha ao carregar aprovações."); } }
   useEffect(() => { load(); }, [clientId]);
-  async function add() { if (!title.trim()) return; const r = await fetch(`/api/clients/${clientId}/approvals`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title, description, file_url: fileUrl || null }) }); const d = await r.json(); if (!r.ok) { setMessage(d.error || "Falha ao criar solicitação."); return; } setTitle(""); setDescription(""); setFileUrl(""); setOpen(false); await load(); }
-  async function status(item: any, value: string) { const r = await fetch(`/api/clients/${clientId}/approvals`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: item.id, status: value }) }); if (!r.ok) { const d = await r.json(); setMessage(d.error || "Falha ao atualizar."); return; } await load(); }
-  const pending = items.filter((item) => item.status === "pending").length;
-  return <div className="border-t border-border/40 pt-3 space-y-2"><div className="flex items-center gap-2"><span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Aprovações</span>{pending > 0 && <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-600">{pending} pendente(s)</span>}<button onClick={() => setOpen((v) => !v)} className="ml-auto rounded-md border border-input px-2 py-1 text-[11px] font-semibold hover:bg-muted">+ Solicitar</button></div>{items.slice(0, 5).map((item) => <div key={item.id} className="flex items-center gap-2 rounded border border-border/30 px-2 py-1.5"><span className="flex-1 text-[11px]">{item.title}</span>{item.file_url && <a href={item.file_url} target="_blank" rel="noreferrer" className="text-[10px] text-primary hover:underline">arquivo</a>}<select value={item.status} onChange={(e) => status(item, e.target.value)} className={cn("rounded border border-input bg-transparent px-1 py-1 text-[10px]", item.status === "approved" ? "text-emerald-600" : item.status === "changes_requested" ? "text-amber-600" : "text-muted-foreground")}><option value="pending">Pendente</option><option value="approved">Aprovado</option><option value="changes_requested">Pedir alteração</option><option value="rejected">Rejeitado</option></select></div>)}{open && <div className="grid gap-2 rounded-md border border-border/50 bg-muted/20 p-2 md:grid-cols-4"><input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex.: Aprovar criativo da campanha" style={compactInput} /><input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Instruções" style={compactInput} /><input value={fileUrl} onChange={(e) => setFileUrl(e.target.value)} placeholder="Link do arquivo no Drive" style={compactInput} /><button onClick={add} disabled={!title.trim()} className="rounded-md bg-primary px-2 py-1 text-[11px] font-semibold text-primary-foreground disabled:opacity-50">Criar solicitação</button></div>}{message && <div className="text-[11px] text-red-500">{message}</div>}</div>;
+  async function add() { if (!title.trim()) return; const r = await fetch(`/api/clients/${clientId}/approvals`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title, description, file_url: fileUrl || null, due_date: dueDate || null, kind }) }); const d = await r.json(); if (!r.ok) { setMessage(d.error || "Falha ao criar solicitação."); return; } setTitle(""); setDescription(""); setFileUrl(""); setDueDate(""); setKind("request"); setOpen(false); await load(); }
+  async function setStatus(item: any, value: string, note?: string) { const r = await fetch(`/api/clients/${clientId}/approvals`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: item.id, status: value, response_note: note ?? undefined }) }); if (!r.ok) { const d = await r.json(); setMessage(d.error || "Falha ao atualizar."); return; } setRespondingId(null); setResponseNote(""); await load(); }
+  async function copyClientLink() {
+    setLinkBusy(true); setMessage(null);
+    try {
+      const r = await fetch(dashboardLinkHref); const d = await r.json(); if (!r.ok) throw new Error(d.error || "Falha ao gerar o link.");
+      await navigator.clipboard.writeText(d.url); setLinkCopied(true); setTimeout(() => setLinkCopied(false), 2500);
+    } catch (e: any) { setMessage(e?.message || "Falha ao gerar o link do cliente."); }
+    finally { setLinkBusy(false); }
+  }
+
+  const pending = items.filter((item) => item.status === "pending");
+  const answered = items.filter((item) => item.status !== "pending");
+  const statusTone: Record<string, string> = { pending: "text-amber-600", approved: "text-emerald-600", changes_requested: "text-amber-600", rejected: "text-red-500" };
+  const statusLabel: Record<string, string> = { pending: "Pendente", approved: "Aprovado", changes_requested: "Alteração pedida", rejected: "Rejeitado" };
+
+  return <div className="space-y-3">
+    <div className="rounded-lg border border-border/50 bg-card p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <h3 className="text-sm font-semibold">Aprovações</h3>
+        {pending.length > 0 && <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-600">{pending.length} pendente(s)</span>}
+        <div className="ml-auto flex gap-1.5">
+          <button onClick={copyClientLink} disabled={linkBusy} className="inline-flex items-center gap-1 rounded-md border border-sky-500/30 px-2 py-1 text-[11px] font-semibold text-sky-600 hover:bg-sky-500/10 disabled:opacity-50">{linkCopied ? <Check className="h-3 w-3" /> : <Link2 className="h-3 w-3" />} {linkCopied ? "Copiado!" : linkBusy ? "Gerando…" : "Copiar link do cliente"}</button>
+          <button onClick={() => setOpen((v) => !v)} className="rounded-md border border-input px-2 py-1 text-[11px] font-semibold hover:bg-muted"><Plus className="mr-1 inline h-3 w-3" /> Solicitar</button>
+        </div>
+      </div>
+      <p className="mt-1 text-[11px] text-muted-foreground">O link do cliente abre o painel público onde ele aprova ou pede alteração direto, sem login.</p>
+      {message && <div className="mt-2 text-[11px] text-red-500">{message}</div>}
+      {open && <div className="mt-3 grid gap-2 rounded-md border border-border/50 bg-muted/20 p-2 md:grid-cols-3">
+        <select value={kind} onChange={(e) => setKind(e.target.value)} style={compactInput}>{APPROVAL_KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}</select>
+        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex.: Aprovar criativo da campanha" style={compactInput} />
+        <input value={dueDate} onChange={(e) => setDueDate(e.target.value)} type="date" title="Prazo de resposta" style={compactInput} />
+        <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Instruções" style={{ ...compactInput, gridColumn: "span 2" }} />
+        <input value={fileUrl} onChange={(e) => setFileUrl(e.target.value)} placeholder="Link do arquivo no Drive" style={compactInput} />
+        <button onClick={add} disabled={!title.trim()} className="rounded-md bg-primary px-2 py-1 text-[11px] font-semibold text-primary-foreground disabled:opacity-50 md:col-span-3">Criar solicitação</button>
+      </div>}
+    </div>
+
+    {pending.length > 0 && <div className="space-y-2">{pending.map((item) => {
+      const isOverdue = item.due_date && item.due_date < new Date().toISOString().slice(0, 10);
+      return <div key={item.id} className={cn("rounded-lg border bg-card p-3 space-y-2", isOverdue ? "border-red-500/30" : "border-amber-500/25")}>
+        <div className="flex flex-wrap items-start gap-2">
+          <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-muted-foreground">{APPROVAL_KINDS.find((k) => k.value === item.kind)?.label || item.kind}</span>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-semibold">{item.title}</div>
+            {item.description && <div className="text-[11px] text-muted-foreground">{item.description}</div>}
+          </div>
+          {item.file_url && <a href={item.file_url} target="_blank" rel="noreferrer" className="text-[10px] font-semibold text-primary hover:underline">ver arquivo</a>}
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
+          <Clock className="h-3 w-3" /> pedido em {brDate(String(item.requested_at).slice(0, 10))}
+          {item.due_date && <span className={isOverdue ? "font-semibold text-red-500" : ""}>· prazo {brDate(item.due_date)}{isOverdue ? " (vencido)" : ""}</span>}
+        </div>
+        {respondingId === item.id ? <div className="flex flex-wrap items-center gap-1.5">
+          <input value={responseNote} onChange={(e) => setResponseNote(e.target.value)} placeholder="Nota da resposta (opcional)" style={{ ...compactInput, flex: "1 1 200px" }} />
+          <button onClick={() => setStatus(item, "approved", responseNote || undefined)} className="rounded-md border border-emerald-500/30 px-2 py-1 text-[11px] font-semibold text-emerald-600 hover:bg-emerald-500/10">Aprovar</button>
+          <button onClick={() => setStatus(item, "changes_requested", responseNote || undefined)} className="rounded-md border border-amber-500/30 px-2 py-1 text-[11px] font-semibold text-amber-600 hover:bg-amber-500/10">Pedir alteração</button>
+          <button onClick={() => setStatus(item, "rejected", responseNote || undefined)} className="rounded-md border border-red-500/30 px-2 py-1 text-[11px] font-semibold text-red-600 hover:bg-red-500/10">Rejeitar</button>
+          <button onClick={() => { setRespondingId(null); setResponseNote(""); }} className="text-[11px] text-muted-foreground hover:text-foreground">cancelar</button>
+        </div> : <button onClick={() => setRespondingId(item.id)} className="rounded-md border border-input px-2 py-1 text-[11px] font-semibold hover:bg-muted">Responder</button>}
+      </div>;
+    })}</div>}
+
+    {answered.length > 0 && <div className="rounded-lg border border-border/50 bg-card p-4 space-y-2">
+      <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Histórico</div>
+      {answered.slice(0, 10).map((item) => <div key={item.id} className="flex flex-wrap items-center gap-2 rounded border border-border/30 px-2 py-1.5 text-[11px]">
+        <span className="flex-1 min-w-0 truncate">{item.title}</span>
+        {item.response_note && <span className="text-muted-foreground">· {item.response_note}</span>}
+        {item.responded_at && <span className="text-muted-foreground">· {brDate(String(item.responded_at).slice(0, 10))}</span>}
+        <span className={cn("font-semibold", statusTone[item.status])}>{statusLabel[item.status] || item.status}</span>
+      </div>)}
+    </div>}
+    {!items.length && <div className="rounded-lg border border-dashed border-border p-6 text-center text-xs text-muted-foreground">Nenhuma solicitação de aprovação ainda.</div>}
+  </div>;
 }
