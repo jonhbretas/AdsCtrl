@@ -3,7 +3,8 @@
 Dashboard para acompanhar múltiplas contas de anúncio da Meta e Google Ads:
 gasto 7d, agrupamento por cliente, saldo (prepaid), status de conta, alertas,
 cockpit operacional, quadro de tarefas, laboratório de criativos e relatórios
-semanais automáticos por e-mail.
+semanais automáticos por e-mail. O Traffic AI fica disponível em todas as telas
+e consulta o contexto atual da operação; a conexão externa é opcional.
 
 ## Stack
 - Next.js 16 (App Router, TypeScript, Tailwind CSS v4) — deploy na Vercel
@@ -67,6 +68,8 @@ NEXT_PUBLIC_APP_BRAND_NAME     # Nome da sua agência (ex: "Assertivus Dash")
 META_ACCESS_TOKEN              # Token de System User (não expira)
 NEXT_PUBLIC_SUPABASE_URL       # URL do seu projeto Supabase
 SUPABASE_SERVICE_ROLE_KEY       # service_role key do Supabase
+OPENAI_API_KEY                  # Opcional: ativa respostas do Traffic AI por modelo externo
+OPENAI_MODEL                    # Opcional: modelo usado pelo Traffic AI
 CRON_SECRET                     # String aleatória para o cron
 GOOGLE_ADS_CLIENT_ID            # OAuth client ID
 GOOGLE_ADS_CLIENT_SECRET        # OAuth client secret

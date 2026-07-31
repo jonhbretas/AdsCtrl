@@ -212,6 +212,8 @@ export default function Dashboard() {
   function selectAccount(accountId: string, open: boolean) {
     const next = open ? null : accountId;
     setExpanded(next);
+    if (next) window.localStorage.setItem("adsctrl:selected-account", next); else window.localStorage.removeItem("adsctrl:selected-account");
+    window.dispatchEvent(new CustomEvent("adsctrl:account-selected", { detail: next || "" }));
     const url = new URL(window.location.href);
     if (next) url.searchParams.set("account", next); else url.searchParams.delete("account");
     window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
@@ -347,6 +349,8 @@ export default function Dashboard() {
     if (requested?.status !== "ACTIVE") setOnlyActive(false);
     if (requested?.hidden) setShowHidden(true);
     setExpanded(requestedAccount);
+    window.localStorage.setItem("adsctrl:selected-account", requestedAccount);
+    window.dispatchEvent(new CustomEvent("adsctrl:account-selected", { detail: requestedAccount }));
     // Âncora: espera o DOM renderizar e leva até a linha expandida.
     const anchorId = `account-${requestedAccount}`;
     const scroll = () => {

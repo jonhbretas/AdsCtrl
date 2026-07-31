@@ -3,6 +3,7 @@ import "./components.css";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import AppNav from "@/components/AppNav";
+import TrafficAI from "@/components/TrafficAI";
 import { getSettings } from "@/lib/settings";
 
 const inter = Inter({
@@ -45,6 +46,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         >
           <AppNav brand={brand_name} />
           <main className="flex-1">{children}</main>
+          <TrafficAI />
         </ThemeProvider>
       </body>
     </html>
