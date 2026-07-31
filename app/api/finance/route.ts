@@ -37,8 +37,14 @@ export async function GET(req: Request) {
     const paid = sum((row) => row.kind === "expense" && row.status === "confirmed");
     const receivable = sum((row) => row.kind === "revenue" && row.status === "planned");
     const payable = sum((row) => row.kind === "expense" && row.status === "planned");
-    const dre = [...new Set(rows.map((row) => row.financial_categories?.name || "Sem categoria"))].map((name) => ({ name, revenue: sum((row) => row.kind === "revenue" && (row.financial_categories?.name || "Sem categoria") === name), expenses: sum((row) => row.kind === "expense" && (row.financial_categories?.name || "Sem categoria") === name) }));
-    return NextResponse.json({ month: range.month, entries: rows, categories: categories || [], clients: clients || [], summary: { revenue, expenses, result: received - paid, projected_result: revenue - expenses, received, paid, receivable, payable, margin: revenue ? ((revenue - expenses) / revenue) * 100 : 0 }, dre });
+    const dre = [...new Set(rows.map((row) => row.financial_categories?.name || "Sem categoria"))].map((name) => ({
+      name,
+      revenue: sum((row) => row.kind === "revenue" && (row.financial_categories?.name || "Sem categoria") === name),
+      received: sum((row) => row.kind === "revenue" && row.status === "confirmed" && (row.financial_categories?.name || "Sem categoria") === name),
+      expenses: sum((row) => row.kind === "expense" && (row.financial_categories?.name || "Sem categoria") === name),
+      paid: sum((row) => row.kind === "expense" && row.status === "confirmed" && (row.financial_categories?.name || "Sem categoria") === name),
+    }));
+    return NextResponse.json({ month: range.month, entries: rows, categories: categories || [], clients: clients || [], summary: { revenue, expenses, result: received - paid, projected_result: revenue - expenses, received, paid, receivable, payable, margin: received ? ((received - paid) / received) * 100 : 0, projected_margin: revenue ? ((revenue - expenses) / revenue) * 100 : 0 }, dre });
   } catch (error: any) { return NextResponse.json({ error: error?.message || "Falha ao carregar financeiro." }, { status: 500 }); }
 }
 
