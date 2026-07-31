@@ -160,12 +160,13 @@ export async function POST(req: Request) {
       `Pergunta: ${message}`,
     ].filter(Boolean).join("\n\n");
 
-    const providerResult = await askAiProvider(prompt, routed.need);
+    const { result: providerResult, attempts } = await askAiProvider(prompt, routed.need);
     return NextResponse.json({
       answer: providerResult?.answer || fallback,
       mode: providerResult ? "ai" : "internal",
       warning: providerResult ? null : "Os provedores externos ficaram indisponíveis; usei o diagnóstico interno.",
       routing: { requested: requestedNeed, need: routed.need, label: AI_NEED_LABELS[routed.need], automatic: routed.automatic, provider: providerResult?.provider || "internal", model: providerResult?.model || "diagnóstico interno" },
+      diagnostics: attempts,
       context: { scope: context.scope, generated_at: context.generated_at, alerts: context.alerts.length },
     });
   } catch (error: any) {

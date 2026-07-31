@@ -66,7 +66,7 @@ function openCodeEndpoint(base: string, model: string): { endpoint: string; shap
   return { endpoint: `${base}/chat/completions`, shape: "chat" };
 }
 
-async function askOpenCode(prompt: string, key: string, model: string, base: string) {
+async function askOpenCode(prompt: string, key: string, model: string, base: string): Promise<{ answer: string | null; status: number }> {
   const { endpoint, shape } = openCodeEndpoint(base, model);
   const body =
     shape === "responses"
@@ -81,37 +81,48 @@ async function askOpenCode(prompt: string, key: string, model: string, base: str
     signal: AbortSignal.timeout(60_000),
   });
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok) return null;
-  if (shape === "responses") return responseText(payload);
-  if (shape === "messages") return messageText(payload);
-  return chatText(payload);
+  if (!response.ok) return { answer: null, status: response.status };
+  if (shape === "responses") return { answer: responseText(payload), status: response.status };
+  if (shape === "messages") return { answer: messageText(payload), status: response.status };
+  return { answer: chatText(payload), status: response.status };
 }
 
-export type AiProviderResult = { answer: string; provider: "opencode-go" | "opencode-zen" | "openrouter" | "openai"; model: string };
+export type AiProviderId = "opencode-go" | "opencode-zen" | "openrouter" | "openai";
+export type AiProviderResult = { answer: string; provider: AiProviderId; model: string };
+export type AiProviderAttempt = { provider: AiProviderId; configured: boolean; ok: boolean; reason?: string };
 
-export async function askAiProvider(prompt: string, need: RoutedNeed): Promise<AiProviderResult | null> {
+function attemptError(error: any): string {
+  if (error?.name === "TimeoutError" || error?.name === "AbortError") return "tempo limite excedido";
+  return error?.message || "falha de rede";
+}
+
+export async function askAiProvider(prompt: string, need: RoutedNeed): Promise<{ result: AiProviderResult | null; attempts: AiProviderAttempt[] }> {
+  const attempts: AiProviderAttempt[] = [];
+
   const goKey = process.env.OPENCODE_GO_API_KEY?.trim();
   if (goKey) {
+    const model = process.env[`OPENCODE_GO_MODEL_${ENV_SUFFIX[need]}`]?.trim() || process.env[`OPENCODE_MODEL_${ENV_SUFFIX[need]}`]?.trim() || GO_MODELS[need];
     try {
-      const model = process.env[`OPENCODE_GO_MODEL_${ENV_SUFFIX[need]}`]?.trim() || process.env[`OPENCODE_MODEL_${ENV_SUFFIX[need]}`]?.trim() || GO_MODELS[need];
-      const answer = await askOpenCode(prompt, goKey, model, "https://opencode.ai/zen/go/v1");
-      if (answer) return { answer, provider: "opencode-go", model };
-    } catch {}
-  }
+      const { answer, status } = await askOpenCode(prompt, goKey, model, "https://opencode.ai/zen/go/v1");
+      if (answer) { attempts.push({ provider: "opencode-go", configured: true, ok: true }); return { result: { answer, provider: "opencode-go", model }, attempts }; }
+      attempts.push({ provider: "opencode-go", configured: true, ok: false, reason: status ? `HTTP ${status}` : "resposta vazia" });
+    } catch (error) { attempts.push({ provider: "opencode-go", configured: true, ok: false, reason: attemptError(error) }); }
+  } else attempts.push({ provider: "opencode-go", configured: false, ok: false });
 
   const zenKey = process.env.OPENCODE_ZEN_API_KEY?.trim();
   if (zenKey) {
+    const model = process.env[`OPENCODE_MODEL_${ENV_SUFFIX[need]}`]?.trim() || ZEN_MODELS[need];
     try {
-      const model = process.env[`OPENCODE_MODEL_${ENV_SUFFIX[need]}`]?.trim() || ZEN_MODELS[need];
-      const answer = await askOpenCode(prompt, zenKey, model, "https://opencode.ai/zen/v1");
-      if (answer) return { answer, provider: "opencode-zen", model };
-    } catch {}
-  }
+      const { answer, status } = await askOpenCode(prompt, zenKey, model, "https://opencode.ai/zen/v1");
+      if (answer) { attempts.push({ provider: "opencode-zen", configured: true, ok: true }); return { result: { answer, provider: "opencode-zen", model }, attempts }; }
+      attempts.push({ provider: "opencode-zen", configured: true, ok: false, reason: status ? `HTTP ${status}` : "resposta vazia" });
+    } catch (error) { attempts.push({ provider: "opencode-zen", configured: true, ok: false, reason: attemptError(error) }); }
+  } else attempts.push({ provider: "opencode-zen", configured: false, ok: false });
 
   const routerKey = process.env.OPENROUTER_API_KEY?.trim();
   if (routerKey) {
+    const model = process.env[`OPENROUTER_MODEL_${ENV_SUFFIX[need]}`]?.trim() || "openrouter/auto";
     try {
-      const model = process.env[`OPENROUTER_MODEL_${ENV_SUFFIX[need]}`]?.trim() || "openrouter/auto";
       const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -125,14 +136,15 @@ export async function askAiProvider(prompt: string, need: RoutedNeed): Promise<A
       });
       const payload = await response.json().catch(() => ({}));
       const answer = response.ok ? chatText(payload) : null;
-      if (answer) return { answer, provider: "openrouter", model: payload?.model || model };
-    } catch {}
-  }
+      if (answer) { attempts.push({ provider: "openrouter", configured: true, ok: true }); return { result: { answer, provider: "openrouter", model: payload?.model || model }, attempts }; }
+      attempts.push({ provider: "openrouter", configured: true, ok: false, reason: response.ok ? "resposta vazia" : `HTTP ${response.status}` });
+    } catch (error) { attempts.push({ provider: "openrouter", configured: true, ok: false, reason: attemptError(error) }); }
+  } else attempts.push({ provider: "openrouter", configured: false, ok: false });
 
   const openAiKey = process.env.OPENAI_API_KEY?.trim();
   if (openAiKey) {
+    const model = process.env.OPENAI_MODEL?.trim() || ZEN_MODELS[need];
     try {
-      const model = process.env.OPENAI_MODEL?.trim() || ZEN_MODELS[need];
       const response = await fetch("https://api.openai.com/v1/responses", {
         method: "POST",
         headers: { Authorization: `Bearer ${openAiKey}`, "Content-Type": "application/json" },
@@ -141,8 +153,10 @@ export async function askAiProvider(prompt: string, need: RoutedNeed): Promise<A
       });
       const payload = await response.json().catch(() => ({}));
       const answer = response.ok ? responseText(payload) : null;
-      if (answer) return { answer, provider: "openai", model };
-    } catch {}
-  }
-  return null;
+      if (answer) { attempts.push({ provider: "openai", configured: true, ok: true }); return { result: { answer, provider: "openai", model }, attempts }; }
+      attempts.push({ provider: "openai", configured: true, ok: false, reason: response.ok ? "resposta vazia" : `HTTP ${response.status}` });
+    } catch (error) { attempts.push({ provider: "openai", configured: true, ok: false, reason: attemptError(error) }); }
+  } else attempts.push({ provider: "openai", configured: false, ok: false });
+
+  return { result: null, attempts };
 }

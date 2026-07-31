@@ -7,8 +7,10 @@ import { cn } from "@/lib/utils";
 
 type Need = "auto" | "fast" | "analysis" | "strategic" | "creative";
 type Routing = { label: string; automatic: boolean; provider: string; model: string };
-type Message = { role: "user" | "assistant"; content: string; mode?: "ai" | "internal"; routing?: Routing };
+type Diagnostic = { provider: string; configured: boolean; ok: boolean; reason?: string };
+type Message = { role: "user" | "assistant"; content: string; mode?: "ai" | "internal"; routing?: Routing; diagnostics?: Diagnostic[] };
 type Account = { account_id: string; name: string; platform: "meta" | "google"; hidden?: boolean };
+type AiStatus = { providers: { id: string; label: string; configured: boolean }[]; active: string | null; activeLabel: string | null };
 
 const QUICK_ACTIONS = [
   "Faça o diagnóstico deste contexto",
@@ -29,6 +31,7 @@ export default function TrafficAI() {
   const [accountId, setAccountId] = useState("");
   const [need, setNeed] = useState<Need>("auto");
   const [alertCount, setAlertCount] = useState(0);
+  const [aiStatus, setAiStatus] = useState<AiStatus | null>(null);
   const [messages, setMessages] = useState<Message[]>([{ role: "assistant", content: "Estou conectada ao contexto do Assertivus Dash. Selecione uma conta ou consulte toda a operação para começar." }]);
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -54,6 +57,11 @@ export default function TrafficAI() {
       .catch(() => {});
   }, [open, accounts.length]);
 
+  useEffect(() => {
+    if (!open || aiStatus) return;
+    fetch("/api/ai/status", { cache: "no-store" }).then((response) => response.json()).then(setAiStatus).catch(() => {});
+  }, [open, aiStatus]);
+
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, busy]);
   if (HIDDEN_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(prefix))) return null;
 
@@ -72,7 +80,7 @@ export default function TrafficAI() {
       const response = await fetch("/api/ai/assistant", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: question, pathname, account_id: accountId || null, need, history: messages.slice(-6) }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Falha ao consultar a Assertivus IA.");
-      setMessages((current) => [...current, { role: "assistant", content: data.answer, mode: data.mode, routing: data.routing }]);
+      setMessages((current) => [...current, { role: "assistant", content: data.answer, mode: data.mode, routing: data.routing, diagnostics: data.diagnostics }]);
     } catch (error: any) {
       setMessages((current) => [...current, { role: "assistant", content: error?.message || "Não consegui concluir esta análise agora." }]);
     } finally { setBusy(false); }
@@ -93,7 +101,10 @@ export default function TrafficAI() {
           <header className="relative border-b border-white/8 bg-[radial-gradient(circle_at_top_left,rgba(217,168,63,0.13),transparent_44%)] px-4 py-3.5">
             <div className="flex items-center gap-3">
               <div className="grid h-9 w-9 place-items-center rounded-xl border border-amber-300/25 bg-amber-300/10 text-amber-300"><BrainCircuit className="h-5 w-5" /></div>
-              <div className="min-w-0 flex-1"><div className="flex items-center gap-2"><span className="font-semibold">Assertivus IA</span><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" /></div><div className="truncate text-[10px] text-slate-400">Análise contextual · roteamento inteligente de modelos</div></div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2"><span className="font-semibold">Assertivus IA</span><span className={cn("h-1.5 w-1.5 rounded-full", aiStatus == null ? "bg-slate-500" : aiStatus.active ? "animate-pulse bg-emerald-400" : "bg-red-400")} /></div>
+                <div className="truncate text-[10px] text-slate-400">{aiStatus == null ? "Verificando conexão…" : aiStatus.active ? `Conectada · ${aiStatus.activeLabel}` : "Sem provedor externo · usando diagnóstico interno"}</div>
+              </div>
               <button type="button" onClick={() => setExpanded((value) => !value)} className="hidden rounded-lg p-2 text-slate-400 hover:bg-white/5 hover:text-white md:block">{expanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}</button>
               <button type="button" onClick={() => setOpen(false)} className="rounded-lg p-2 text-slate-400 hover:bg-white/5 hover:text-white"><X className="h-4 w-4" /></button>
             </div>
@@ -115,6 +126,7 @@ export default function TrafficAI() {
               <div className={cn("max-w-[88%] whitespace-pre-wrap rounded-2xl px-3.5 py-3 text-[12px] leading-5", message.role === "user" ? "rounded-br-md bg-amber-300 text-slate-950" : "rounded-tl-md border border-white/8 bg-white/[0.035] text-slate-200")}>
                 {message.content}
                 {message.role === "assistant" && message.mode && <div className="mt-2 border-t border-white/8 pt-1.5 text-[9px] uppercase tracking-wider text-slate-500">{message.mode === "ai" ? `${message.routing?.label || "IA conectada"} · ${message.routing?.provider || "provedor externo"} · ${message.routing?.model || "modelo roteado"}` : "Diagnóstico interno"}</div>}
+                {message.role === "assistant" && message.mode === "internal" && message.diagnostics?.some((item) => item.configured) && <div className="mt-1 text-[9px] normal-case tracking-normal text-red-400/80">{message.diagnostics.filter((item) => item.configured).map((item) => `${item.provider}: ${item.reason || "falhou"}`).join(" · ")}</div>}
               </div>
             </div>)}
             {busy && <div className="flex items-center gap-2.5"><div className="grid h-7 w-7 place-items-center rounded-lg border border-amber-300/20 bg-amber-300/10 text-amber-300"><Bot className="h-3.5 w-3.5" /></div><div className="flex gap-1 rounded-2xl rounded-tl-md border border-white/8 bg-white/[0.035] px-4 py-3"><span className="h-1.5 w-1.5 animate-bounce rounded-full bg-amber-300" /><span className="h-1.5 w-1.5 animate-bounce rounded-full bg-amber-300 [animation-delay:120ms]" /><span className="h-1.5 w-1.5 animate-bounce rounded-full bg-amber-300 [animation-delay:240ms]" /></div></div>}
