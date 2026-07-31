@@ -209,6 +209,15 @@ export default function Dashboard() {
     ACCOUNT_SORT_KEYS
   );
 
+  function selectAccount(accountId: string, open: boolean) {
+    const next = open ? null : accountId;
+    setExpanded(next);
+    const url = new URL(window.location.href);
+    if (next) url.searchParams.set("account", next); else url.searchParams.delete("account");
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    if (next) requestAnimationFrame(() => document.getElementById(`account-${next}`)?.scrollIntoView({ behavior: "smooth", block: "center" }));
+  }
+
   useEffect(() => {
     if (window.location.hash === "#alerts") window.location.replace("/alerts");
   }, []);
@@ -881,9 +890,9 @@ export default function Dashboard() {
                 const linkedGoogle = a.platform === "meta" ? accounts.filter((google) => google.platform === "google" && google.linked_meta_account_id === a.account_id && !google.hidden) : [];
 
                 return (
-                  <div key={a.account_id} className={cn("border-b border-border/30 last:border-b-0 transition-all duration-300", a.hidden && "opacity-55", dimmed && "opacity-5 pointer-events-none")}>
+                  <div id={`account-${a.account_id}`} key={a.account_id} className={cn("border-b border-border/30 last:border-b-0 transition-all duration-300", a.hidden && "opacity-55", dimmed && "opacity-5 pointer-events-none")}>
                     <div
-                      onClick={() => { if (!a.hidden) setExpanded(open ? null : a.account_id); }}
+                      onClick={() => { if (!a.hidden) selectAccount(a.account_id, open); }}
                       className={cn(
                         "grid grid-cols-[1.7fr_0.5fr_0.8fr_1fr_0.9fr_0.7fr_0.9fr_28px_28px] gap-2 px-4 py-3 items-center transition-colors",
                         a.hidden ? "cursor-default" : "cursor-pointer hover:bg-accent/30",
