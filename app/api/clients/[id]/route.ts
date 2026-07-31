@@ -96,3 +96,25 @@ export async function PATCH(req: Request, { params }: RouteContext) {
     return NextResponse.json({ error: response.message }, { status: response.status });
   }
 }
+
+export async function DELETE(_req: Request, { params }: RouteContext) {
+  try {
+    const { id } = await params;
+    if (supabaseEnvMissing()) return NextResponse.json({ error: "Supabase não configurado." }, { status: 503 });
+    const sb = getServiceClient();
+    const { data: client, error: clientError } = await sb.from("clients").select("id").eq("id", id).maybeSingle();
+    if (clientError) throw clientError;
+    if (!client) return NextResponse.json({ error: "Cliente não encontrado." }, { status: 404 });
+
+    // Exclusão operacional: não apaga contas de anúncio nem histórico financeiro.
+    // Os vínculos ficam livres para serem associados ao cliente correto.
+    const { error: unlinkError } = await sb.from("client_ad_accounts").delete().eq("client_id", id);
+    if (unlinkError) throw unlinkError;
+    const { error: archiveError } = await sb.from("clients").update({ status: "archived", updated_at: new Date().toISOString() }).eq("id", id);
+    if (archiveError) throw archiveError;
+    return NextResponse.json({ ok: true, archived: true, client_id: id });
+  } catch (error: any) {
+    const response = apiError(error, "Erro ao excluir cliente.");
+    return NextResponse.json({ error: response.message }, { status: response.status });
+  }
+}

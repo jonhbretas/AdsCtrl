@@ -52,6 +52,7 @@ export default function ClientesPage() {
   const [busy, setBusy] = useState(false);
   const [accountBusy, setAccountBusy] = useState<string | null>(null);
   const [driveBusy, setDriveBusy] = useState<string | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState<string | null>(null);
   const [clientSort, setClientSort] = usePersistentSort<ClientAdminSortKey>("adsctrl:sort:admin-clients", { key: "name", direction: "asc" }, CLIENT_ADMIN_SORT_KEYS);
   const [groupSort, setGroupSort] = usePersistentSort<GroupSortKey>("adsctrl:sort:admin-groups", { key: "name", direction: "asc" }, GROUP_SORT_KEYS);
   const [accountSort, setAccountSort] = usePersistentSort<AccountAdminSortKey>("adsctrl:sort:admin-accounts", { key: "name", direction: "asc" }, ACCOUNT_ADMIN_SORT_KEYS);
@@ -93,6 +94,17 @@ export default function ClientesPage() {
     finally { setDriveBusy(null); }
   }
   async function updateClient(id: string, patch: Partial<ClientRecord>) { setClients((prev) => prev.map((c) => c.id === id ? { ...c, ...patch } : c)); try { const r = await api(`/api/clients/${id}`, { method: "PATCH", body: JSON.stringify(patch) }); const confirmed = Object.keys(patch).reduce((n, k) => { const f = k as keyof ClientRecord; (n as any)[f] = r.client?.[f] ?? patch[f]; return n; }, {} as Partial<ClientRecord>); setClients((prev) => prev.map((c) => c.id === id ? { ...c, ...confirmed } : c)); } catch (e: any) { await load(); setError(e?.message); } }
+  async function deleteClient(client: ClientRecord) {
+    if (!window.confirm(`Excluir o cliente “${client.name}”? As contas serão desvinculadas, mas não serão apagadas. O histórico financeiro será preservado.`)) return;
+    setDeleteBusy(client.id); setError(null);
+    try {
+      await api(`/api/clients/${client.id}`, { method: "DELETE" });
+      setClients((previous) => previous.filter((item) => item.id !== client.id));
+      setExpandedProfiles((previous) => { const next = new Set(previous); next.delete(client.id); return next; });
+      if (clientModal && clientModal.id === client.id) setClientModal(false);
+    } catch (e: any) { setError(e?.message || "Falha ao excluir cliente."); }
+    finally { setDeleteBusy(null); }
+  }
   async function linkClientAccount(client: ClientRecord, accountId: string) { if (!accountId) return; setAccountBusy(`${client.id}:${accountId}`); try { const d = await api(`/api/clients/${client.id}/accounts`, { method: "POST", body: JSON.stringify({ account_id: accountId }) }); setClients((prev) => prev.map((item) => item.id === client.id ? { ...item, ...d.client } : item)); } catch (e: any) { setError(e?.message); } finally { setAccountBusy(null); } }
   async function unlinkClientAccount(client: ClientRecord, accountId: string) { setAccountBusy(`${client.id}:${accountId}`); try { const d = await api(`/api/clients/${client.id}/accounts?account_id=${encodeURIComponent(accountId)}`, { method: "DELETE" }); setClients((prev) => prev.map((item) => item.id === client.id ? { ...item, ...d.client } : item)); } catch (e: any) { setError(e?.message); } finally { setAccountBusy(null); } }
   function updateClientField(client: ClientRecord, field: string, value: any) { const patch: any = {}; patch[field] = value; updateClient(client.id, patch); }
@@ -203,6 +215,7 @@ export default function ClientesPage() {
                     {!profileExpanded && <span className="text-[11px] text-muted-foreground">Clique em + para abrir os dados</span>}
                     <div className="ml-auto flex flex-wrap gap-1.5">
                       <button type="button" onClick={() => openClientModal(client)} className="rounded-md border border-input px-2 py-1 text-[11px] font-semibold hover:bg-muted">Editar cadastro</button>
+                      <button type="button" onClick={() => deleteClient(client)} disabled={deleteBusy === client.id} className="rounded-md border border-red-500/30 px-2 py-1 text-[11px] font-semibold text-red-600 hover:bg-red-500/10 disabled:opacity-50">{deleteBusy === client.id ? "Excluindo…" : "Excluir cliente"}</button>
                       {phone && <a href={`https://wa.me/${phone}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-emerald-500/25 bg-emerald-500/10 px-2 py-1 text-[11px] font-semibold text-emerald-600"><Phone className="h-3 w-3" /> WhatsApp</a>}
                       {client.drive_folder_url && <a href={client.drive_folder_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-sky-500/25 bg-sky-500/10 px-2 py-1 text-[11px] font-semibold text-sky-600"><FolderOpen className="h-3 w-3" /> Drive</a>}
                     </div>
