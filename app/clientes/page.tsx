@@ -65,6 +65,8 @@ export default function ClientesPage() {
   const [newColor, setNewColor] = useState(PALETTE[0]);
   const [clientModal, setClientModal] = useState<ClientRecord | null | false>(false);
   const [clientForm, setClientForm] = useState<Record<string, string>>({});
+  const [cnpjLookup, setCnpjLookup] = useState<{ status: "idle" | "loading" | "error" | "done"; data?: any; error?: string }>({ status: "idle" });
+  const [cnpjConfirmed, setCnpjConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [accountBusy, setAccountBusy] = useState<string | null>(null);
   const [driveBusy, setDriveBusy] = useState<string | null>(null);
@@ -152,6 +154,35 @@ export default function ClientesPage() {
     const next: Record<string, string> = {};
     for (const field of fields) next[field] = client ? String((client as any)[field] ?? "") : field === "person_type" ? "juridica" : field === "address_country" ? "Brasil" : field === "contract_notice_days" ? "30" : "";
     setClientForm(next); setClientModal(client || null);
+    setCnpjLookup({ status: "idle" }); setCnpjConfirmed(Boolean(client));
+  }
+  async function lookupCnpj() {
+    const digits = (clientForm.cnpj || "").replace(/\D/g, "");
+    if (digits.length !== 14) { setCnpjLookup({ status: "error", error: "CNPJ precisa ter 14 dígitos." }); return; }
+    setCnpjLookup({ status: "loading" });
+    try {
+      const r = await fetch(`/api/cnpj/${digits}`);
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "CNPJ não encontrado.");
+      setCnpjLookup({ status: "done", data: d });
+    } catch (e: any) { setCnpjLookup({ status: "error", error: e?.message || "Falha ao consultar CNPJ." }); }
+  }
+  function confirmCnpjData() {
+    const d = cnpjLookup.data; if (!d) return;
+    setClientForm((old) => ({
+      ...old,
+      name: old.name || d.nome_fantasia || d.razao_social || "",
+      legal_name: d.razao_social || old.legal_name,
+      address_zip_code: d.cep || old.address_zip_code,
+      address_street: d.logradouro || old.address_street,
+      address_number: d.numero || old.address_number,
+      address_complement: d.complemento || old.address_complement,
+      address_neighborhood: d.bairro || old.address_neighborhood,
+      address_city: d.municipio || old.address_city,
+      address_state: d.uf || old.address_state,
+      address_country: "Brasil",
+    }));
+    setCnpjConfirmed(true);
   }
   async function saveClientModal(openContract = false) {
     setBusy(true);
@@ -396,6 +427,40 @@ export default function ClientesPage() {
       )}
 
       {clientModal !== false && <Modal title={clientModal ? `Editar cliente: ${clientModal.name}` : "Novo cliente"} onClose={() => setClientModal(false)} wide>
+        {!clientModal && (clientForm.person_type || "juridica") === "juridica" && !cnpjConfirmed ? (
+          <div className="space-y-4">
+            <p className="text-xs text-muted-foreground">Informe o CNPJ pra puxar razão social e endereço direto da Receita Federal. Depois só falta confirmar, e-mail de assinatura e WhatsApp.</p>
+            <div className="flex flex-wrap items-end gap-2">
+              <Field label="CNPJ"><input value={clientForm.cnpj || ""} onChange={(e) => setClientForm((old) => ({ ...old, cnpj: e.target.value }))} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); lookupCnpj(); } }} placeholder="00.000.000/0000-00" className={cn(inputClass, "w-56")} /></Field>
+              <Button size="sm" onClick={lookupCnpj} disabled={cnpjLookup.status === "loading" || !clientForm.cnpj?.trim()}>{cnpjLookup.status === "loading" ? "Buscando…" : "Buscar dados"}</Button>
+            </div>
+            {cnpjLookup.status === "error" && <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-500">{cnpjLookup.error}</div>}
+            {cnpjLookup.status === "done" && cnpjLookup.data && (() => {
+              const d = cnpjLookup.data; const ativa = /ativa/i.test(d.descricao_situacao_cadastral || "");
+              return <div className="space-y-3 rounded-lg border border-emerald-500/25 bg-emerald-500/5 p-4">
+                <div className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-600" /><span className="text-sm font-semibold">Dados encontrados na Receita Federal</span></div>
+                <div className="grid gap-1 text-xs sm:grid-cols-2">
+                  <div><span className="text-muted-foreground">Razão social:</span> {d.razao_social}</div>
+                  {d.nome_fantasia && <div><span className="text-muted-foreground">Nome fantasia:</span> {d.nome_fantasia}</div>}
+                  <div><span className="text-muted-foreground">Situação:</span> <span className={cn("font-semibold", ativa ? "text-emerald-600" : "text-red-500")}>{d.descricao_situacao_cadastral || "—"}</span></div>
+                  <div className="sm:col-span-2"><span className="text-muted-foreground">Endereço:</span> {[d.logradouro, d.numero, d.bairro, d.municipio, d.uf].filter(Boolean).join(", ")}{d.cep ? ` · ${d.cep}` : ""}</div>
+                </div>
+                {!ativa && <div className="text-[11px] font-semibold text-red-500">Situação cadastral não é ATIVA — confira antes de seguir.</div>}
+                <div className="flex flex-wrap justify-end gap-2">
+                  <Button variant="secondary" size="sm" onClick={() => setCnpjLookup({ status: "idle" })}>Buscar outro CNPJ</Button>
+                  <Button size="sm" onClick={confirmCnpjData}>Dados confirmados, continuar</Button>
+                </div>
+              </div>;
+            })()}
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/40 pt-3">
+              <Button variant="secondary" size="sm" onClick={() => setClientModal(false)}>Cancelar</Button>
+              <div className="flex gap-3">
+                <button type="button" onClick={() => setClientForm((old) => ({ ...old, person_type: "fisica" }))} className="text-[11px] text-muted-foreground underline decoration-dotted hover:text-foreground">É pessoa física?</button>
+                <button type="button" onClick={() => setCnpjConfirmed(true)} className="text-[11px] text-muted-foreground underline decoration-dotted hover:text-foreground">Preencher manualmente</button>
+              </div>
+            </div>
+          </div>
+        ) : (
         <div className="space-y-5">
           <p className="text-xs text-muted-foreground">Preencha os dados uma única vez. Eles serão usados no cadastro, no faturamento e na geração da minuta contratual.</p>
           <div>
@@ -443,6 +508,7 @@ export default function ClientesPage() {
             <Button size="sm" onClick={() => saveClientModal(false)} disabled={busy || !clientForm.name?.trim()}>{busy ? "Salvando…" : clientModal ? "Salvar alterações" : "Cadastrar cliente"}</Button>
           </div>
         </div>
+        )}
       </Modal>}
     </div>
   );
