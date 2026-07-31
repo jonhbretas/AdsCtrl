@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { compareSortValues, SortButton, SortState, usePersistentSort } from "@/components/SortableHeader";
+import { compareSortValues, SortButton, usePersistentSort } from "@/components/SortableHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { Search, RefreshCw, AlertTriangle, CheckCircle2, RotateCcw } from "lucide-react";
@@ -15,15 +14,17 @@ type AlertItem = { id: number; account_id: string; account_name: string; level: 
 type AlertSortKey = "level" | "account" | "alert" | "updated";
 const ALERT_SORT_KEYS: readonly AlertSortKey[] = ["level", "account", "alert", "updated"];
 const LEVEL: Record<AlertLevel, { label: string; variant: "destructive" | "warning" | "info" }> = { critical: { label: "Crítico", variant: "destructive" }, warning: { label: "Atenção", variant: "warning" }, info: { label: "Informativo", variant: "info" } };
-const TYPE_LABEL: Record<string, string> = { account_disabled: "status", payment_issue: "pagamento", low_balance: "saldo baixo", spend_drop: "queda de gasto", spend_spike: "pico de gasto", cpa_spike: "CPA em alta", roas_drop: "ROAS em queda", rejected_creative: "criativo reprovado", creative_issue: "erro de veiculação", no_spend: "sem gasto", broad_location: "localização ampla" };
+const TYPE_LABEL: Record<string, string> = { account_disabled: "Status da conta", payment_issue: "Pagamento", low_balance: "Saldo baixo", spend_drop: "Queda de gasto", spend_spike: "Pico de gasto", cpa_spike: "CPA em alta", roas_drop: "ROAS em queda", rejected_creative: "Criativo reprovado", creative_issue: "Erro de veiculação", no_spend: "Sem gasto", broad_location: "Localização ampla" };
 
 export default function AlertsPage() {
   const [active, setActive] = useState<AlertItem[]>([]);
   const [history, setHistory] = useState<AlertItem[]>([]);
   const [tab, setTab] = useState<"active" | "history">("active");
   const [level, setLevel] = useState<"all" | AlertLevel>("all");
+  const [typeFilter, setTypeFilter] = useState("all");
   const [groupFilter, setGroupFilter] = useState("all");
   const [search, setSearch] = useState("");
+  const [groupedMode, setGroupedMode] = useState(true);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -34,79 +35,21 @@ export default function AlertsPage() {
 
   async function setAck(id: number, acknowledged: boolean) { setBusy(id); try { const r = await fetch("/api/alerts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, acknowledged }) }); if (!r.ok) return; if (acknowledged) setActive((p) => p.filter((a) => a.id !== id)); else { setHistory((p) => p.filter((a) => a.id !== id)); await load(); } } finally { setBusy(null); } }
 
-  const allGroups = useMemo(() => {
-    const seen = new Map<string, { name: string; color: string }>();
-    for (const a of [...active, ...history]) { if (a.group) seen.set(a.group.name, a.group); }
-    return Array.from(seen.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [active, history]);
+  const list = tab === "active" ? active : history;
+  const allGroups = useMemo(() => { const seen = new Map<string, { name: string; color: string }>(); for (const a of [...active, ...history]) if (a.group) seen.set(a.group.name, a.group); return Array.from(seen.values()).sort((a, b) => a.name.localeCompare(b.name)); }, [active, history]);
+  const allTypes = useMemo(() => Array.from(new Set([...active, ...history].map((a) => a.type).filter(Boolean))).sort((a, b) => (TYPE_LABEL[a] || a).localeCompare(TYPE_LABEL[b] || b)), [active, history]);
+  const filtered = useMemo(() => list.filter((a) => (level === "all" || a.level === level) && (typeFilter === "all" || a.type === typeFilter) && (groupFilter === "all" || a.group?.name === groupFilter) && (!search.trim() || a.account_name.toLowerCase().includes(search.toLowerCase()) || a.title.toLowerCase().includes(search.toLowerCase()))).sort((a, b) => { const value = (item: AlertItem) => { switch (sort.key) { case "level": return { critical: 0, warning: 1, info: 2 }[item.level]; case "account": return item.account_name; case "alert": return item.title; case "updated": return item.last_seen_at || item.first_seen_at || ""; } }; return compareSortValues(value(a), value(b), sort.direction); }), [list, level, typeFilter, groupFilter, search, sort]);
+  const grouped = useMemo(() => { const result = new Map<string, AlertItem[]>(); for (const alert of filtered) result.set(alert.type || "other", [...(result.get(alert.type || "other") || []), alert]); return Array.from(result.entries()).sort((a, b) => (TYPE_LABEL[a[0]] || a[0]).localeCompare(TYPE_LABEL[b[0]] || b[0])); }, [filtered]);
 
-  const filtered = useMemo(() => {
-    const list = tab === "active" ? active : history;
-    return list.filter((a) => (level === "all" || a.level === level) && (groupFilter === "all" || a.group?.name === groupFilter) && (!search.trim() || a.account_name.toLowerCase().includes(search.toLowerCase()) || a.title.toLowerCase().includes(search.toLowerCase()))).sort((a, b) => { const lv = (va: AlertItem) => { switch (sort.key) { case "level": return { critical: 0, warning: 1, info: 2 }[va.level]; case "account": return va.account_name; case "alert": return va.title; case "updated": return va.last_seen_at || va.first_seen_at || ""; } }; return compareSortValues(lv(a), lv(b), sort.direction); });
-  }, [active, history, tab, level, groupFilter, search, sort]);
+  return <div className="p-4 md:p-6 md:ml-56 pb-20 md:pb-6 space-y-4 animate-fade-in">
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3"><div><h1 className="text-2xl font-bold tracking-tight">Central de Alertas</h1><p className="text-sm text-muted-foreground mt-0.5">Alertas agrupados por tipo para priorizar o que exige ação.</p></div><Button variant="ghost" size="sm" onClick={load} disabled={loading}><RefreshCw className={cn("h-3.5 w-3.5 mr-1", loading && "animate-spin")} /> Atualizar</Button></div>
+    {error && <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-red-500/20 bg-red-500/10 text-sm text-red-500"><AlertTriangle className="h-4 w-4 shrink-0" />{error}</div>}
+    <div className="flex flex-wrap items-center gap-2"><div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-muted/50 border border-border/50">{(["active", "history"] as const).map((item) => <button key={item} onClick={() => setTab(item)} className={cn("px-3 py-1.5 text-xs font-medium rounded-md transition-colors border-none cursor-pointer", tab === item ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground bg-transparent")}>{item === "active" ? "Ativos" : "Histórico"}</button>)}</div><div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-muted/50 border border-border/50">{(["all", "critical", "warning", "info"] as const).map((item) => <button key={item} onClick={() => setLevel(item)} className={cn("px-3 py-1.5 text-xs font-medium rounded-md transition-colors border-none cursor-pointer", level === item ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground bg-transparent")}>{item === "all" ? "Todos" : LEVEL[item]?.label || item}</button>)}</div><select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="h-8 rounded-lg border border-border/50 bg-muted/30 px-2 text-xs"><option value="all">Todos os tipos</option>{allTypes.map((type) => <option key={type} value={type}>{TYPE_LABEL[type] || type}</option>)}</select><button onClick={() => setGroupedMode((value) => !value)} className={cn("h-8 rounded-lg border px-3 text-xs font-semibold transition-colors", groupedMode ? "border-primary/30 bg-primary/10 text-primary" : "border-border/50 text-muted-foreground hover:text-foreground")}>{groupedMode ? "Agrupado por tipo" : "Lista detalhada"}</button>{allGroups.length > 0 && <div className="flex flex-wrap gap-1.5">{["all", ...allGroups.map((group) => group.name)].map((name) => <button key={name} onClick={() => setGroupFilter(name)} className={cn("px-2.5 py-1.5 text-xs font-medium rounded-full border transition-colors", groupFilter === name ? "bg-primary/10 border-primary/30 text-primary" : "border-border/50 text-muted-foreground hover:text-foreground")}>{name === "all" ? "Todos os grupos" : name}</button>)}</div>}<div className="relative flex-1 min-w-[140px] max-w-[220px]"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar conta…" className="w-full h-8 pl-8 pr-3 text-xs rounded-lg border border-border/50 bg-muted/30 focus:outline-none focus:ring-2 focus:ring-ring/30" /></div></div>
+    {loading ? <div className="space-y-2">{[1, 2, 3].map((item) => <Skeleton key={item} className="h-20 rounded-lg" />)}</div> : !filtered.length ? <Card><CardContent className="p-8 text-center text-sm text-muted-foreground">{tab === "active" ? "Nenhum alerta ativo para este filtro." : "Nenhum histórico para este filtro."}</CardContent></Card> : groupedMode ? <div className="space-y-3">{grouped.map(([type, alerts]) => <details key={type} open={alerts.length <= 3 || typeFilter !== "all"} className="group space-y-2"><summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg border border-border/50 bg-card px-3 py-2"><span className="text-sm font-semibold">{TYPE_LABEL[type] || "Outros alertas"}</span><span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold text-muted-foreground">{alerts.length}</span><span className="ml-auto text-[11px] text-muted-foreground group-open:hidden">Clique para abrir</span></summary>{alerts.map((alert) => <AlertCard key={alert.id} alert={alert} tab={tab} busy={busy} onAck={setAck} />)}</details>)}</div> : <div className="space-y-2">{filtered.map((alert) => <AlertCard key={alert.id} alert={alert} tab={tab} busy={busy} onAck={setAck} />)}</div>}
+  </div>;
+}
 
-  return (
-    <div className="p-4 md:p-6 md:ml-56 pb-20 md:pb-6 space-y-4 animate-fade-in">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div><h1 className="text-2xl font-bold tracking-tight">Central de Alertas</h1><p className="text-sm text-muted-foreground mt-0.5">Saldo, pagamento, criativos reprovados e quedas de gasto.</p></div>
-        <Button variant="ghost" size="sm" onClick={load} disabled={loading}><RefreshCw className={cn("h-3.5 w-3.5 mr-1", loading && "animate-spin")} /> Atualizar</Button>
-      </div>
-
-      {error && <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-red-500/20 bg-red-500/10 text-sm text-red-500"><AlertTriangle className="h-4 w-4 shrink-0" />{error}</div>}
-
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-muted/50 border border-border/50">
-          {(["active", "history"] as const).map((t) => <button key={t} onClick={() => setTab(t)} className={cn("px-3 py-1.5 text-xs font-medium rounded-md transition-colors border-none cursor-pointer", tab === t ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground bg-transparent")}>{t === "active" ? "Ativos" : "Histórico"}</button>)}
-        </div>
-          <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-muted/50 border border-border/50">
-            {(["all", "critical", "warning", "info"] as const).map((l) => <button key={l} onClick={() => setLevel(l)} className={cn("px-3 py-1.5 text-xs font-medium rounded-md transition-colors border-none cursor-pointer", level === l ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground bg-transparent")}>{l === "all" ? "Todos" : LEVEL[l]?.label || l}</button>)}
-          </div>
-          {allGroups.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              <button onClick={() => setGroupFilter("all")}
-                className={cn("px-3 py-1.5 text-xs font-medium rounded-full border transition-colors", groupFilter === "all" ? "bg-primary/10 border-primary/30 text-primary" : "border-border/50 text-muted-foreground hover:text-foreground hover:bg-accent/50")}>Todos</button>
-              {allGroups.map((g) => <button key={g.name} onClick={() => setGroupFilter(g.name)}
-                className={cn("px-3 py-1.5 text-xs font-medium rounded-full border transition-colors", groupFilter === g.name ? "border-primary/30" : "border-border/50 text-muted-foreground hover:text-foreground hover:bg-accent/50")}
-                style={groupFilter === g.name ? { backgroundColor: g.color + "18", borderColor: g.color + "40", color: g.color } : undefined}>
-                <span className="inline-block w-1.5 h-1.5 rounded-full mr-1.5" style={{ backgroundColor: g.color }} />
-                {g.name}
-              </button>)}
-            </div>
-          )}
-        <div className="relative flex-1 min-w-[140px] max-w-[220px]">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-          <input value={search} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)} placeholder="Buscar…" className="w-full h-8 pl-8 pr-3 text-xs rounded-lg border border-border/50 bg-muted/30 focus:outline-none focus:ring-2 focus:ring-ring/30" />
-        </div>
-      </div>
-
-      {loading ? (
-        <div className="space-y-2">{[1,2,3].map((i) => <Skeleton key={i} className="h-20 rounded-lg" />)}</div>
-      ) : filtered.length === 0 ? (
-        <Card><CardContent className="p-8 text-center text-sm text-muted-foreground">{tab === "active" ? "Nenhum alerta ativo." : "Nenhum histórico."}</CardContent></Card>
-      ) : (
-        <div className="space-y-2">
-          {filtered.map((a) => {
-            const colors = { critical: "border-l-red-500 bg-red-500/5", warning: "border-l-amber-500 bg-amber-500/5", info: "border-l-sky-500 bg-sky-500/5" };
-            return (
-              <div key={a.id} className={cn("border-l-2 rounded-lg p-4", colors[a.level])}>
-                <div className="flex items-center gap-2 mb-1">
-                  <Badge variant={LEVEL[a.level].variant} className="text-[10px]">{LEVEL[a.level].label}</Badge>
-                  {a.type && TYPE_LABEL[a.type] && <Badge variant="outline" className="text-[10px]">{TYPE_LABEL[a.type]}</Badge>}
-                  {a.resolved && <Badge variant="success" className="text-[10px] ml-auto"><CheckCircle2 className="h-3 w-3 mr-0.5" />Resolvido</Badge>}
-                </div>
-                <div className="text-sm font-semibold">{a.account_name}{a.group && <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full font-medium" style={{ backgroundColor: a.group.color + "20", color: a.group.color }}>{a.group.name}</span>}</div>
-                <div className="text-xs font-medium text-foreground/80 mt-0.5">{a.title}</div>
-                <div className="text-[11px] text-muted-foreground mt-0.5">{a.detail}</div>
-                <div className="flex items-center gap-3 mt-2 text-[11px] text-muted-foreground">
-                  <span>{new Date(a.last_seen_at || a.first_seen_at || "").toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
-                  {tab === "active" && !a.acknowledged && <button onClick={() => setAck(a.id, true)} disabled={busy === a.id} className="text-primary hover:underline bg-transparent border-none cursor-pointer font-semibold"><CheckCircle2 className="h-3 w-3 inline mr-0.5" />Ciente</button>}
-                  {tab === "history" && a.acknowledged && !a.resolved && <button onClick={() => setAck(a.id, false)} disabled={busy === a.id} className="text-primary hover:underline bg-transparent border-none cursor-pointer font-semibold"><RotateCcw className="h-3 w-3 inline mr-0.5" />Reabrir</button>}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
+function AlertCard({ alert, tab, busy, onAck }: { alert: AlertItem; tab: "active" | "history"; busy: number | null; onAck: (id: number, acknowledged: boolean) => void }) {
+  const colors = { critical: "border-l-red-500 bg-red-500/5", warning: "border-l-amber-500 bg-amber-500/5", info: "border-l-sky-500 bg-sky-500/5" };
+  return <div className={cn("border-l-2 rounded-lg p-4", colors[alert.level])}><div className="flex items-center gap-2 mb-1"><Badge variant={LEVEL[alert.level].variant} className="text-[10px]">{LEVEL[alert.level].label}</Badge>{alert.type && <Badge variant="outline" className="text-[10px]">{TYPE_LABEL[alert.type] || alert.type}</Badge>}{alert.resolved && <Badge variant="success" className="text-[10px] ml-auto"><CheckCircle2 className="h-3 w-3 mr-0.5" />Resolvido</Badge>}</div><div className="text-sm font-semibold">{alert.account_name || `Conta sem nome · ${alert.account_id}`}{alert.group && <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full font-medium" style={{ backgroundColor: alert.group.color + "20", color: alert.group.color }}>{alert.group.name}</span>}</div><div className="text-xs font-medium text-foreground/80 mt-0.5">{alert.title}</div><div className="text-[11px] text-muted-foreground mt-0.5">{alert.detail}</div><div className="flex items-center gap-3 mt-2 text-[11px] text-muted-foreground"><span>{new Date(alert.last_seen_at || alert.first_seen_at || "").toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>{tab === "active" && !alert.acknowledged && <button onClick={() => onAck(alert.id, true)} disabled={busy === alert.id} className="text-primary hover:underline bg-transparent border-none cursor-pointer font-semibold"><CheckCircle2 className="h-3 w-3 inline mr-0.5" />Ciente</button>}{tab === "history" && alert.acknowledged && !alert.resolved && <button onClick={() => onAck(alert.id, false)} disabled={busy === alert.id} className="text-primary hover:underline bg-transparent border-none cursor-pointer font-semibold"><RotateCcw className="h-3 w-3 inline mr-0.5" />Reabrir</button>}</div></div>;
 }
