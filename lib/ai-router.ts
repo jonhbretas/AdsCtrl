@@ -78,9 +78,14 @@ async function askOpenCode(prompt: string, key: string, model: string, base: str
       : shape === "messages"
         ? { model, max_tokens: 1200, messages: [{ role: "user", content: prompt }] }
         : { model, messages: [{ role: "user", content: prompt }] };
+  // /messages segue o formato nativo da Anthropic: autentica com x-api-key,
+  // não com Authorization Bearer — usar Bearer aí devolve 401 silencioso.
+  const headers: Record<string, string> = shape === "messages"
+    ? { "x-api-key": key, "anthropic-version": "2023-06-01", "Content-Type": "application/json" }
+    : { Authorization: `Bearer ${key}`, "Content-Type": "application/json" };
   const response = await fetch(endpoint, {
     method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(60_000),
   });
