@@ -27,7 +27,7 @@ interface SettingsPayload { stored: Partial<Record<SettingKey, string>>; env: Re
 interface Integration { key: string; label: string; state: "ok" | "warn" | "off" | "error"; detail: string; hint?: string; }
 
 const IDENTITY_FIELDS: { key: SettingKey; label: string; placeholder: string; help: string }[] = [
-  { key: "brand_name", label: "Nome do painel", placeholder: "AdsCtrl", help: "Aparece na barra lateral, na aba do navegador e assina o que o cliente vê." },
+  { key: "brand_name", label: "Nome do painel", placeholder: "Assertivus Dash", help: "Aparece na barra lateral, na aba do navegador e assina o que o cliente vê." },
   { key: "brand_description", label: "Descrição", placeholder: "Cockpit de performance em mídia paga", help: "Texto de apoio na aba do navegador e no login." },
 ];
 

@@ -18,7 +18,7 @@ export default function BrandMark({
       height={size}
       viewBox="0 0 100 100"
       role="img"
-      aria-label="AdsCtrl"
+      aria-label="Assertivus Dash"
       style={{ display: "block", flexShrink: 0 }}
     >
       <rect width="100" height="100" rx="22" fill={background} />

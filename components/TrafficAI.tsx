@@ -5,7 +5,9 @@ import { usePathname } from "next/navigation";
 import { Bot, BrainCircuit, ChevronDown, Maximize2, Minimize2, Send, Sparkles, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type Message = { role: "user" | "assistant"; content: string; mode?: "ai" | "internal" };
+type Need = "auto" | "fast" | "analysis" | "strategic" | "creative";
+type Routing = { label: string; automatic: boolean; provider: string; model: string };
+type Message = { role: "user" | "assistant"; content: string; mode?: "ai" | "internal"; routing?: Routing };
 type Account = { account_id: string; name: string; platform: "meta" | "google"; hidden?: boolean };
 
 const QUICK_ACTIONS = [
@@ -15,6 +17,7 @@ const QUICK_ACTIONS = [
   "Resuma os alertas e priorize as ações",
 ];
 const HIDDEN_PREFIXES = ["/login", "/report/", "/r/", "/c/", "/contratos/"];
+const NEEDS: { value: Need; label: string }[] = [{ value: "auto", label: "Roteamento automático" }, { value: "fast", label: "Resposta rápida" }, { value: "analysis", label: "Análise de performance" }, { value: "strategic", label: "Estratégia profunda" }, { value: "creative", label: "Criativos e copy" }];
 
 export default function TrafficAI() {
   const pathname = usePathname();
@@ -24,8 +27,9 @@ export default function TrafficAI() {
   const [busy, setBusy] = useState(false);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [accountId, setAccountId] = useState("");
+  const [need, setNeed] = useState<Need>("auto");
   const [alertCount, setAlertCount] = useState(0);
-  const [messages, setMessages] = useState<Message[]>([{ role: "assistant", content: "Estou conectado ao contexto do AdsCtrl. Selecione uma conta ou consulte toda a operação para começar." }]);
+  const [messages, setMessages] = useState<Message[]>([{ role: "assistant", content: "Estou conectada ao contexto do Assertivus Dash. Selecione uma conta ou consulte toda a operação para começar." }]);
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -65,10 +69,10 @@ export default function TrafficAI() {
     const nextMessages: Message[] = [...messages, { role: "user", content: question }];
     setMessages(nextMessages); setInput(""); setBusy(true);
     try {
-      const response = await fetch("/api/ai/assistant", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: question, pathname, account_id: accountId || null, history: messages.slice(-6) }) });
+      const response = await fetch("/api/ai/assistant", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: question, pathname, account_id: accountId || null, need, history: messages.slice(-6) }) });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Falha ao consultar o Traffic AI.");
-      setMessages((current) => [...current, { role: "assistant", content: data.answer, mode: data.mode }]);
+      if (!response.ok) throw new Error(data.error || "Falha ao consultar a Assertivus IA.");
+      setMessages((current) => [...current, { role: "assistant", content: data.answer, mode: data.mode, routing: data.routing }]);
     } catch (error: any) {
       setMessages((current) => [...current, { role: "assistant", content: error?.message || "Não consegui concluir esta análise agora." }]);
     } finally { setBusy(false); }
@@ -78,7 +82,7 @@ export default function TrafficAI() {
   const selected = accounts.find((account) => account.account_id === accountId);
 
   return <>
-    <button type="button" onClick={() => setOpen(true)} aria-label="Abrir Traffic AI" className={cn("fixed z-40 grid h-14 w-14 place-items-center rounded-full border border-amber-300/35 bg-[radial-gradient(circle_at_35%_25%,#f5d77c,#9a6b16_72%)] text-slate-950 shadow-[0_0_0_6px_rgba(217,168,63,0.08),0_18px_45px_rgba(0,0,0,0.4)] transition-all hover:scale-105 hover:shadow-[0_0_0_8px_rgba(217,168,63,0.12),0_18px_55px_rgba(0,0,0,0.5)]", open && "pointer-events-none scale-90 opacity-0", "bottom-20 right-4 md:bottom-6 md:right-6")}>
+    <button type="button" onClick={() => setOpen(true)} aria-label="Abrir Assertivus IA" className={cn("fixed z-40 grid h-14 w-14 place-items-center rounded-full border border-amber-300/35 bg-[radial-gradient(circle_at_35%_25%,#f5d77c,#9a6b16_72%)] text-slate-950 shadow-[0_0_0_6px_rgba(217,168,63,0.08),0_18px_45px_rgba(0,0,0,0.4)] transition-all hover:scale-105 hover:shadow-[0_0_0_8px_rgba(217,168,63,0.12),0_18px_55px_rgba(0,0,0,0.5)]", open && "pointer-events-none scale-90 opacity-0", "bottom-20 right-4 md:bottom-6 md:right-6")}>
       <BrainCircuit className="h-6 w-6" />
       {alertCount > 0 && <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full border-2 border-background bg-red-500 px-1 text-[9px] font-bold text-white">{Math.min(alertCount, 99)}</span>}
     </button>
@@ -89,16 +93,13 @@ export default function TrafficAI() {
           <header className="relative border-b border-white/8 bg-[radial-gradient(circle_at_top_left,rgba(217,168,63,0.13),transparent_44%)] px-4 py-3.5">
             <div className="flex items-center gap-3">
               <div className="grid h-9 w-9 place-items-center rounded-xl border border-amber-300/25 bg-amber-300/10 text-amber-300"><BrainCircuit className="h-5 w-5" /></div>
-              <div className="min-w-0 flex-1"><div className="flex items-center gap-2"><span className="font-semibold">Traffic AI</span><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" /></div><div className="truncate text-[10px] text-slate-400">Análise contextual · dados atualizados a cada consulta</div></div>
+              <div className="min-w-0 flex-1"><div className="flex items-center gap-2"><span className="font-semibold">Assertivus IA</span><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" /></div><div className="truncate text-[10px] text-slate-400">Análise contextual · roteamento inteligente de modelos</div></div>
               <button type="button" onClick={() => setExpanded((value) => !value)} className="hidden rounded-lg p-2 text-slate-400 hover:bg-white/5 hover:text-white md:block">{expanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}</button>
               <button type="button" onClick={() => setOpen(false)} className="rounded-lg p-2 text-slate-400 hover:bg-white/5 hover:text-white"><X className="h-4 w-4" /></button>
             </div>
-            <div className="relative mt-3">
-              <select value={accountId} onChange={(event) => changeAccount(event.target.value)} className="h-9 w-full appearance-none rounded-lg border border-white/10 bg-black/20 px-3 pr-8 text-xs text-slate-200 outline-none focus:border-amber-300/35">
-                <option value="">Toda a operação</option>
-                {accounts.map((account) => <option key={account.account_id} value={account.account_id}>{account.platform === "google" ? "Google" : "Meta"} · {account.name}</option>)}
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <div className="relative"><select value={accountId} onChange={(event) => changeAccount(event.target.value)} className="h-9 w-full appearance-none rounded-lg border border-white/10 bg-black/20 px-3 pr-8 text-xs text-slate-200 outline-none focus:border-amber-300/35"><option value="">Toda a operação</option>{accounts.map((account) => <option key={account.account_id} value={account.account_id}>{account.platform === "google" ? "Google" : "Meta"} · {account.name}</option>)}</select><ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" /></div>
+              <div className="relative"><select value={need} onChange={(event) => setNeed(event.target.value as Need)} className="h-9 w-full appearance-none rounded-lg border border-white/10 bg-black/20 px-3 pr-8 text-xs text-slate-200 outline-none focus:border-amber-300/35">{NEEDS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" /></div>
             </div>
           </header>
 
@@ -113,7 +114,7 @@ export default function TrafficAI() {
               {message.role === "assistant" && <div className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-amber-300/20 bg-amber-300/10 text-amber-300"><Bot className="h-3.5 w-3.5" /></div>}
               <div className={cn("max-w-[88%] whitespace-pre-wrap rounded-2xl px-3.5 py-3 text-[12px] leading-5", message.role === "user" ? "rounded-br-md bg-amber-300 text-slate-950" : "rounded-tl-md border border-white/8 bg-white/[0.035] text-slate-200")}>
                 {message.content}
-                {message.role === "assistant" && message.mode && <div className="mt-2 border-t border-white/8 pt-1.5 text-[9px] uppercase tracking-wider text-slate-500">{message.mode === "ai" ? "IA conectada" : "Diagnóstico interno"}</div>}
+                {message.role === "assistant" && message.mode && <div className="mt-2 border-t border-white/8 pt-1.5 text-[9px] uppercase tracking-wider text-slate-500">{message.mode === "ai" ? `${message.routing?.label || "IA conectada"} · ${message.routing?.provider || "provedor externo"} · ${message.routing?.model || "modelo roteado"}` : "Diagnóstico interno"}</div>}
               </div>
             </div>)}
             {busy && <div className="flex items-center gap-2.5"><div className="grid h-7 w-7 place-items-center rounded-lg border border-amber-300/20 bg-amber-300/10 text-amber-300"><Bot className="h-3.5 w-3.5" /></div><div className="flex gap-1 rounded-2xl rounded-tl-md border border-white/8 bg-white/[0.035] px-4 py-3"><span className="h-1.5 w-1.5 animate-bounce rounded-full bg-amber-300" /><span className="h-1.5 w-1.5 animate-bounce rounded-full bg-amber-300 [animation-delay:120ms]" /><span className="h-1.5 w-1.5 animate-bounce rounded-full bg-amber-300 [animation-delay:240ms]" /></div></div>}

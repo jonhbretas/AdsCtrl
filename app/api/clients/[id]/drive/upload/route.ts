@@ -21,7 +21,7 @@ export async function POST(req: Request, { params }: RouteContext) {
     if (!client) return NextResponse.json({ error: "Cliente não encontrado." }, { status: 404 });
     if (!client.drive_folder_url) return NextResponse.json({ error: "Crie ou vincule a pasta do Drive antes de enviar arquivos." }, { status: 400 });
     const uploaded = await uploadClientDriveFile(client.drive_folder_url, category, file);
-    const { data: document, error: documentError } = await sb.from("client_documents").insert({ client_id: id, category, name: uploaded.name || file.name, drive_file_url: uploaded.webViewLink || `https://drive.google.com/open?id=${uploaded.id}`, notes: "Enviado pelo AdsCtrl." }).select("*").single();
+    const { data: document, error: documentError } = await sb.from("client_documents").insert({ client_id: id, category, name: uploaded.name || file.name, drive_file_url: uploaded.webViewLink || `https://drive.google.com/open?id=${uploaded.id}`, notes: "Enviado pelo Assertivus Dash." }).select("*").single();
     if (documentError) throw documentError;
     return NextResponse.json({ document, file: uploaded }, { status: 201 });
   } catch (error: any) {

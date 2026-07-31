@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getServiceClient, supabaseEnvMissing } from "@/lib/supabase";
+import { AI_NEEDS, AI_NEED_LABELS, askAiProvider, routeNeed, type AiNeed } from "@/lib/ai-router";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -134,47 +135,39 @@ function internalAnalysis(context: any, question: string) {
   return lines.join("\n");
 }
 
-function extractResponseText(payload: any): string | null {
-  if (typeof payload?.output_text === "string" && payload.output_text.trim()) return payload.output_text.trim();
-  for (const item of payload?.output || []) for (const content of item?.content || []) if (typeof content?.text === "string" && content.text.trim()) return content.text.trim();
-  return null;
-}
-
 export async function POST(req: Request) {
   try {
     if (supabaseEnvMissing()) return NextResponse.json({ error: "Supabase não configurado." }, { status: 503 });
-    const body = await req.json().catch(() => null) as { message?: unknown; pathname?: unknown; account_id?: unknown; history?: unknown } | null;
+    const body = await req.json().catch(() => null) as { message?: unknown; pathname?: unknown; account_id?: unknown; history?: unknown; need?: unknown } | null;
     const message = typeof body?.message === "string" ? body.message.trim().slice(0, 4000) : "";
-    if (!message) return NextResponse.json({ error: "Escreva uma pergunta para o Traffic AI." }, { status: 400 });
+    if (!message) return NextResponse.json({ error: "Escreva uma pergunta para a Assertivus IA." }, { status: 400 });
     const accountId = typeof body?.account_id === "string" ? body.account_id.trim().slice(0, 100) : null;
     const pathname = typeof body?.pathname === "string" ? body.pathname.slice(0, 160) : "/";
+    const requestedNeed: AiNeed = AI_NEEDS.includes(body?.need as AiNeed) ? body!.need as AiNeed : "auto";
+    const routed = routeNeed(requestedNeed, message, pathname);
     const history = Array.isArray(body?.history) ? (body!.history as ChatMessage[]).filter((item) => item && ["user", "assistant"].includes(item.role) && typeof item.content === "string").slice(-6).map((item) => ({ role: item.role, content: item.content.slice(0, 2000) })) : [];
     const context = await buildContext(accountId);
     const fallback = internalAnalysis(context, message);
-    const apiKey = process.env.OPENAI_API_KEY?.trim();
-
-    if (!apiKey) return NextResponse.json({ answer: fallback, mode: "internal", context: { scope: context.scope, generated_at: context.generated_at, alerts: context.alerts.length } });
-
     const prompt = [
-      "Você é o Traffic AI, copiloto estratégico de uma agência de tráfego pago.",
+      "Você é a Assertivus IA, copiloto estratégico da Assertivus para gestão de tráfego pago.",
       "Responda em português do Brasil, de forma direta, com diagnóstico, evidências numéricas e próxima ação.",
       "Diferencie fato, hipótese e recomendação. Nunca afirme que executou uma mudança. Alterações exigem aprovação humana.",
       "Não invente métricas ausentes. A verba de mídia não é receita da agência.",
+      `Tipo de necessidade escolhido: ${AI_NEED_LABELS[routed.need]}.`,
       `Tela atual: ${pathname}`,
       `Contexto operacional JSON: ${JSON.stringify(context)}`,
       history.length ? `Conversa recente: ${JSON.stringify(history)}` : "",
       `Pergunta: ${message}`,
     ].filter(Boolean).join("\n\n");
 
-    const response = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: process.env.OPENAI_MODEL?.trim() || "gpt-5.6-luna", input: prompt, store: false }),
-      signal: AbortSignal.timeout(45_000),
+    const providerResult = await askAiProvider(prompt, routed.need);
+    return NextResponse.json({
+      answer: providerResult?.answer || fallback,
+      mode: providerResult ? "ai" : "internal",
+      warning: providerResult ? null : "Os provedores externos ficaram indisponíveis; usei o diagnóstico interno.",
+      routing: { requested: requestedNeed, need: routed.need, label: AI_NEED_LABELS[routed.need], automatic: routed.automatic, provider: providerResult?.provider || "internal", model: providerResult?.model || "diagnóstico interno" },
+      context: { scope: context.scope, generated_at: context.generated_at, alerts: context.alerts.length },
     });
-    const payload = await response.json().catch(() => ({}));
-    const answer = response.ok ? extractResponseText(payload) : null;
-    return NextResponse.json({ answer: answer || fallback, mode: answer ? "ai" : "internal", warning: answer ? null : "A IA externa ficou indisponível; usei o diagnóstico interno.", context: { scope: context.scope, generated_at: context.generated_at, alerts: context.alerts.length } });
   } catch (error: any) {
     return NextResponse.json({ error: error?.message || "Falha ao gerar diagnóstico." }, { status: 500 });
   }

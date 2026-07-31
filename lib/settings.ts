@@ -87,7 +87,7 @@ const ENV_BY_KEY: Record<SettingKey, string> = {
 };
 
 const DEFAULTS: Partial<Record<SettingKey, string>> = {
-  brand_name: "AdsCtrl",
+  brand_name: "Assertivus Dash",
   brand_description: "Cockpit de performance em mídia paga",
   report_hour: String(DEFAULT_REPORT_HOUR),
 };
