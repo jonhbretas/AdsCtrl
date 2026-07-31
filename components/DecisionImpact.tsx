@@ -43,7 +43,7 @@ const brDate = (iso: string) => iso.split("-").reverse().join("-");
 
 // Variação relativa. `betterWhenUp` inverte o julgamento para custo.
 function Delta({ from, to, betterWhenUp = true }: { from: number; to: number; betterWhenUp?: boolean }) {
-  if (!from && !to) return <span style={{ color: "#c4c8ce", fontSize: 10.5 }}>—</span>;
+  if (!from && !to) return <span style={{ color: "var(--color-muted-foreground)", fontSize: 10.5 }}>—</span>;
   // Saindo do zero não existe porcentagem: o sinal já diz tudo, e "novo" ao
   // lado de "0 → 1" só repete o que o número mostra.
   if (!from) {
@@ -52,7 +52,7 @@ function Delta({ from, to, betterWhenUp = true }: { from: number; to: number; be
     );
   }
   const pct = ((to - from) / from) * 100;
-  if (Math.abs(pct) < 0.5) return <span style={{ color: "#8a919e", fontSize: 10.5 }}>igual</span>;
+  if (Math.abs(pct) < 0.5) return <span style={{ color: "var(--color-muted-foreground)", fontSize: 10.5 }}>igual</span>;
   const up = pct > 0;
   const good = betterWhenUp ? up : !up;
   return (
@@ -65,17 +65,17 @@ function Delta({ from, to, betterWhenUp = true }: { from: number; to: number; be
 function WindowHead({ label, window: w, currency }: { label: string; window: ImpactWindow; currency: string }) {
   return (
     <div>
-      <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0.3, textTransform: "uppercase", color: "#8a919e" }}>
+      <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0.3, textTransform: "uppercase", color: "var(--color-muted-foreground)" }}>
         {label}
       </div>
-      <div style={{ fontSize: 10.5, color: "#a0a4ad" }}>
+      <div style={{ fontSize: 10.5, color: "var(--color-muted-foreground)" }}>
         {brDate(w.since)} a {brDate(w.until)} · {w.days} dias
       </div>
       <div style={{ fontSize: 13, fontWeight: 750, marginTop: 3 }}>
         {money(w.spendPerDay, currency)}
-        <span style={{ fontSize: 10, fontWeight: 500, color: "#8a919e" }}> /dia</span>
+        <span style={{ fontSize: 10, fontWeight: 500, color: "var(--color-muted-foreground)" }}> /dia</span>
       </div>
-      <div style={{ fontSize: 10, color: "#a0a4ad" }}>{money(w.spend, currency)} no total</div>
+      <div style={{ fontSize: 10, color: "var(--color-muted-foreground)" }}>{money(w.spend, currency)} no total</div>
     </div>
   );
 }
@@ -130,17 +130,17 @@ export default function DecisionImpact({
   }, [accountId, since, until, compare?.since, compare?.until]);
 
   if (loading) {
-    return <div style={{ padding: "14px 2px", fontSize: 12, color: "#9aa1ad" }}>Calculando o impacto…</div>;
+    return <div style={{ padding: "14px 2px", fontSize: 12, color: "var(--color-muted-foreground)" }}>Calculando o impacto…</div>;
   }
   if (error) {
     return (
-      <div style={{ margin: "8px 0", padding: "9px 11px", borderRadius: 8, background: "#fdf0ef", border: "1px solid #f0cfcc", color: "#a3372f", fontSize: 12 }}>
+      <div style={{ margin: "8px 0", padding: "9px 11px", borderRadius: 8, background: "color-mix(in srgb, var(--color-destructive) 10%, transparent)", border: "1px solid color-mix(in srgb, var(--color-destructive) 25%, transparent)", color: "var(--color-destructive)", fontSize: 12 }}>
         {error}
       </div>
     );
   }
   if (!data) {
-    return <div style={{ padding: "12px 2px", fontSize: 12, color: "#9aa1ad" }}>{note || "Sem dados de impacto."}</div>;
+    return <div style={{ padding: "12px 2px", fontSize: 12, color: "var(--color-muted-foreground)" }}>{note || "Sem dados de impacto."}</div>;
   }
 
   const families = sortFamilies(data.families);
@@ -149,13 +149,13 @@ export default function DecisionImpact({
   return (
     <div style={{ marginTop: 4 }}>
       {/* comparativo do período */}
-      <div style={{ border: "1px solid #e7e9ef", borderRadius: 10, padding: "11px 12px", background: "#fcfcfd" }}>
+      <div style={{ border: "1px solid var(--color-border)", borderRadius: 10, padding: "11px 12px", background: "var(--color-card)" }}>
         <div style={{ display: "flex", gap: 22, flexWrap: "wrap", marginBottom: 10 }}>
           <WindowHead label="Período" window={current} currency={currency} />
           <WindowHead label="Comparado com" window={previous} currency={currency} />
           <div style={{ flex: 1 }} />
           <div style={{ alignSelf: "flex-end", textAlign: "right" }}>
-            <div style={{ fontSize: 10, color: "#8a919e" }}>investimento por dia</div>
+            <div style={{ fontSize: 10, color: "var(--color-muted-foreground)" }}>investimento por dia</div>
             <Delta from={previous.spendPerDay} to={current.spendPerDay} />
           </div>
         </div>
@@ -163,7 +163,7 @@ export default function DecisionImpact({
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11.5, minWidth: 460 }}>
             <thead>
-              <tr style={{ color: "#8a919e", fontSize: 9.5, textTransform: "uppercase", letterSpacing: 0.3 }}>
+              <tr style={{ color: "var(--color-muted-foreground)", fontSize: 9.5, textTransform: "uppercase", letterSpacing: 0.3 }}>
                 <th style={{ textAlign: "left", padding: "0 6px 6px", fontWeight: 800 }}>Resultado</th>
                 <th style={{ textAlign: "right", padding: "0 6px 6px", fontWeight: 800 }}>Período</th>
                 <th style={{ textAlign: "right", padding: "0 6px 6px", fontWeight: 800 }}>Anterior</th>
@@ -178,12 +178,12 @@ export default function DecisionImpact({
                 const costNow = current.costPer[family];
                 const costBefore = previous.costPer[family];
                 return (
-                  <tr key={family} style={{ borderTop: "1px solid #f0f1f5" }}>
+                  <tr key={family} style={{ borderTop: "1px solid var(--color-border)" }}>
                     <td style={{ padding: "7px 6px", fontWeight: 600 }}>{familyLabel(family)}</td>
                     <td style={{ padding: "7px 6px", textAlign: "right", fontWeight: 700 }}>{now}</td>
-                    <td style={{ padding: "7px 6px", textAlign: "right", color: "#7c8493" }}>{before}</td>
+                    <td style={{ padding: "7px 6px", textAlign: "right", color: "var(--color-muted-foreground)" }}>{before}</td>
                     <td style={{ padding: "7px 6px", textAlign: "right", whiteSpace: "nowrap" }}>
-                      {dec(current.resultsPerDay[family] || 0)} <span style={{ color: "#c4c8ce" }}>vs</span>{" "}
+                      {dec(current.resultsPerDay[family] || 0)} <span style={{ color: "var(--color-muted-foreground)" }}>vs</span>{" "}
                       {dec(previous.resultsPerDay[family] || 0)}{" "}
                       <Delta from={previous.resultsPerDay[family] || 0} to={current.resultsPerDay[family] || 0} />
                     </td>
@@ -204,7 +204,7 @@ export default function DecisionImpact({
       {/* decisões, com antes/depois */}
       {data.decisions.length > 0 && (
         <div style={{ marginTop: 12 }}>
-          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0.35, textTransform: "uppercase", color: "#8a919e", marginBottom: 7 }}>
+          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0.35, textTransform: "uppercase", color: "var(--color-muted-foreground)", marginBottom: 7 }}>
             Antes e depois de cada decisão
           </div>
           <div style={{ display: "grid", gap: 8 }}>
@@ -216,10 +216,10 @@ export default function DecisionImpact({
       )}
 
       {(note || data.note) && (
-        <div style={{ marginTop: 10, fontSize: 11, color: "#8a919e" }}>{note || data.note}</div>
+        <div style={{ marginTop: 10, fontSize: 11, color: "var(--color-muted-foreground)" }}>{note || data.note}</div>
       )}
 
-      <div style={{ marginTop: 10, fontSize: 10.5, color: "#a0a4ad", lineHeight: 1.5 }}>
+      <div style={{ marginTop: 10, fontSize: 10.5, color: "var(--color-muted-foreground)", lineHeight: 1.5 }}>
         Comparação, não prova de causa: sazonalidade, concorrência, oferta e o aprendizado da
         plataforma mudam junto. Serve para levantar a pergunta certa, não para fechar a conclusão.
       </div>
@@ -237,19 +237,19 @@ function DecisionCard({ decision, currency }: { decision: DecisionImpactData; cu
   ).slice(0, 4);
 
   return (
-    <div style={{ border: "1px solid #e7e9ef", borderRadius: 10, padding: "10px 12px" }}>
+    <div style={{ border: "1px solid var(--color-border)", borderRadius: 10, padding: "10px 12px", background: "var(--color-card)" }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap", marginBottom: 7 }}>
         <span style={{ fontSize: 12, fontWeight: 750 }}>{brDate(decision.date)}</span>
-        <span style={{ fontSize: 10.5, color: "#a0a4ad" }}>
+        <span style={{ fontSize: 10.5, color: "var(--color-muted-foreground)" }}>
           {decision.windowDays} dias antes vs {decision.windowDays} depois
         </span>
       </div>
 
       <div style={{ display: "grid", gap: 3, marginBottom: 9 }}>
         {decision.changes.map((change, i) => (
-          <div key={i} style={{ fontSize: 11.5, color: "#4a5160" }}>
+          <div key={i} style={{ fontSize: 11.5, color: "var(--color-foreground)" }}>
             <span style={{ fontWeight: 650 }}>{change.label}</span>
-            {change.objectName && <span style={{ color: "#8a919e" }}> · {change.objectName}</span>}
+            {change.objectName && <span style={{ color: "var(--color-muted-foreground)" }}> · {change.objectName}</span>}
             {change.to && (
               <span>
                 {" — "}
@@ -264,9 +264,9 @@ function DecisionCard({ decision, currency }: { decision: DecisionImpactData; cu
 
       <div style={{ display: "flex", gap: 18, flexWrap: "wrap", fontSize: 11.5 }}>
         <div>
-          <div style={{ fontSize: 9.5, color: "#8a919e", textTransform: "uppercase", fontWeight: 800 }}>Investido/dia</div>
+          <div style={{ fontSize: 9.5, color: "var(--color-muted-foreground)", textTransform: "uppercase", fontWeight: 800 }}>Investido/dia</div>
           <div style={{ whiteSpace: "nowrap" }}>
-            {money(before.spendPerDay, currency)} <span style={{ color: "#c4c8ce" }}>→</span>{" "}
+            {money(before.spendPerDay, currency)} <span style={{ color: "var(--color-muted-foreground)" }}>→</span>{" "}
             <strong>{money(after.spendPerDay, currency)}</strong>{" "}
             <Delta from={before.spendPerDay} to={after.spendPerDay} />
           </div>
@@ -278,14 +278,14 @@ function DecisionCard({ decision, currency }: { decision: DecisionImpactData; cu
           const ca = after.costPer[family];
           return (
             <div key={family}>
-              <div style={{ fontSize: 9.5, color: "#8a919e", textTransform: "uppercase", fontWeight: 800 }}>
+              <div style={{ fontSize: 9.5, color: "var(--color-muted-foreground)", textTransform: "uppercase", fontWeight: 800 }}>
                 {familyLabel(family)}
               </div>
               <div style={{ whiteSpace: "nowrap" }}>
-                {b} <span style={{ color: "#c4c8ce" }}>→</span> <strong>{a}</strong>{" "}
+                {b} <span style={{ color: "var(--color-muted-foreground)" }}>→</span> <strong>{a}</strong>{" "}
                 <Delta from={b} to={a} />
               </div>
-              <div style={{ fontSize: 10, color: "#a0a4ad", whiteSpace: "nowrap" }}>
+              <div style={{ fontSize: 10, color: "var(--color-muted-foreground)", whiteSpace: "nowrap" }}>
                 {cb == null ? "—" : money(cb, currency)} → {ca == null ? "—" : money(ca, currency)}
               </div>
             </div>

@@ -108,10 +108,10 @@ function timeLabel(iso: string): string {
 }
 
 const IMPACT_MARK: Record<NonNullable<AdChangeEvent["impact"]>, { icon: string; color: string }> = {
-  up: { icon: "▲", color: "#1768ca" },
-  down: { icon: "▼", color: "#c2410c" },
-  pause: { icon: "⏸", color: "#c2410c" },
-  resume: { icon: "▶", color: "#16803d" },
+  up: { icon: "▲", color: "var(--color-info)" },
+  down: { icon: "▼", color: "var(--color-destructive)" },
+  pause: { icon: "⏸", color: "var(--color-destructive)" },
+  resume: { icon: "▶", color: "var(--color-success)" },
 };
 
 export default function AccountChanges({
@@ -196,9 +196,9 @@ export default function AccountChanges({
     <section
       style={{
         margin: compact ? "10px 0 0" : "10px 0 2px",
-        border: "1px solid #e8e8e5",
+        border: "1px solid var(--color-border)",
         borderRadius: 11,
-        background: "#fff",
+        background: "var(--color-card)",
         overflow: "hidden",
       }}
     >
@@ -212,16 +212,16 @@ export default function AccountChanges({
           gap: 9,
           padding: compact ? "10px 11px" : "11px 13px",
           border: "none",
-          background: open ? "#fafaf9" : "#fff",
+          background: open ? "var(--color-muted)" : "var(--color-card)",
           cursor: "pointer",
           textAlign: "left",
         }}
       >
-        <span style={{ fontSize: 13, color: "#888" }}>🕘</span>
-        <span style={{ fontSize: 10, color: "#888", fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.35 }}>
+        <span style={{ fontSize: 13, color: "var(--color-muted-foreground)" }}>🕘</span>
+        <span style={{ fontSize: 10, color: "var(--color-muted-foreground)", fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.35 }}>
           Últimas edições
         </span>
-        <span style={{ fontSize: 11.5, color: "#999" }}>
+        <span style={{ fontSize: 11.5, color: "var(--color-muted-foreground)" }}>
           o que foi alterado na conta — pausas, orçamentos, lances e criativos
         </span>
         {data && !loading && (
@@ -231,22 +231,22 @@ export default function AccountChanges({
               fontWeight: 750,
               padding: "2px 7px",
               borderRadius: 999,
-              background: events.length ? "#eef5ff" : "#f4f4f2",
-              color: events.length ? "#1768ca" : "#999",
+              background: events.length ? "color-mix(in srgb, var(--color-info) 12%, transparent)" : "var(--color-muted)",
+              color: events.length ? "var(--color-info)" : "var(--color-muted-foreground)",
             }}
           >
             {events.length} {events.length === 1 ? "edição" : "edições"}
           </span>
         )}
         <span style={{ flex: 1 }} />
-        <span style={{ fontSize: 12, color: "#bbb" }}>{open ? "▲" : "▼"}</span>
+        <span style={{ fontSize: 12, color: "var(--color-muted-foreground)" }}>{open ? "▲" : "▼"}</span>
       </button>
 
       {open && (
-        <div style={{ borderTop: "1px solid #f0f0ee", padding: "11px 13px 14px" }}>
+        <div style={{ borderTop: "1px solid var(--color-border)", padding: "11px 13px 14px" }}>
           {/* período + recarregar */}
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
-            <span style={{ fontSize: 11, color: "#999" }}>Período:</span>
+            <span style={{ fontSize: 11, color: "var(--color-muted-foreground)" }}>Período:</span>
             {([["panel", "Do painel"], [7, "7 dias"], [14, "14 dias"], [30, "30 dias"], ["month", "Mês vs anterior"]] as const).map(
               ([mode, label]) => (
                 <button
@@ -255,9 +255,9 @@ export default function AccountChanges({
                   style={{
                     padding: "4px 9px",
                     borderRadius: 8,
-                    border: `1px solid ${rangeMode === mode ? "#b9d5fb" : "#e6e6e3"}`,
-                    background: rangeMode === mode ? "#eef5ff" : "#fff",
-                    color: rangeMode === mode ? "#1768ca" : "#666",
+                    border: `1px solid ${rangeMode === mode ? "color-mix(in srgb, var(--color-info) 40%, transparent)" : "var(--color-border)"}`,
+                    background: rangeMode === mode ? "color-mix(in srgb, var(--color-info) 12%, transparent)" : "var(--color-card)",
+                    color: rangeMode === mode ? "var(--color-info)" : "var(--color-muted-foreground)",
                     fontSize: 11,
                     fontWeight: 650,
                     cursor: "pointer",
@@ -267,7 +267,7 @@ export default function AccountChanges({
                 </button>
               )
             )}
-            <span style={{ fontSize: 10.5, color: "#bbb" }}>
+            <span style={{ fontSize: 10.5, color: "var(--color-muted-foreground)" }}>
               {activeSince} → {activeUntil}
             </span>
             <span style={{ flex: 1 }} />
@@ -277,9 +277,9 @@ export default function AccountChanges({
               style={{
                 padding: "4px 9px",
                 borderRadius: 8,
-                border: "1px dashed #ddd",
-                background: "#fff",
-                color: "#888",
+                border: "1px dashed var(--color-border)",
+                background: "var(--color-card)",
+                color: "var(--color-muted-foreground)",
                 fontSize: 11,
                 cursor: loading ? "default" : "pointer",
               }}
@@ -300,9 +300,9 @@ export default function AccountChanges({
                   gap: 7,
                   padding: "6px 11px",
                   borderRadius: 9,
-                  border: `1px solid ${showImpact ? "#b9d5fb" : "#e6e6e3"}`,
-                  background: showImpact ? "#eef5ff" : "#fff",
-                  color: showImpact ? "#1768ca" : "#555",
+                  border: `1px solid ${showImpact ? "color-mix(in srgb, var(--color-info) 40%, transparent)" : "var(--color-border)"}`,
+                  background: showImpact ? "color-mix(in srgb, var(--color-info) 12%, transparent)" : "var(--color-card)",
+                  color: showImpact ? "var(--color-info)" : "var(--color-foreground)",
                   fontSize: 11.5,
                   fontWeight: 700,
                   cursor: "pointer",
@@ -310,10 +310,10 @@ export default function AccountChanges({
               >
                 <span>📈</span>
                 Impacto das decisões
-                <span style={{ fontSize: 10, color: "#9aa1ad", fontWeight: 500 }}>
+                <span style={{ fontSize: 10, color: "var(--color-muted-foreground)", fontWeight: 500 }}>
                   investimento e resultado, antes e depois
                 </span>
-                <span style={{ fontSize: 10, color: "#bbb" }}>{showImpact ? "▲" : "▼"}</span>
+                <span style={{ fontSize: 10, color: "var(--color-muted-foreground)" }}>{showImpact ? "▲" : "▼"}</span>
               </button>
               {showImpact && (
                 <DecisionImpact
@@ -357,22 +357,22 @@ export default function AccountChanges({
             </div>
           )}
 
-          {loading && <div style={{ fontSize: 13, color: "#999", padding: "10px 2px" }}>Carregando o histórico…</div>}
+          {loading && <div style={{ fontSize: 13, color: "var(--color-muted-foreground)", padding: "10px 2px" }}>Carregando o histórico…</div>}
 
           {error && (
-            <div style={{ background: "#fceceb", color: "#a32d2d", padding: "9px 12px", borderRadius: 8, fontSize: 12.5 }}>
+            <div style={{ background: "color-mix(in srgb, var(--color-destructive) 10%, transparent)", color: "var(--color-destructive)", padding: "9px 12px", borderRadius: 8, fontSize: 12.5 }}>
               {error}
             </div>
           )}
 
           {!loading && !error && data?.note && (
-            <div style={{ fontSize: 11.5, color: "#8a6117", background: "#fff8e9", border: "1px solid #edd49f", borderRadius: 8, padding: "7px 10px", marginBottom: 10 }}>
+            <div style={{ fontSize: 11.5, color: "var(--color-warning)", background: "color-mix(in srgb, var(--color-warning) 12%, transparent)", border: "1px solid color-mix(in srgb, var(--color-warning) 30%, transparent)", borderRadius: 8, padding: "7px 10px", marginBottom: 10 }}>
               {data.note}
             </div>
           )}
 
           {!loading && !error && events.length === 0 && (
-            <div style={{ fontSize: 13, color: "#aaa", padding: "10px 2px" }}>
+            <div style={{ fontSize: 13, color: "var(--color-muted-foreground)", padding: "10px 2px" }}>
               {systemCount > 0
                 ? `Nenhuma edição manual neste período — só ${systemCount} ${
                     systemCount === 1 ? "evento automático" : "eventos automáticos"
@@ -384,7 +384,7 @@ export default function AccountChanges({
           )}
 
           {!loading && !error && events.length > 0 && visible.length === 0 && (
-            <div style={{ fontSize: 13, color: "#aaa", padding: "10px 2px" }}>
+            <div style={{ fontSize: 13, color: "var(--color-muted-foreground)", padding: "10px 2px" }}>
               Nenhuma edição desse tipo no período.
             </div>
           )}
@@ -397,7 +397,7 @@ export default function AccountChanges({
                     style={{
                       fontSize: 10.5,
                       fontWeight: 800,
-                      color: "#999",
+                      color: "var(--color-muted-foreground)",
                       textTransform: "uppercase",
                       letterSpacing: 0.4,
                       marginBottom: 6,
@@ -437,9 +437,9 @@ function FilterChip({
       style={{
         padding: "4px 9px",
         borderRadius: 999,
-        border: `1px solid ${active ? color : "#e6e6e3"}`,
-        background: active ? `${color}14` : "#fff",
-        color: active ? color : "#666",
+        border: `1px solid ${active ? color : "var(--color-border)"}`,
+        background: active ? `${color}26` : "var(--color-card)",
+        color: active ? `color-mix(in srgb, ${color} 62%, var(--color-foreground))` : "var(--color-muted-foreground)",
         fontSize: 11,
         fontWeight: 650,
         cursor: "pointer",
@@ -464,10 +464,10 @@ function ChangeRow({ event }: { event: AdChangeEvent }) {
         gap: 8,
         padding: "7px 6px",
         borderRadius: 8,
-        background: "#fcfcfb",
+        background: "color-mix(in srgb, var(--color-muted) 45%, transparent)",
       }}
     >
-      <span style={{ fontSize: 11, color: "#aaa", fontVariantNumeric: "tabular-nums", paddingTop: 2 }}>
+      <span style={{ fontSize: 11, color: "var(--color-muted-foreground)", fontVariantNumeric: "tabular-nums", paddingTop: 2 }}>
         {timeLabel(event.time)}
       </span>
       <span
@@ -476,11 +476,11 @@ function ChangeRow({ event }: { event: AdChangeEvent }) {
       />
       <div style={{ minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 7, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 12.5, fontWeight: 650, color: "#222" }}>{event.label}</span>
+          <span style={{ fontSize: 12.5, fontWeight: 650, color: "var(--color-foreground)" }}>{event.label}</span>
           {event.count > 1 && (
             <span
               title={`${event.count} eventos idênticos no mesmo minuto`}
-              style={{ fontSize: 10, fontWeight: 700, color: "#888", background: "#f1f1ef", borderRadius: 999, padding: "1px 6px" }}
+              style={{ fontSize: 10, fontWeight: 700, color: "var(--color-muted-foreground)", background: "var(--color-muted)", borderRadius: 999, padding: "1px 6px" }}
             >
               ×{event.count}
             </span>
@@ -490,7 +490,7 @@ function ChangeRow({ event }: { event: AdChangeEvent }) {
               title={`${event.objectType || ""} ${event.objectName || ""}${event.objectId ? ` · ID ${event.objectId}` : ""}`}
               style={{
                 fontSize: 11,
-                color: "#666",
+                color: "var(--color-muted-foreground)",
                 maxWidth: 340,
                 overflow: "hidden",
                 textOverflow: "ellipsis",
@@ -504,19 +504,19 @@ function ChangeRow({ event }: { event: AdChangeEvent }) {
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap", marginTop: 2 }}>
           {hasValues && (
-            <span style={{ fontSize: 11.5, color: "#444" }}>
+            <span style={{ fontSize: 11.5, color: "var(--color-foreground)" }}>
               {event.from && (
                 <>
-                  <span style={{ color: "#999", textDecoration: "line-through" }}>{event.from}</span>
-                  <span style={{ color: "#bbb", margin: "0 5px" }}>→</span>
+                  <span style={{ color: "var(--color-muted-foreground)", textDecoration: "line-through" }}>{event.from}</span>
+                  <span style={{ color: "var(--color-muted-foreground)", margin: "0 5px" }}>→</span>
                 </>
               )}
-              <strong style={{ color: mark?.color || "#222" }}>{event.to || "—"}</strong>
+              <strong style={{ color: mark?.color || "var(--color-foreground)" }}>{event.to || "—"}</strong>
               {mark && <span style={{ color: mark.color, marginLeft: 5 }}>{mark.icon}</span>}
             </span>
           )}
-          {event.detail && <span style={{ fontSize: 11, color: "#888" }}>{event.detail}</span>}
-          {event.actor && <span style={{ fontSize: 11, color: "#bbb" }}>por {event.actor}</span>}
+          {event.detail && <span style={{ fontSize: 11, color: "var(--color-muted-foreground)" }}>{event.detail}</span>}
+          {event.actor && <span style={{ fontSize: 11, color: "var(--color-muted-foreground)" }}>por {event.actor}</span>}
         </div>
       </div>
     </div>

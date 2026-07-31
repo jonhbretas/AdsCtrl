@@ -218,7 +218,7 @@ export default function CreativesPage() {
                   )}
                   <Field label="Objetivo"><Select value={goalFilter} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setGoalFilter(e.target.value as GoalFilter)} className="min-w-[154px]"><option value="all">Todos os objetivos</option>{goalCounts.map((o) => <option key={o.goal} value={o.goal}>{o.label} ({o.count})</option>)}</Select></Field>
                   <Input value={search} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)} placeholder="Buscar criativo…" className="min-w-[180px]" />
-                  {goalFilter === "all" && goalCounts.length > 1 && <span className="px-2.5 py-1 text-[10px] font-semibold rounded-full bg-amber-500/10 text-amber-600 border border-amber-500/20 whitespace-nowrap">Filtre o objetivo para comparar custos</span>}
+                  {goalFilter === "all" && goalCounts.length > 1 && <span className="px-2.5 py-1 text-[10px] font-semibold rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 whitespace-nowrap">Filtre o objetivo para comparar custos</span>}
                   <div className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-full border border-border/50 bg-muted/20 text-[10px] text-muted-foreground">
                     <span>Ordenação:</span><strong className="text-primary">{SORT_LABELS[sort.key]} {sort.direction === "asc" ? "↑" : "↓"}</strong>
                     {(sort.key !== DEFAULT_CREATIVE_SORT.key || sort.direction !== DEFAULT_CREATIVE_SORT.direction) && <button onClick={() => setSort({ ...DEFAULT_CREATIVE_SORT })} className="border-l border-border/50 pl-2 font-bold hover:text-foreground bg-transparent border-none cursor-pointer">Restaurar</button>}
@@ -227,10 +227,10 @@ export default function CreativesPage() {
 
                 <div className="flex flex-wrap items-center gap-3 px-4 py-2 border-b border-border/50 bg-muted/10 text-[9.5px] text-muted-foreground">
                   <strong className="text-foreground">Legenda do heatmap:</strong>
-                  <span><i className="inline-block w-2 h-2 rounded-xs mr-1" style={{ backgroundColor: "#eaf7ee", border: "1px solid #cfe9d6" }} />melhor que a mediana</span>
-                  <span><i className="inline-block w-2 h-2 rounded-xs mr-1" style={{ backgroundColor: "#fff8e9", border: "1px solid #f0dfb4" }} />próximo da mediana</span>
-                  <span><i className="inline-block w-2 h-2 rounded-xs mr-1" style={{ backgroundColor: "#fff0ee", border: "1px solid #efd2ce" }} />pior que a mediana</span>
-                  <span><i className="inline-block w-2 h-2 rounded-xs mr-1" style={{ backgroundColor: "#fafafa", border: "1px solid #e7e7e4" }} />sem amostra/referência</span>
+                  <span><i className="inline-block w-2 h-2 rounded-xs mr-1 bg-emerald-100 dark:bg-emerald-900/30 border border-emerald-300/70 dark:border-emerald-700/50" />melhor que a mediana</span>
+                  <span><i className="inline-block w-2 h-2 rounded-xs mr-1 bg-amber-50 dark:bg-amber-900/20 border border-amber-300/70 dark:border-amber-700/50" />próximo da mediana</span>
+                  <span><i className="inline-block w-2 h-2 rounded-xs mr-1 bg-red-100 dark:bg-red-900/30 border border-red-300/70 dark:border-red-700/50" />pior que a mediana</span>
+                  <span><i className="inline-block w-2 h-2 rounded-xs mr-1 bg-muted border border-border/70" />sem amostra/referência</span>
                   <span className="ml-auto">Leitura automática compara anúncios do mesmo objetivo.</span>
                 </div>
 

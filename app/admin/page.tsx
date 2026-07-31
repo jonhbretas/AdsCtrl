@@ -257,7 +257,7 @@ export default function ConfigPage() {
 
       {/* Barra de salvar: fixa porque os campos ficam em seções que rolam. */}
       <div className="sticky bottom-3 flex items-center gap-2 justify-end">
-        {saved && <span className="text-xs font-medium text-emerald-600">Configurações salvas.</span>}
+        {saved && <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">Configurações salvas.</span>}
         <Button onClick={save} disabled={!dirty || saving} size="sm" className="shadow-lg">
           <Save className="h-3.5 w-3.5 mr-1" /> {saving ? "Salvando…" : dirty ? "Salvar alterações" : "Tudo salvo"}
         </Button>
@@ -309,7 +309,7 @@ function TaskReminders({ onError, recipient }: { onError: (message: string) => v
         exige ação deixa de ser lido.
       </p>
       <p className="text-[11px] text-muted-foreground">
-        Destinatário: {recipient ? <code>{recipient}</code> : <span className="text-amber-600">defina em Config › E-mail</span>}.
+        Destinatário: {recipient ? <code>{recipient}</code> : <span className="text-amber-600 dark:text-amber-400">defina em Config › E-mail</span>}.
       </p>
       <div className="flex flex-wrap gap-2">
         <Button variant="secondary" size="sm" onClick={() => call("preview")} disabled={busy !== null}>

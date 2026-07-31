@@ -16,7 +16,7 @@ interface Payload { months: string[]; rows: LinhaCliente[]; allClients: { id: st
 
 const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 function SeloGrupo({ grupo }: { grupo: { name: string; color: string } }) {
-  return <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full font-semibold whitespace-nowrap" style={{ backgroundColor: grupo.color + "22", color: grupo.color }}>{grupo.name}</span>;
+  return <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full font-semibold whitespace-nowrap" style={{ backgroundColor: grupo.color + "22", color: `color-mix(in srgb, ${grupo.color} 62%, var(--color-foreground))` }}>{grupo.name}</span>;
 }
 
 // Meta e Google abrem pelo id nu, sem prefixo (act_/google:). O painel expõe o
@@ -159,7 +159,7 @@ export function RoiPorCliente({ clientId }: { clientId?: string } = {}) {
                 className={cn("px-3 py-1.5 text-xs font-medium rounded-full border transition-colors", grupoFiltro === "all" ? "bg-primary/10 border-primary/30 text-primary" : "border-border/50 text-muted-foreground hover:text-foreground hover:bg-accent/50")}>Todos</button>
               {grupos.map((g) => <button key={g.name} onClick={() => setGrupoFiltro(g.name)}
                 className={cn("px-3 py-1.5 text-xs font-medium rounded-full border transition-colors", grupoFiltro === g.name ? "border-primary/30" : "border-border/50 text-muted-foreground hover:text-foreground hover:bg-accent/50")}
-                style={grupoFiltro === g.name ? { backgroundColor: g.color + "18", borderColor: g.color + "40", color: g.color } : undefined}>
+                style={grupoFiltro === g.name ? { backgroundColor: g.color + "18", borderColor: g.color + "40", color: `color-mix(in srgb, ${g.color} 62%, var(--color-foreground))` } : undefined}>
                 <span className="inline-block w-1.5 h-1.5 rounded-full mr-1.5" style={{ backgroundColor: g.color }} />
                 {g.name}
               </button>)}

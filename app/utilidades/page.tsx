@@ -175,8 +175,8 @@ function Heat({ value, benchmark, invert }: { value: number | null; benchmark: n
   if (value == null || benchmark == null) return <span className="text-muted-foreground">—</span>;
   const better = invert ? value < benchmark : value > benchmark;
   const worse = invert ? value > benchmark * 1.15 : value < benchmark * 0.85;
-  const bg = better ? "bg-emerald-100" : worse ? "bg-red-100" : "bg-amber-50";
-  const txt = better ? "text-emerald-700" : worse ? "text-red-700" : "text-amber-700";
+  const bg = better ? "bg-emerald-100 dark:bg-emerald-900/30" : worse ? "bg-red-100 dark:bg-red-900/30" : "bg-amber-50 dark:bg-amber-900/20";
+  const txt = better ? "text-emerald-700 dark:text-emerald-300" : worse ? "text-red-700 dark:text-red-300" : "text-amber-700 dark:text-amber-300";
   return <span className={cn("tabular-nums font-semibold px-1.5 py-0.5 rounded", bg, txt)}>{value.toFixed(1)}</span>;
 }
 
@@ -321,8 +321,8 @@ function BenchmarkTable() {
                     <td className="p-2 text-center">
                       {isRelevant && status ? (
                         <span className={cn("inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full",
-                          status === "better" ? "bg-emerald-100 text-emerald-700" :
-                          status === "worse" ? "bg-red-100 text-red-700" : "bg-amber-50 text-amber-700"
+                          status === "better" ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300" :
+                          status === "worse" ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300" : "bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300"
                         )}>
                           {status === "better" ? "▲ Melhor" : status === "worse" ? "▼ Pior" : "◆ Mediano"}
                         </span>
@@ -338,9 +338,9 @@ function BenchmarkTable() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3 text-[10px] text-muted-foreground pt-2 border-t border-border/50">
-          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-emerald-100 border border-emerald-300" /> Melhor que o benchmark</span>
-          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-amber-50 border border-amber-300" /> Próximo do benchmark</span>
-          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-red-100 border border-red-300" /> Pior que o benchmark</span>
+          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-emerald-100 dark:bg-emerald-900/30 border border-emerald-300 dark:border-emerald-700/60" /> Melhor que o benchmark</span>
+          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700/60" /> Próximo do benchmark</span>
+          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-700/60" /> Pior que o benchmark</span>
           <span className="ml-auto text-[10px]">Referências: média do mercado brasileiro (2025-2026).</span>
         </div>
       </CardContent>

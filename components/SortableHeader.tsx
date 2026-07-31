@@ -160,7 +160,7 @@ export function SortButton<Key extends string>({
         padding: 0,
         border: 0,
         background: "transparent",
-        color: active ? "#333" : "inherit",
+        color: active ? "var(--color-foreground)" : "inherit",
         font: "inherit",
         fontWeight: active ? 800 : "inherit",
         textTransform: "inherit",
@@ -178,7 +178,7 @@ export function SortButton<Key extends string>({
       <span
         aria-hidden="true"
         style={{
-          color: active ? "#286fc9" : "#c5c5c0",
+          color: active ? "var(--color-primary)" : "var(--color-muted-foreground)",
           fontSize: "0.95em",
           lineHeight: 1,
           flexShrink: 0,

@@ -318,16 +318,16 @@ function ClientRow({ client }: { client: Client }) {
         <div className="flex items-center gap-1.5 min-w-0">
           <span className="text-sm font-semibold truncate">{client.name}</span>
           {client.group && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0" style={{ backgroundColor: client.group.color + "20", color: client.group.color }}>
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0" style={{ backgroundColor: client.group.color + "20", color: `color-mix(in srgb, ${client.group.color} 62%, var(--color-foreground))` }}>
               {client.group.name}
             </span>
           )}
         </div>
         <div className="flex items-center gap-1.5 mt-1">
           {platforms.map((p) => (
-            <span key={p} className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded uppercase", p === "google" ? "bg-sky-500/10 text-sky-600" : "bg-blue-500/10 text-blue-600")}>{p}</span>
+            <span key={p} className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded uppercase", p === "google" ? "bg-sky-500/10 text-sky-600 dark:text-sky-400" : "bg-blue-500/10 text-blue-600 dark:text-blue-400")}>{p}</span>
           ))}
-          {client.priorities.length > 0 && <span className="text-[10px] text-amber-600 font-medium">{client.priorities.length} ação(ões)</span>}
+          {client.priorities.length > 0 && <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">{client.priorities.length} ação(ões)</span>}
         </div>
       </div>
 
@@ -393,7 +393,7 @@ function PriorityCard({ item }: { item: Priority }) {
       </div>
       <div className="text-sm font-semibold mt-1.5 text-foreground">
         {item.client_name}
-        {item.client_group && <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full font-medium" style={{ backgroundColor: item.client_group.color + "20", color: item.client_group.color }}>{item.client_group.name}</span>}
+        {item.client_group && <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full font-medium" style={{ backgroundColor: item.client_group.color + "20", color: `color-mix(in srgb, ${item.client_group.color} 62%, var(--color-foreground))` }}>{item.client_group.name}</span>}
       </div>
       <div className="text-xs font-semibold text-foreground/80 mt-0.5">{item.title}</div>
       <div className="text-[11px] text-muted-foreground mt-0.5">{item.detail}</div>

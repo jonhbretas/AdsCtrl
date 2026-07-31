@@ -30,7 +30,7 @@ const todayIso = () => new Date().toISOString().slice(0, 10);
 const brDate = (iso: string) => iso.split("-").reverse().join("-");
 
 function GroupBadge({ group }: { group: GroupRef }) {
-  return <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap" style={{ backgroundColor: group.color + "22", color: group.color }}>{group.name}</span>;
+  return <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap" style={{ backgroundColor: group.color + "22", color: `color-mix(in srgb, ${group.color} 62%, var(--color-foreground))` }}>{group.name}</span>;
 }
 
 function dueLabel(due: string): { text: string; tone: "late" | "today" | "soon" | "far" } {
@@ -209,7 +209,7 @@ export default function TasksPage() {
         onRemoved={(id) => { setProjects((c) => c.filter((x) => x.id !== id)); setProjectFilter((c) => (c === id ? "" : c)); setTasks((c) => c.map((t) => (t.project_id === id ? { ...t, project_id: null } : t))); }} />
 
       {projectFilter && projectById.get(projectFilter) && (
-        <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-sky-500/20 bg-sky-500/5 text-sm text-sky-600">
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-sky-500/20 bg-sky-500/5 text-sm text-sky-600 dark:text-sky-400">
           Mostrando só as tarefas de <strong>{projectById.get(projectFilter)!.name}</strong>.
           <button onClick={() => setProjectFilter("")} className="ml-auto text-xs font-semibold hover:underline bg-transparent border-none cursor-pointer">Limpar filtro</button>
         </div>

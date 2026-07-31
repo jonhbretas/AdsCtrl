@@ -818,7 +818,7 @@ export default function Dashboard() {
                 ? "border-primary/30 text-primary"
                 : "border-border/50 text-muted-foreground hover:text-foreground hover:bg-accent/50"
             )}
-            style={groupFilter === g.id ? { backgroundColor: g.color + "18", borderColor: g.color + "40", color: g.color } : undefined}
+            style={groupFilter === g.id ? { backgroundColor: g.color + "18", borderColor: g.color + "40", color: `color-mix(in srgb, ${g.color} 62%, var(--color-foreground))` } : undefined}
           >
             <span className="inline-block w-1.5 h-1.5 rounded-full mr-1.5" style={{ backgroundColor: g.color }} />
             {g.name}
@@ -913,7 +913,7 @@ export default function Dashboard() {
                         <div className="min-w-0">
                           <div className="text-sm font-medium truncate" title={a.name}>{a.name}</div>
                           <div className="flex items-center gap-1.5 mt-0.5">
-                            {g && <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium" style={{ backgroundColor: g.color + "20", color: g.color }}>{g.name}</span>}
+                            {g && <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium" style={{ backgroundColor: g.color + "20", color: `color-mix(in srgb, ${g.color} 62%, var(--color-foreground))` }}>{g.name}</span>}
                             {linkedMeta && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-sky-500/10 text-sky-600 dark:text-sky-400 font-medium">Cliente</span>}
                             {/* Mesmo formato dos chips ao lado (grupo, Cliente):
                                 pílula com fundo, em português. Antes era
@@ -1121,7 +1121,7 @@ function AlertCard({ alert, onAck, acking }: { alert: AlertItem; onAck: () => vo
 
 function HistoryCard({ alert, onReopen, acking }: { alert: AlertItem; onReopen?: () => void; acking: boolean }) {
   const dotColors: Record<string, string> = { critical: "bg-red-500", warning: "bg-amber-500", info: "bg-sky-500" };
-  const badge = alert.resolved ? { label: "Resolvido", color: "text-emerald-500 bg-emerald-500/10" } : { label: "Ciente", color: "text-gray-500 bg-gray-500/10" };
+  const badge = alert.resolved ? { label: "Resolvido", color: "text-emerald-500 dark:text-emerald-400 bg-emerald-500/10" } : { label: "Ciente", color: "text-gray-500 dark:text-gray-400 bg-gray-500/10" };
   const when = alert.resolved_at || alert.acknowledged_at || alert.last_seen_at;
   return (
     <Card className="opacity-80">
@@ -1274,7 +1274,7 @@ function OperationalLinks({ accountId, accountName, platform, balance, currency,
         <span className={cn(
           "px-2 py-1 text-[10px] font-bold rounded-md border",
           balTone === "danger" ? "bg-red-500/10 border-red-500/30 text-red-500" :
-          balTone === "warn" ? "bg-amber-500/10 border-amber-500/30 text-amber-600" :
+          balTone === "warn" ? "bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400" :
           "bg-emerald-500/10 border-emerald-500/30 text-emerald-500"
         )}>
           Saldo {formatCurrency(effectiveBalance)} · {runwayText ? `dura ${runwayText}` : "sem gasto 7d"}

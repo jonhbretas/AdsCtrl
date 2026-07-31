@@ -249,9 +249,9 @@ export default function ClientesPage() {
                 {selectedClient.contact_name && <span className="text-xs text-muted-foreground">· {selectedClient.contact_name}</span>}
                 <div className="ml-auto flex flex-wrap gap-1.5">
                   <button type="button" onClick={() => openClientModal(selectedClient)} className="rounded-md border border-input px-2 py-1 text-[11px] font-semibold hover:bg-muted">Editar cadastro</button>
-                  <button type="button" onClick={() => deleteClient(selectedClient)} disabled={deleteBusy === selectedClient.id} className="rounded-md border border-red-500/30 px-2 py-1 text-[11px] font-semibold text-red-600 hover:bg-red-500/10 disabled:opacity-50">{deleteBusy === selectedClient.id ? "Excluindo…" : "Excluir cliente"}</button>
-                  {phone && <a href={`https://wa.me/${phone}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-emerald-500/25 bg-emerald-500/10 px-2 py-1 text-[11px] font-semibold text-emerald-600"><Phone className="h-3 w-3" /> WhatsApp</a>}
-                  {selectedClient.drive_folder_url && <a href={selectedClient.drive_folder_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-sky-500/25 bg-sky-500/10 px-2 py-1 text-[11px] font-semibold text-sky-600"><FolderOpen className="h-3 w-3" /> Drive</a>}
+                  <button type="button" onClick={() => deleteClient(selectedClient)} disabled={deleteBusy === selectedClient.id} className="rounded-md border border-red-500/30 px-2 py-1 text-[11px] font-semibold text-red-600 dark:text-red-400 hover:bg-red-500/10 disabled:opacity-50">{deleteBusy === selectedClient.id ? "Excluindo…" : "Excluir cliente"}</button>
+                  {phone && <a href={`https://wa.me/${phone}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-emerald-500/25 bg-emerald-500/10 px-2 py-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400"><Phone className="h-3 w-3" /> WhatsApp</a>}
+                  {selectedClient.drive_folder_url && <a href={selectedClient.drive_folder_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-sky-500/25 bg-sky-500/10 px-2 py-1 text-[11px] font-semibold text-sky-600 dark:text-sky-400"><FolderOpen className="h-3 w-3" /> Drive</a>}
                 </div>
               </div>
 
@@ -271,7 +271,7 @@ export default function ClientesPage() {
                     <button
                       onClick={() => updateClientField(selectedClient, "track_sales", !selectedClient.track_sales)}
                       className={cn("h-[30px] w-full rounded-lg text-[11px] font-semibold border cursor-pointer transition-colors",
-                        selectedClient.track_sales ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600" : "border-border bg-transparent text-muted-foreground hover:text-foreground")}
+                        selectedClient.track_sales ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "border-border bg-transparent text-muted-foreground hover:text-foreground")}
                     >
                       {selectedClient.track_sales ? "✓ acompanhando" : "não acompanha"}
                     </button>
@@ -343,7 +343,7 @@ export default function ClientesPage() {
 
               {activeTab === "documentos" && <div className="space-y-3 rounded-lg border border-border/50 bg-card p-4">
                 <div className="grid gap-3 md:grid-cols-1">
-                  <Field label="Pasta do Drive"><div className="flex gap-1"><input key={`${selectedClient.id}-drive-${loadRevision}`} type="url" defaultValue={selectedClient.drive_folder_url ?? ""} placeholder="Cole o link da pasta" onBlur={(e) => updateClientField(selectedClient, "drive_folder_url", e.target.value || null)} style={{ ...compactInput, minWidth: 0 }} />{selectedClient.drive_folder_url ? <a href={selectedClient.drive_folder_url} target="_blank" rel="noreferrer" className="inline-flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded border border-input text-muted-foreground hover:text-foreground"><ExternalLink className="h-3 w-3" /></a> : <button onClick={() => createDrive(selectedClient)} disabled={driveBusy === selectedClient.id} title="Cria a pasta e as subpastas padrão no Google Drive conectado" className="h-[30px] shrink-0 rounded border border-sky-500/30 px-2 text-[10px] font-semibold text-sky-600 hover:bg-sky-500/10 disabled:opacity-50">{driveBusy === selectedClient.id ? "…" : "Criar"}</button>}</div></Field>
+                  <Field label="Pasta do Drive"><div className="flex gap-1"><input key={`${selectedClient.id}-drive-${loadRevision}`} type="url" defaultValue={selectedClient.drive_folder_url ?? ""} placeholder="Cole o link da pasta" onBlur={(e) => updateClientField(selectedClient, "drive_folder_url", e.target.value || null)} style={{ ...compactInput, minWidth: 0 }} />{selectedClient.drive_folder_url ? <a href={selectedClient.drive_folder_url} target="_blank" rel="noreferrer" className="inline-flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded border border-input text-muted-foreground hover:text-foreground"><ExternalLink className="h-3 w-3" /></a> : <button onClick={() => createDrive(selectedClient)} disabled={driveBusy === selectedClient.id} title="Cria a pasta e as subpastas padrão no Google Drive conectado" className="h-[30px] shrink-0 rounded border border-sky-500/30 px-2 text-[10px] font-semibold text-sky-600 dark:text-sky-400 hover:bg-sky-500/10 disabled:opacity-50">{driveBusy === selectedClient.id ? "…" : "Criar"}</button>}</div></Field>
                 </div>
                 <ClientDocuments clientId={selectedClient.id} filterKind="document" />
               </div>}
@@ -404,7 +404,7 @@ export default function ClientesPage() {
                 </div>
                 {sortedAccounts.map((a) => (
                   <div key={a.account_id} className="grid gap-2 px-3 py-2 rounded-lg border border-border/30 bg-card text-xs items-center" style={{ gridTemplateColumns: "60px 1.5fr 80px 1fr 1.2fr 110px 130px" }}>
-                    <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded text-center", a.platform === "google" ? "bg-sky-500/10 text-sky-600" : "bg-blue-500/10 text-blue-600")}>{a.platform}</span>
+                    <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded text-center", a.platform === "google" ? "bg-sky-500/10 text-sky-600 dark:text-sky-400" : "bg-blue-500/10 text-blue-600 dark:text-blue-400")}>{a.platform}</span>
                     <span className="font-medium truncate" title={a.name}>{a.name}</span>
                     <span className={cn("text-[10px] font-semibold", a.status === "ACTIVE" ? "text-emerald-500" : "text-muted-foreground")}>{a.status}</span>
                     <span className="text-muted-foreground truncate">{clients.flatMap((client) => client.accounts || []).find((account) => account.account_id === a.account_id) ? clients.find((client) => (client.accounts || []).some((account) => account.account_id === a.account_id))?.name || "—" : "—"}</span>
@@ -447,11 +447,11 @@ export default function ClientesPage() {
               const phonePreview = phoneDigits.length === 10 ? `(${phoneDigits.slice(0, 2)}) ${phoneDigits.slice(2, 6)}-${phoneDigits.slice(6)}` : phoneDigits.length === 11 ? `(${phoneDigits.slice(0, 2)}) ${phoneDigits.slice(2, 7)}-${phoneDigits.slice(7)}` : phoneDigits;
               const row = (label: string, value: unknown) => <div><span className="text-muted-foreground">{label}:</span> {value ? <span>{String(value)}</span> : <span className="italic text-muted-foreground/70">não informado pela Receita</span>}</div>;
               return <div className="space-y-3 rounded-lg border border-emerald-500/25 bg-emerald-500/5 p-4">
-                <div className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-600" /><span className="text-sm font-semibold">Dados encontrados na Receita Federal</span></div>
+                <div className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /><span className="text-sm font-semibold">Dados encontrados na Receita Federal</span></div>
                 <div className="grid gap-1 text-xs sm:grid-cols-2">
                   {row("Razão social", d.razao_social)}
                   {row("Nome fantasia", d.nome_fantasia)}
-                  <div><span className="text-muted-foreground">Situação:</span> <span className={cn("font-semibold", ativa ? "text-emerald-600" : "text-red-500")}>{d.descricao_situacao_cadastral || "—"}</span></div>
+                  <div><span className="text-muted-foreground">Situação:</span> <span className={cn("font-semibold", ativa ? "text-emerald-600 dark:text-emerald-400" : "text-red-500")}>{d.descricao_situacao_cadastral || "—"}</span></div>
                   {row("CEP", d.cep)}
                   {row("Logradouro", d.logradouro)}
                   {row("Número", d.numero)}
@@ -556,7 +556,7 @@ function ClientAccounts({ client, accounts, busyAccount, onLink, onUnlink }: { c
   const linked = client.accounts || [];
   const linkedIds = new Set(linked.map((account) => account.account_id));
   const available = accounts.filter((account) => !linkedIds.has(account.account_id) && !account.hidden);
-  return <div className="space-y-1.5"><div className="text-[10px] font-semibold text-muted-foreground">Contas vinculadas ({linked.length})</div><div className="flex gap-1 flex-wrap">{linked.map((account) => <span key={account.account_id} title={account.name} className={cn("inline-flex max-w-[150px] items-center gap-1 truncate rounded px-1.5 py-0.5 text-[9px] font-bold", account.platform === "google" ? "bg-sky-500/10 text-sky-600" : "bg-blue-500/10 text-blue-600")}><span className="truncate">{account.name}</span><button type="button" onClick={() => onUnlink(client, account.account_id)} disabled={busyAccount === `${client.id}:${account.account_id}`} className="text-current opacity-60 hover:opacity-100" title="Desvincular conta">×</button></span>)}{!linked.length && <span className="text-[10px] text-muted-foreground">Nenhuma conta vinculada</span>}</div>{available.length > 0 && <select value="" onChange={(event) => onLink(client, event.target.value)} disabled={Boolean(busyAccount)} className="h-7 max-w-full rounded border border-input bg-transparent px-1 text-[10px]"><option value="">+ Vincular conta de anúncio</option>{available.map((account) => <option key={account.account_id} value={account.account_id}>{account.platform} · {account.name}</option>)}</select>}</div>;
+  return <div className="space-y-1.5"><div className="text-[10px] font-semibold text-muted-foreground">Contas vinculadas ({linked.length})</div><div className="flex gap-1 flex-wrap">{linked.map((account) => <span key={account.account_id} title={account.name} className={cn("inline-flex max-w-[150px] items-center gap-1 truncate rounded px-1.5 py-0.5 text-[9px] font-bold", account.platform === "google" ? "bg-sky-500/10 text-sky-600 dark:text-sky-400" : "bg-blue-500/10 text-blue-600 dark:text-blue-400")}><span className="truncate">{account.name}</span><button type="button" onClick={() => onUnlink(client, account.account_id)} disabled={busyAccount === `${client.id}:${account.account_id}`} className="text-current opacity-60 hover:opacity-100" title="Desvincular conta">×</button></span>)}{!linked.length && <span className="text-[10px] text-muted-foreground">Nenhuma conta vinculada</span>}</div>{available.length > 0 && <select value="" onChange={(event) => onLink(client, event.target.value)} disabled={Boolean(busyAccount)} className="h-7 max-w-full rounded border border-input bg-transparent px-1 text-[10px]"><option value="">+ Vincular conta de anúncio</option>{available.map((account) => <option key={account.account_id} value={account.account_id}>{account.platform} · {account.name}</option>)}</select>}</div>;
 }
 
 function SocialPagesPanel({
@@ -738,7 +738,7 @@ function ClientDocuments({ clientId, filterKind }: { clientId: string; filterKin
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"><FileText className="inline h-3.5 w-3.5 mr-1" />{filterKind === "contract" ? "Contratos" : "Documentos"}</span>
         {filterKind === "contract" && latestContract && <span className="text-[11px] text-muted-foreground">· contrato: {latestContract.title}{latestContract.end_date ? ` até ${brDate(latestContract.end_date)}` : ""}</span>}
-        {filterKind === "contract" && latestContract && <button onClick={renew} disabled={busy} className="rounded-md border border-amber-500/30 px-2 py-1 text-[11px] font-semibold text-amber-600 hover:bg-amber-500/10 disabled:opacity-50">Renovar</button>}
+        {filterKind === "contract" && latestContract && <button onClick={renew} disabled={busy} className="rounded-md border border-amber-500/30 px-2 py-1 text-[11px] font-semibold text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 disabled:opacity-50">Renovar</button>}
         {filterKind === "contract" && <Link href={`/contratos/${clientId}`} className="rounded-md border border-primary/30 px-2 py-1 text-[11px] font-semibold text-primary hover:bg-primary/10">Gerar minuta</Link>}
         <button onClick={() => setOpen((v) => !v)} className="ml-auto inline-flex items-center gap-1 rounded-md border border-input px-2 py-1 text-[11px] font-semibold hover:bg-muted"><Plus className="h-3 w-3" /> Adicionar</button>
       </div>
@@ -753,7 +753,7 @@ function ClientDocuments({ clientId, filterKind }: { clientId: string; filterKin
         {filterKind === "document" && <select value={category} onChange={(e) => setCategory(e.target.value)} style={compactInput}><option value="other">Outro</option><option value="invoice">Nota fiscal</option><option value="briefing">Briefing</option><option value="addendum">Aditivo</option><option value="proof">Comprovante</option></select>}
         <button onClick={add} disabled={busy || !name.trim()} className="rounded-md bg-primary px-3 py-1 text-[11px] font-semibold text-primary-foreground disabled:opacity-50">{busy ? "Salvando…" : "Salvar"}</button>
         <input type="file" onChange={(e) => setFile(e.target.files?.[0] || null)} className="text-[11px] file:mr-2 file:rounded file:border-0 file:bg-muted file:px-2 file:py-1 file:text-[11px]" />
-        <button onClick={upload} disabled={busy || !file} className="rounded-md border border-sky-500/30 px-3 py-1 text-[11px] font-semibold text-sky-600 disabled:opacity-50">{busy ? "Enviando…" : "Enviar ao Drive"}</button>
+        <button onClick={upload} disabled={busy || !file} className="rounded-md border border-sky-500/30 px-3 py-1 text-[11px] font-semibold text-sky-600 dark:text-sky-400 disabled:opacity-50">{busy ? "Enviando…" : "Enviar ao Drive"}</button>
       </div>}
     </div>
   );
@@ -794,12 +794,12 @@ function ClientBilling({ clientId, defaultValue }: { clientId: string; defaultVa
   const active = data.subscriptions.find((item) => item.status === "ACTIVE") || data.subscriptions[0];
   const latest = data.charges[0];
   return <div className="rounded-lg border border-border/50 bg-card p-4 space-y-2">
-    <div className="flex flex-wrap items-center gap-2"><span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Financeiro / Asaas</span>{active && <span className="text-[11px] text-emerald-600">assinatura {active.status}</span>}{latest && <span className={cn("text-[11px]", latest.status === "OVERDUE" ? "text-red-500" : "text-muted-foreground")}>última cobrança: {latest.status}</span>}</div>
-    {!active && <div className="grid gap-2 md:grid-cols-4"><input value={value} onChange={(e) => setValue(e.target.value)} type="number" min="1" step="0.01" placeholder="Mensalidade" style={compactInput} /><input value={dueDate} onChange={(e) => setDueDate(e.target.value)} type="date" title="Primeiro vencimento" style={compactInput} /><select value={billingType} onChange={(e) => setBillingType(e.target.value)} style={compactInput}><option value="UNDEFINED">Cliente escolhe</option><option value="PIX">Pix</option><option value="BOLETO">Boleto</option><option value="CREDIT_CARD">Cartão</option></select><button onClick={createSubscription} disabled={busy || !value} className="rounded-md border border-emerald-500/30 px-2 py-1 text-[11px] font-semibold text-emerald-600 disabled:opacity-50">{busy ? "Criando…" : "Criar cobrança recorrente"}</button></div>}
+    <div className="flex flex-wrap items-center gap-2"><span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Financeiro / Asaas</span>{active && <span className="text-[11px] text-emerald-600 dark:text-emerald-400">assinatura {active.status}</span>}{latest && <span className={cn("text-[11px]", latest.status === "OVERDUE" ? "text-red-500" : "text-muted-foreground")}>última cobrança: {latest.status}</span>}</div>
+    {!active && <div className="grid gap-2 md:grid-cols-4"><input value={value} onChange={(e) => setValue(e.target.value)} type="number" min="1" step="0.01" placeholder="Mensalidade" style={compactInput} /><input value={dueDate} onChange={(e) => setDueDate(e.target.value)} type="date" title="Primeiro vencimento" style={compactInput} /><select value={billingType} onChange={(e) => setBillingType(e.target.value)} style={compactInput}><option value="UNDEFINED">Cliente escolhe</option><option value="PIX">Pix</option><option value="BOLETO">Boleto</option><option value="CREDIT_CARD">Cartão</option></select><button onClick={createSubscription} disabled={busy || !value} className="rounded-md border border-emerald-500/30 px-2 py-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 disabled:opacity-50">{busy ? "Criando…" : "Criar cobrança recorrente"}</button></div>}
     {message && <div className="text-[11px] text-muted-foreground">{message}</div>}
-    {data.configured && active && <div className="mt-2 grid gap-2 border-t border-border/40 pt-2 md:grid-cols-4"><input value={invoiceDescription} onChange={(e) => setInvoiceDescription(e.target.value)} placeholder="Descrição do serviço" style={compactInput} /><input value={invoiceValue} onChange={(e) => setInvoiceValue(e.target.value)} type="number" min="1" step="0.01" placeholder="Valor da NFS-e" style={compactInput} /><input value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} type="date" title="Data de emissão" style={compactInput} /><button onClick={scheduleInvoice} disabled={invoiceBusy || !invoiceValue} className="rounded-md border border-violet-500/30 px-2 py-1 text-[11px] font-semibold text-violet-600 disabled:opacity-50">{invoiceBusy ? "Agendando…" : "Agendar NFS-e"}</button></div>}
+    {data.configured && active && <div className="mt-2 grid gap-2 border-t border-border/40 pt-2 md:grid-cols-4"><input value={invoiceDescription} onChange={(e) => setInvoiceDescription(e.target.value)} placeholder="Descrição do serviço" style={compactInput} /><input value={invoiceValue} onChange={(e) => setInvoiceValue(e.target.value)} type="number" min="1" step="0.01" placeholder="Valor da NFS-e" style={compactInput} /><input value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} type="date" title="Data de emissão" style={compactInput} /><button onClick={scheduleInvoice} disabled={invoiceBusy || !invoiceValue} className="rounded-md border border-violet-500/30 px-2 py-1 text-[11px] font-semibold text-violet-600 dark:text-violet-400 disabled:opacity-50">{invoiceBusy ? "Agendando…" : "Agendar NFS-e"}</button></div>}
     {data.invoices[0] && <div className="text-[11px] text-muted-foreground">NFS-e: {data.invoices[0].status}{data.invoices[0].pdf_url ? <a className="ml-2 text-primary hover:underline" href={data.invoices[0].pdf_url} target="_blank" rel="noreferrer">Abrir PDF</a> : null}</div>}
-    {!data.configured && <div className="text-[11px] text-amber-600">Configure ASAAS_API_KEY no ambiente para ativar este módulo.</div>}
+    {!data.configured && <div className="text-[11px] text-amber-600 dark:text-amber-400">Configure ASAAS_API_KEY no ambiente para ativar este módulo.</div>}
   </div>;
 }
 
@@ -822,8 +822,8 @@ function ClientOnboarding({ clientId }: { clientId: string }) {
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="text-sm font-semibold">Checklist de entrada</h3>
         {data && <span className="text-[11px] text-muted-foreground">{data.progress.done}/{data.progress.total} concluídos</span>}
-        {overdue > 0 && <span className="rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-bold text-red-600">{overdue} atrasado(s)</span>}
-        {data && <span className="ml-auto text-sm font-bold text-emerald-600">{data.progress.percent}%</span>}
+        {overdue > 0 && <span className="rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-bold text-red-600 dark:text-red-400">{overdue} atrasado(s)</span>}
+        {data && <span className="ml-auto text-sm font-bold text-emerald-600 dark:text-emerald-400">{data.progress.percent}%</span>}
       </div>
       {data && <div className="h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${data.progress.percent}%` }} /></div>}
       {error && <div className="text-[11px] text-red-500">{error}</div>}
@@ -834,18 +834,18 @@ function ClientOnboarding({ clientId }: { clientId: string }) {
       const notesKey = `${item.id}`;
       return <div key={item.id} className={cn("rounded-lg border bg-card p-3 space-y-2", item.status === "done" ? "border-emerald-500/25 bg-emerald-500/[0.03]" : isOverdue ? "border-red-500/30" : "border-border/50")}>
         <div className="flex items-start gap-2.5">
-          <span className={cn("mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg", item.status === "done" ? "bg-emerald-500/10 text-emerald-600" : item.status === "blocked" ? "bg-red-500/10 text-red-600" : "bg-primary/10 text-primary")}><Icon className="h-4 w-4" /></span>
+          <span className={cn("mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg", item.status === "done" ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : item.status === "blocked" ? "bg-red-500/10 text-red-600 dark:text-red-400" : "bg-primary/10 text-primary")}><Icon className="h-4 w-4" /></span>
           <div className="min-w-0 flex-1">
             <span className={cn("text-sm font-semibold", item.status === "done" && "text-muted-foreground line-through")}>{item.title}</span>
             {item.description && <div className="text-[11px] text-muted-foreground">{item.description}</div>}
           </div>
-          <select value={item.status} onChange={(e) => patchItem(item, { status: e.target.value })} className={cn("w-[110px] shrink-0 rounded border border-input bg-transparent px-1 py-1 text-[10px] font-semibold", item.status === "done" ? "text-emerald-600" : item.status === "blocked" ? "text-red-500" : "text-muted-foreground")}><option value="pending">Pendente</option><option value="in_progress">Em andamento</option><option value="done">Concluído</option><option value="blocked">Bloqueado</option></select>
+          <select value={item.status} onChange={(e) => patchItem(item, { status: e.target.value })} className={cn("w-[110px] shrink-0 rounded border border-input bg-transparent px-1 py-1 text-[10px] font-semibold", item.status === "done" ? "text-emerald-600 dark:text-emerald-400" : item.status === "blocked" ? "text-red-500" : "text-muted-foreground")}><option value="pending">Pendente</option><option value="in_progress">Em andamento</option><option value="done">Concluído</option><option value="blocked">Bloqueado</option></select>
         </div>
         <div className="grid gap-2 pl-[42px] sm:grid-cols-2">
           <Field label="Prazo"><BrDateInput value={item.due_date} onChange={(value) => patchItem(item, { due_date: value || null })} style={compactInput} /></Field>
           <Field label="Observações"><input value={notesDraft[notesKey] ?? (item.notes || "")} onChange={(e) => setNotesDraft((prev) => ({ ...prev, [notesKey]: e.target.value }))} onBlur={(e) => { if (e.target.value !== (item.notes || "")) patchItem(item, { notes: e.target.value }); }} placeholder="Nenhuma" style={compactInput} /></Field>
         </div>
-        {item.status === "done" && item.completed_at && <div className="pl-[42px] text-[10px] text-emerald-600">Concluído em {brDate(item.completed_at.slice(0, 10))}</div>}
+        {item.status === "done" && item.completed_at && <div className="pl-[42px] text-[10px] text-emerald-600 dark:text-emerald-400">Concluído em {brDate(item.completed_at.slice(0, 10))}</div>}
         {isOverdue && <div className="pl-[42px] text-[10px] text-red-500">Prazo vencido em {brDate(item.due_date)}</div>}
       </div>;
     })}</div>}
@@ -885,16 +885,16 @@ function ClientApprovals({ clientId, dashboardLinkHref }: { clientId: string; da
 
   const pending = items.filter((item) => item.status === "pending");
   const answered = items.filter((item) => item.status !== "pending");
-  const statusTone: Record<string, string> = { pending: "text-amber-600", approved: "text-emerald-600", changes_requested: "text-amber-600", rejected: "text-red-500" };
+  const statusTone: Record<string, string> = { pending: "text-amber-600 dark:text-amber-400", approved: "text-emerald-600 dark:text-emerald-400", changes_requested: "text-amber-600 dark:text-amber-400", rejected: "text-red-500" };
   const statusLabel: Record<string, string> = { pending: "Pendente", approved: "Aprovado", changes_requested: "Alteração pedida", rejected: "Rejeitado" };
 
   return <div className="space-y-3">
     <div className="rounded-lg border border-border/50 bg-card p-4">
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="text-sm font-semibold">Aprovações</h3>
-        {pending.length > 0 && <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-600">{pending.length} pendente(s)</span>}
+        {pending.length > 0 && <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400">{pending.length} pendente(s)</span>}
         <div className="ml-auto flex gap-1.5">
-          <button onClick={copyClientLink} disabled={linkBusy} className="inline-flex items-center gap-1 rounded-md border border-sky-500/30 px-2 py-1 text-[11px] font-semibold text-sky-600 hover:bg-sky-500/10 disabled:opacity-50">{linkCopied ? <Check className="h-3 w-3" /> : <Link2 className="h-3 w-3" />} {linkCopied ? "Copiado!" : linkBusy ? "Gerando…" : "Copiar link do cliente"}</button>
+          <button onClick={copyClientLink} disabled={linkBusy} className="inline-flex items-center gap-1 rounded-md border border-sky-500/30 px-2 py-1 text-[11px] font-semibold text-sky-600 dark:text-sky-400 hover:bg-sky-500/10 disabled:opacity-50">{linkCopied ? <Check className="h-3 w-3" /> : <Link2 className="h-3 w-3" />} {linkCopied ? "Copiado!" : linkBusy ? "Gerando…" : "Copiar link do cliente"}</button>
           <button onClick={() => setOpen((v) => !v)} className="rounded-md border border-input px-2 py-1 text-[11px] font-semibold hover:bg-muted"><Plus className="mr-1 inline h-3 w-3" /> Solicitar</button>
         </div>
       </div>
@@ -927,9 +927,9 @@ function ClientApprovals({ clientId, dashboardLinkHref }: { clientId: string; da
         </div>
         {respondingId === item.id ? <div className="flex flex-wrap items-center gap-1.5">
           <input value={responseNote} onChange={(e) => setResponseNote(e.target.value)} placeholder="Nota da resposta (opcional)" style={{ ...compactInput, flex: "1 1 200px" }} />
-          <button onClick={() => setStatus(item, "approved", responseNote || undefined)} className="rounded-md border border-emerald-500/30 px-2 py-1 text-[11px] font-semibold text-emerald-600 hover:bg-emerald-500/10">Aprovar</button>
-          <button onClick={() => setStatus(item, "changes_requested", responseNote || undefined)} className="rounded-md border border-amber-500/30 px-2 py-1 text-[11px] font-semibold text-amber-600 hover:bg-amber-500/10">Pedir alteração</button>
-          <button onClick={() => setStatus(item, "rejected", responseNote || undefined)} className="rounded-md border border-red-500/30 px-2 py-1 text-[11px] font-semibold text-red-600 hover:bg-red-500/10">Rejeitar</button>
+          <button onClick={() => setStatus(item, "approved", responseNote || undefined)} className="rounded-md border border-emerald-500/30 px-2 py-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10">Aprovar</button>
+          <button onClick={() => setStatus(item, "changes_requested", responseNote || undefined)} className="rounded-md border border-amber-500/30 px-2 py-1 text-[11px] font-semibold text-amber-600 dark:text-amber-400 hover:bg-amber-500/10">Pedir alteração</button>
+          <button onClick={() => setStatus(item, "rejected", responseNote || undefined)} className="rounded-md border border-red-500/30 px-2 py-1 text-[11px] font-semibold text-red-600 dark:text-red-400 hover:bg-red-500/10">Rejeitar</button>
           <button onClick={() => { setRespondingId(null); setResponseNote(""); }} className="text-[11px] text-muted-foreground hover:text-foreground">cancelar</button>
         </div> : <button onClick={() => setRespondingId(item.id)} className="rounded-md border border-input px-2 py-1 text-[11px] font-semibold hover:bg-muted">Responder</button>}
       </div>;

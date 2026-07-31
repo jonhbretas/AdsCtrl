@@ -271,7 +271,7 @@ function DeliveryCard({
           disabled={!hasEmail}
           title={hasEmail ? "Liga e desliga o envio automático" : "Cadastre o e-mail antes de ativar"}
           className={cn("h-8 px-3 rounded-lg text-xs font-semibold border cursor-pointer transition-colors disabled:cursor-not-allowed disabled:opacity-50",
-            client.report_enabled ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600" : "border-border text-muted-foreground hover:text-foreground")}
+            client.report_enabled ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "border-border text-muted-foreground hover:text-foreground")}
         >
           {client.report_enabled ? <><Check className="h-3.5 w-3.5 inline mr-1" />Ativo</> : "Ativar envio"}
         </button>
@@ -344,7 +344,7 @@ function DeliveryCard({
         {dashboardUrl && (
           <code className="text-[10px] text-muted-foreground truncate max-w-[280px]" title={dashboardUrl}>{dashboardUrl}</code>
         )}
-        {feedback && <span className="text-[11px] font-medium text-emerald-600">{feedback}</span>}
+        {feedback && <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">{feedback}</span>}
       </div>
     </div>
   );

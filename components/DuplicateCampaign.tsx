@@ -111,7 +111,7 @@ export default function DuplicateCampaign({ sourceAccountId, campaignId, campaig
                 </label>
 
                 {estrutura.needsRemap.audiences > 0 && (
-                  <div className="flex items-start gap-2 px-2.5 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-600">
+                  <div className="flex items-start gap-2 px-2.5 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-600 dark:text-amber-400">
                     <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
                     <span>{estrutura.needsRemap.audiences} público(s) personalizado(s) não serão copiados — eles não existem na conta de destino.</span>
                   </div>
@@ -123,9 +123,9 @@ export default function DuplicateCampaign({ sourceAccountId, campaignId, campaig
           {resultado && (
             <div className="space-y-2">
               {warnings.length > 0 && warnings.map((w, i) => (
-                <div key={i} className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-600"><Info className="h-3.5 w-3.5 shrink-0 mt-0.5" /><span>{w}</span></div>
+                <div key={i} className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-600 dark:text-amber-400"><Info className="h-3.5 w-3.5 shrink-0 mt-0.5" /><span>{w}</span></div>
               ))}
-              <div className={cn("flex items-start gap-2 px-3 py-2 rounded-lg text-xs", resultado.dryRun ? "bg-sky-500/10 border border-sky-500/20 text-sky-600" : "bg-emerald-500/10 border border-emerald-500/20 text-emerald-600")}>
+              <div className={cn("flex items-start gap-2 px-3 py-2 rounded-lg text-xs", resultado.dryRun ? "bg-sky-500/10 border border-sky-500/20 text-sky-600 dark:text-sky-400" : "bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400")}>
                 {resultado.dryRun ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0 mt-0.5" /> : <CheckCircle2 className="h-3.5 w-3.5 shrink-0 mt-0.5" />}
                 <div>
                   {resultado.dryRun ? "Validação concluída. Nada foi criado." : `Campanha criada com sucesso em ${resultado.target || "destino"}.`}

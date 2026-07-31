@@ -153,12 +153,12 @@ const SECTION_GAP = 20;  // entre blocos
 
 // Botão de ação na linha da tabela (Orçamento, Duplicar). Borda e fundo
 // próprios: sem eles o rótulo se perdia entre as colunas de número.
-const rowActionRest: React.CSSProperties = { background: "#fff", borderColor: "#d7dee8", color: "#334155" };
-const rowActionHover: React.CSSProperties = { background: "#f1f5f9", borderColor: ACCENT, color: ACCENT };
+const rowActionRest: React.CSSProperties = { background: "var(--color-card)", borderColor: "var(--color-border)", color: "var(--color-foreground)" };
+const rowActionHover: React.CSSProperties = { background: "var(--color-muted)", borderColor: ACCENT, color: ACCENT };
 const rowActionStyle: React.CSSProperties = {
   display: "inline-flex", alignItems: "center", gap: 5,
   padding: "5px 10px", borderRadius: 8,
-  border: "1px solid #d7dee8", background: "#fff", color: "#334155",
+  border: "1px solid var(--color-border)", background: "var(--color-card)", color: "var(--color-foreground)",
   fontSize: 11.5, fontWeight: 600, lineHeight: 1.2, cursor: "pointer",
   whiteSpace: "nowrap", transition: "background .15s, border-color .15s, color .15s",
 };
@@ -340,9 +340,9 @@ export default function AccountDetail({
     }));
   }, [data]);
 
-  if (loading) return <div style={{ padding: 32, color: "#888", fontSize: 14 }}>Carregando dados do {platformLabel}…</div>;
+  if (loading) return <div style={{ padding: 32, color: "var(--color-muted-foreground)", fontSize: 14 }}>Carregando dados do {platformLabel}…</div>;
   if (error)
-    return <div style={{ padding: 24 }}><div style={{ background: "#fceceb", color: "#a32d2d", padding: "10px 14px", borderRadius: 8, fontSize: 14 }}>{error}</div></div>;
+    return <div style={{ padding: 24 }}><div style={{ background: "color-mix(in srgb, var(--color-destructive) 10%, transparent)", color: "var(--color-destructive)", padding: "10px 14px", borderRadius: 8, fontSize: 14 }}>{error}</div></div>;
   if (!data) return null;
 
   const k = data.kpis, p = data.prevKpis;
@@ -427,22 +427,22 @@ export default function AccountDetail({
   ].filter((s, i) => i === 0 || s.v > 0);
 
   return (
-    <div style={{ padding: "8px 4px 24px", background: "#fafafa" }}>
+    <div style={{ padding: "8px 4px 24px", background: "var(--color-background)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: SECTION_GAP, flexWrap: "wrap" }}>
         <strong style={{ fontSize: 15 }}>{platformLabel}</strong>
         {/* A prop `status` chegava aqui e não era mostrada em lugar nenhum:
             dava para ler número de conta desativada sem nenhum aviso no bloco.
             Conta saudável não precisa de selo — só o que exige ação aparece. */}
         {platform === "meta" && status && status !== "ACTIVE" && <AccountStatusChip status={status} />}
-        <span style={{ fontSize: 12, color: "#8a919b" }}>vs. período anterior ({data.prevRange.since} → {data.prevRange.until})</span>
+        <span style={{ fontSize: 12, color: "var(--color-muted-foreground)" }}>vs. período anterior ({data.prevRange.since} → {data.prevRange.until})</span>
         <span style={{ flex: 1 }} />
         <a href={`/report/${accountId}?since=${since}&until=${until}`} target="_blank" rel="noreferrer"
            style={{ fontSize: 12, color: ACCENT, textDecoration: "none", border: `1px solid ${ACCENT}55`, background: `${ACCENT}0d`, borderRadius: 8, padding: "5px 10px", fontWeight: 600 }}>
           ⤓ Relatório / PDF
         </a>
-        <label style={{ fontSize: 12, color: "#8a919b" }}>Resultado:</label>
+        <label style={{ fontSize: 12, color: "var(--color-muted-foreground)" }}>Resultado:</label>
         <select value={result ?? ""} onChange={(e) => setResult(e.target.value)}
-                style={{ padding: "5px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13 }}>
+                style={{ padding: "5px 10px", borderRadius: 8, border: "1px solid var(--color-border)", fontSize: 13 }}>
           <optgroup label="Resultado do negócio">
             {familyOptions.map((option) => (
               <option key={option.value} value={option.value}>
@@ -503,7 +503,7 @@ export default function AccountDetail({
       {hasFunnel && (
         <>
           <SectionTitle>Funil de conversão</SectionTitle>
-          <div style={{ background: "#fff", border: "1px solid #eee", borderRadius: 12, padding: 16, marginBottom: SECTION_GAP }}>
+          <div style={{ background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 12, padding: 16, marginBottom: SECTION_GAP }}>
             <div style={{ display: "grid", gap: 8 }}>
               {funnel.map((s, i) => {
                 const top = funnel[0].v || 1;
@@ -511,13 +511,13 @@ export default function AccountDetail({
                 const conv = i > 0 && funnel[i - 1].v ? (s.v / funnel[i - 1].v) * 100 : null;
                 return (
                   <div key={s.label} style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    <span style={{ width: 130, fontSize: 13, color: "#555" }}>{s.label}</span>
-                    <div style={{ flex: 1, background: "#f2f2f2", borderRadius: 6, overflow: "hidden", height: 26 }}>
+                    <span style={{ width: 130, fontSize: 13, color: "var(--color-foreground)" }}>{s.label}</span>
+                    <div style={{ flex: 1, background: "var(--color-muted)", borderRadius: 6, overflow: "hidden", height: 26 }}>
                       <div style={{ width: `${w}%`, height: "100%", background: `linear-gradient(90deg, ${ACCENT}, ${TEAL})`, borderRadius: 6, display: "flex", alignItems: "center", paddingLeft: 10, color: "#fff", fontSize: 12, fontWeight: 600 }}>
                         {num(s.v)}
                       </div>
                     </div>
-                    <span style={{ width: 70, textAlign: "right", fontSize: 12, color: conv == null ? "transparent" : "#888" }}>
+                    <span style={{ width: 70, textAlign: "right", fontSize: 12, color: conv == null ? "transparent" : "var(--color-muted-foreground)" }}>
                       {conv == null ? "—" : `${conv.toFixed(1)}%`}
                     </span>
                   </div>
@@ -534,11 +534,11 @@ export default function AccountDetail({
       <ChartCard height={260}>
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={data.daily.map((d) => ({ ...d, label: dayLabel(d.date) }))} margin={{ top: 10, right: 8, left: 8, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eee" />
-            <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#999" }} tickLine={false} axisLine={false} />
-            <YAxis yAxisId="l" tick={{ fontSize: 11, fill: "#999" }} tickLine={false} axisLine={false} tickFormatter={(v) => formatMoneyShort(v)} width={56} />
-            <YAxis yAxisId="r" orientation="right" tick={{ fontSize: 11, fill: "#999" }} tickLine={false} axisLine={false} tickFormatter={(v) => formatMoneyShort(v)} width={48} />
-            <Tooltip formatter={(v: any, n: any) => [formatMoney(Number(v)), n === "spend" ? "Investimento" : "CPM"]} />
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-border)" />
+            <XAxis dataKey="label" tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} tickLine={false} axisLine={false} />
+            <YAxis yAxisId="l" tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} tickLine={false} axisLine={false} tickFormatter={(v) => formatMoneyShort(v)} width={56} />
+            <YAxis yAxisId="r" orientation="right" tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} tickLine={false} axisLine={false} tickFormatter={(v) => formatMoneyShort(v)} width={48} />
+            <Tooltip formatter={(v: any, n: any) => [formatMoney(Number(v)), n === "spend" ? "Investimento" : "CPM"]} contentStyle={{ borderRadius: 8, border: "1px solid var(--color-border)", background: "var(--color-popover)", color: "var(--color-popover-foreground)" }} />
             <Bar yAxisId="l" dataKey="spend" name="Investimento" fill={TEAL} radius={[4, 4, 0, 0]} maxBarSize={48} />
             <Line yAxisId="r" type="monotone" dataKey="cpm" name="CPM" stroke={ACCENT2} strokeWidth={2} dot={false} />
           </ComposedChart>
@@ -555,20 +555,20 @@ export default function AccountDetail({
             padding: "9px 12px",
             borderRadius: 9,
             fontSize: 12.5,
-            background: changeNote.bad ? "#fdf0ef" : "#eef7f1",
-            border: `1px solid ${changeNote.bad ? "#f0cfcc" : "#cfe6d8"}`,
-            color: changeNote.bad ? "#a3372f" : "#2b7143",
+            background: changeNote.bad ? "color-mix(in srgb, var(--color-destructive) 10%, transparent)" : "color-mix(in srgb, var(--color-success) 10%, transparent)",
+            border: `1px solid ${changeNote.bad ? "color-mix(in srgb, var(--color-destructive) 25%, transparent)" : "color-mix(in srgb, var(--color-success) 25%, transparent)"}`,
+            color: changeNote.bad ? "var(--color-destructive)" : "var(--color-success)",
           }}
         >
           {changeNote.text}
           {!changeNote.bad && " A alteração aparece em Últimas edições."}
         </div>
       )}
-      <div style={{ border: "1px solid #eee", borderRadius: 12, background: "#fff", overflow: "hidden", marginBottom: SECTION_GAP }}>
-        <div style={{ display: "flex", gap: 4, padding: 10, borderBottom: "1px solid #f0f0f0" }}>
+      <div style={{ border: "1px solid var(--color-border)", borderRadius: 12, background: "var(--color-card)", overflow: "hidden", marginBottom: SECTION_GAP }}>
+        <div style={{ display: "flex", gap: 4, padding: 10, borderBottom: "1px solid var(--color-border)" }}>
           {(["campaigns", "adsets", "ads"] as const).map((t) => (
             <button key={t} onClick={() => setTab(t)}
-              style={{ padding: "6px 14px", borderRadius: 8, border: "none", background: tab === t ? "#111" : "transparent", color: tab === t ? "#fff" : "#666", fontSize: 13, fontWeight: 500, cursor: "pointer" }}>
+              style={{ padding: "6px 14px", borderRadius: 8, border: "none", background: tab === t ? "var(--color-foreground)" : "transparent", color: tab === t ? "var(--color-background)" : "var(--color-muted-foreground)", fontSize: 13, fontWeight: 500, cursor: "pointer" }}>
               {t === "campaigns" ? "Campanhas" : t === "adsets" ? "Conjuntos" : "Anúncios"}
             </button>
           ))}
@@ -576,7 +576,7 @@ export default function AccountDetail({
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 760 }}>
             <thead>
-              <tr style={{ color: "#999", textAlign: "right" }}>
+              <tr style={{ color: "var(--color-muted-foreground)", textAlign: "right" }}>
                 {/* Veiculação primeiro: é o interruptor da linha, e ler o nome
                     depois de decidir ligar/desligar é a ordem natural. */}
                 {platform === "meta" && (
@@ -612,7 +612,7 @@ export default function AccountDetail({
                 const res = resultOf(r);
                 const rv = pickVal(r.values, PURCHASE_KEYS);
                 return (
-                  <tr key={r.id} style={{ borderTop: "1px solid #f4f4f4" }}>
+                  <tr key={r.id} style={{ borderTop: "1px solid var(--color-border)" }}>
                     {platform === "meta" && (
                       <td style={{ padding: "10px 14px", textAlign: "left" }}>
                         <DeliverySwitch
@@ -639,7 +639,7 @@ export default function AccountDetail({
                         {r.broad_location && (tab === "campaigns" || tab === "adsets") && (
                           <span
                             title="Este conjunto está rodando o país inteiro, sem cidade, região ou raio configurado. Confira se a localização foi mesmo definida — é o sintoma mais comum de campanha duplicada onde ninguém trocou o público."
-                            style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 7px", borderRadius: 999, fontSize: 10, fontWeight: 700, background: "#fef3c7", color: "#92400e", border: "1px solid #fcd34d", flexShrink: 0, cursor: "help" }}
+                            style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 7px", borderRadius: 999, fontSize: 10, fontWeight: 700, background: "color-mix(in srgb, var(--color-warning) 16%, transparent)", color: "var(--color-warning)", border: "1px solid color-mix(in srgb, var(--color-warning) 35%, transparent)", flexShrink: 0, cursor: "help" }}
                           >
                             ⚠ país inteiro
                           </span>
@@ -711,10 +711,10 @@ export default function AccountDetail({
               <defs>
                 <linearGradient id="reachGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#10b981" stopOpacity={0.3} /><stop offset="100%" stopColor="#10b981" stopOpacity={0} /></linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-              <XAxis dataKey="label" tick={{ fontSize: 10, fill: "#94a3b8" }} tickLine={false} axisLine={false} />
-              <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} tickLine={false} axisLine={false} width={36} tickFormatter={(v) => num(v)} />
-              <Tooltip formatter={(v: any) => num(Number(v))} contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0" }} />
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-border)" />
+              <XAxis dataKey="label" tick={{ fontSize: 10, fill: "var(--color-muted-foreground)" }} tickLine={false} axisLine={false} />
+              <YAxis tick={{ fontSize: 10, fill: "var(--color-muted-foreground)" }} tickLine={false} axisLine={false} width={36} tickFormatter={(v) => num(v)} />
+              <Tooltip formatter={(v: any) => num(Number(v))} contentStyle={{ borderRadius: 8, border: "1px solid var(--color-border)", background: "var(--color-popover)", color: "var(--color-popover-foreground)" }} />
               <Area type="monotone" dataKey="reach" name="Alcance" stroke="#10b981" strokeWidth={2} fill="url(#reachGrad)" dot={false} />
             </AreaChart>
           </ResponsiveContainer>
@@ -722,11 +722,11 @@ export default function AccountDetail({
         <ChartCard height={200} title="Cliques + CTR">
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={data.daily.map((d) => ({ label: dayLabel(d.date), clicks: d.clicks, ctr: d.ctr }))} margin={{ top: 4, right: 8, left: 8, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-              <XAxis dataKey="label" tick={{ fontSize: 10, fill: "#94a3b8" }} tickLine={false} axisLine={false} />
-              <YAxis yAxisId="l" tick={{ fontSize: 10, fill: "#94a3b8" }} tickLine={false} axisLine={false} width={36} tickFormatter={(v) => num(v)} />
-              <YAxis yAxisId="r" orientation="right" tick={{ fontSize: 10, fill: "#94a3b8" }} tickLine={false} axisLine={false} width={28} tickFormatter={(v) => `${v.toFixed(1)}%`} />
-              <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0" }} />
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-border)" />
+              <XAxis dataKey="label" tick={{ fontSize: 10, fill: "var(--color-muted-foreground)" }} tickLine={false} axisLine={false} />
+              <YAxis yAxisId="l" tick={{ fontSize: 10, fill: "var(--color-muted-foreground)" }} tickLine={false} axisLine={false} width={36} tickFormatter={(v) => num(v)} />
+              <YAxis yAxisId="r" orientation="right" tick={{ fontSize: 10, fill: "var(--color-muted-foreground)" }} tickLine={false} axisLine={false} width={28} tickFormatter={(v) => `${v.toFixed(1)}%`} />
+              <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid var(--color-border)", background: "var(--color-popover)", color: "var(--color-popover-foreground)" }} />
               <Bar yAxisId="l" dataKey="clicks" name="Cliques" fill="#06b6d4" radius={[3, 3, 0, 0]} maxBarSize={24} />
               <Line yAxisId="r" type="monotone" dataKey="ctr" name="CTR" stroke="#f59e0b" strokeWidth={2} dot={false} />
               <Legend wrapperStyle={{ fontSize: 10 }} />
@@ -741,8 +741,8 @@ export default function AccountDetail({
           <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "8px 0 12px" }}>
             <SectionTitle noMargin>Segmentações</SectionTitle>
             <span style={{ flex: 1 }} />
-            <label style={{ fontSize: 12, color: "#888" }}>Visualizar por:</label>
-            <select value={demoMetric} onChange={(e) => setDemoMetric(e.target.value as MetricKey)} style={{ padding: "5px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13 }}>
+            <label style={{ fontSize: 12, color: "var(--color-muted-foreground)" }}>Visualizar por:</label>
+            <select value={demoMetric} onChange={(e) => setDemoMetric(e.target.value as MetricKey)} style={{ padding: "5px 10px", borderRadius: 8, border: "1px solid var(--color-border)", fontSize: 13 }}>
               {(Object.keys(METRIC_LABELS) as MetricKey[]).map((m) => <option key={m} value={m}>{METRIC_LABELS[m]}</option>)}
             </select>
           </div>
@@ -756,8 +756,8 @@ export default function AccountDetail({
               if (isPie && data.length <= 6) {
                 const COLORS = ["#06b6d4", "#10b981", "#f59e0b", "#8b5cf6", "#ef4444", "#3b82f6"];
                 return (
-                  <div key={segment.title} style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: 14 }}>
-                    <h4 style={{ fontSize: 11, fontWeight: 700, color: "#64748b", letterSpacing: 0.4, textTransform: "uppercase", marginBottom: 8 }}>{segment.title.replace("_", " ")}</h4>
+                  <div key={segment.title} style={{ background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 12, padding: 14 }}>
+                    <h4 style={{ fontSize: 11, fontWeight: 700, color: "var(--color-muted-foreground)", letterSpacing: 0.4, textTransform: "uppercase", marginBottom: 8 }}>{segment.title.replace("_", " ")}</h4>
                     <ResponsiveContainer width="100%" height={180}>
                       <PieChart>
                         <Pie data={data} dataKey="primary" nameKey="name" cx="50%" cy="50%" innerRadius={45} outerRadius={78} paddingAngle={2}
@@ -766,10 +766,10 @@ export default function AccountDetail({
                         >
                           {data.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                         </Pie>
-                        <Tooltip formatter={(v: any) => fmtMetric(Number(v), demoMetric)} contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0" }} />
+                        <Tooltip formatter={(v: any) => fmtMetric(Number(v), demoMetric)} contentStyle={{ borderRadius: 8, border: "1px solid var(--color-border)", background: "var(--color-popover)", color: "var(--color-popover-foreground)" }} />
                       </PieChart>
                     </ResponsiveContainer>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px", marginTop: 6, justifyContent: "center", fontSize: 10, color: "#64748b" }}>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px", marginTop: 6, justifyContent: "center", fontSize: 10, color: "var(--color-muted-foreground)" }}>
                       {data.map((d, i) => <span key={d.name} style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 8, height: 8, borderRadius: "50%", background: COLORS[i % COLORS.length] }} />{d.name}</span>)}
                     </div>
                   </div>
@@ -778,14 +778,14 @@ export default function AccountDetail({
 
               if (isAgeGender) {
                 return (
-                  <div key={segment.title} style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: 14 }}>
-                    <h4 style={{ fontSize: 11, fontWeight: 700, color: "#64748b", letterSpacing: 0.4, textTransform: "uppercase", marginBottom: 8 }}>{segment.title.replace("_", " ")}</h4>
+                  <div key={segment.title} style={{ background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 12, padding: 14 }}>
+                    <h4 style={{ fontSize: 11, fontWeight: 700, color: "var(--color-muted-foreground)", letterSpacing: 0.4, textTransform: "uppercase", marginBottom: 8 }}>{segment.title.replace("_", " ")}</h4>
                     <ResponsiveContainer width="100%" height={200}>
                       <BarChart data={data} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                        <XAxis dataKey="name" tick={{ fontSize: 9, fill: "#94a3b8" }} tickLine={false} axisLine={false} />
-                        <YAxis tick={{ fontSize: 9, fill: "#94a3b8" }} tickLine={false} axisLine={false} width={40} tickFormatter={(v) => num(v)} />
-                        <Tooltip formatter={(v: any) => fmtMetric(Number(v), demoMetric)} contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0" }} />
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-border)" />
+                        <XAxis dataKey="name" tick={{ fontSize: 9, fill: "var(--color-muted-foreground)" }} tickLine={false} axisLine={false} />
+                        <YAxis tick={{ fontSize: 9, fill: "var(--color-muted-foreground)" }} tickLine={false} axisLine={false} width={40} tickFormatter={(v) => num(v)} />
+                        <Tooltip formatter={(v: any) => fmtMetric(Number(v), demoMetric)} contentStyle={{ borderRadius: 8, border: "1px solid var(--color-border)", background: "var(--color-popover)", color: "var(--color-popover-foreground)" }} />
                         <Bar dataKey="primary" name={METRIC_LABELS[demoMetric]} fill="#06b6d4" radius={[3, 3, 0, 0]} maxBarSize={24} />
                       </BarChart>
                     </ResponsiveContainer>
@@ -795,16 +795,16 @@ export default function AccountDetail({
 
               // Default: horizontal bar chart
               return (
-                <div key={segment.title} style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: 14 }}>
-                  <h4 style={{ fontSize: 11, fontWeight: 700, color: "#64748b", letterSpacing: 0.4, textTransform: "uppercase", marginBottom: 8 }}>{segment.title.replace("_", " ")}</h4>
+                <div key={segment.title} style={{ background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 12, padding: 14 }}>
+                  <h4 style={{ fontSize: 11, fontWeight: 700, color: "var(--color-muted-foreground)", letterSpacing: 0.4, textTransform: "uppercase", marginBottom: 8 }}>{segment.title.replace("_", " ")}</h4>
                   <div style={{ display: "grid", gap: 4 }}>
                     {data.slice(0, 8).map((d) => (
                       <div key={d.name} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <span style={{ width: 80, fontSize: 10, color: "#333", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "right" }}>{d.name}</span>
-                        <div style={{ flex: 1, height: 12, background: "#f1f5f9", borderRadius: 4, overflow: "hidden" }}>
+                        <span style={{ width: 80, fontSize: 10, color: "var(--color-foreground)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "right" }}>{d.name}</span>
+                        <div style={{ flex: 1, height: 12, background: "var(--color-muted)", borderRadius: 4, overflow: "hidden" }}>
                           <div style={{ width: `${Math.max((d.primary / maxVal) * 100, 2)}%`, height: "100%", borderRadius: 4, background: demoMetric === "spend" || demoMetric === "cpr" ? "#06b6d4" : "#10b981" }} />
                         </div>
-                        <span style={{ width: 60, fontSize: 10, fontWeight: 600, color: "#333", textAlign: "right" }}>{fmtMetric(d.primary, demoMetric)}</span>
+                        <span style={{ width: 60, fontSize: 10, fontWeight: 600, color: "var(--color-foreground)", textAlign: "right" }}>{fmtMetric(d.primary, demoMetric)}</span>
                       </div>
                     ))}
                   </div>
@@ -813,7 +813,7 @@ export default function AccountDetail({
             })}
           </div>
           {segments.empty.length > 0 && (
-            <p style={{ fontSize: 11.5, color: "var(--text-muted)", margin: "0 0 16px", lineHeight: 1.5 }}>
+            <p style={{ fontSize: 11.5, color: "var(--color-muted-foreground)", margin: "0 0 16px", lineHeight: 1.5 }}>
               Sem dado em {segments.empty.join(", ").toLowerCase()} para {METRIC_LABELS[demoMetric].toLowerCase()}
               {platform === "google"
                 ? ". O Google Ads não expõe estes recortes por esta via — o que dá para agir aqui são os termos de busca acima."
@@ -829,10 +829,10 @@ export default function AccountDetail({
         <ChartCard height={220} title="Impressões × Alcance por hora">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={data.breakdowns.hour.map((h) => ({ label: `${h.key}h`, impressions: (h as any).impressions || 0, reach: (h as any).reach || 0 }))} margin={{ top: 6, right: 8, left: 8, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-              <XAxis dataKey="label" tick={{ fontSize: 10, fill: "#94a3b8" }} tickLine={false} axisLine={false} interval={2} />
-              <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} tickLine={false} axisLine={false} width={44} tickFormatter={(v) => num(v)} />
-              <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0" }} />
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-border)" />
+              <XAxis dataKey="label" tick={{ fontSize: 10, fill: "var(--color-muted-foreground)" }} tickLine={false} axisLine={false} interval={2} />
+              <YAxis tick={{ fontSize: 10, fill: "var(--color-muted-foreground)" }} tickLine={false} axisLine={false} width={44} tickFormatter={(v) => num(v)} />
+              <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid var(--color-border)", background: "var(--color-popover)", color: "var(--color-popover-foreground)" }} />
               <Bar dataKey="impressions" name="Impressões" fill="#06b6d4" radius={[3, 3, 0, 0]} maxBarSize={16} />
               <Bar dataKey="reach" name="Alcance" fill="#10b981" radius={[3, 3, 0, 0]} maxBarSize={16} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
@@ -845,7 +845,7 @@ export default function AccountDetail({
       {/* Preview popup para thumbnail de anúncio */}
       {previewAd && (
         <div
-          style={{ position: "fixed", zIndex: 999, top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: 400, height: 400, maxWidth: "90vw", maxHeight: "90vh", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, boxShadow: "0 20px 60px rgba(0,0,0,0.3)", overflow: "hidden", cursor: "pointer" }}
+          style={{ position: "fixed", zIndex: 999, top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: 400, height: 400, maxWidth: "90vw", maxHeight: "90vh", background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 12, boxShadow: "0 20px 60px rgba(0,0,0,0.3)", overflow: "hidden", cursor: "pointer" }}
           onClick={() => setPreviewAd(null)}
           onMouseLeave={() => setPreviewAd(null)}
         >
@@ -856,25 +856,25 @@ export default function AccountDetail({
       {/* Modal de ajuste de orçamento */}
       {budgetModal && (
         <div style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setBudgetModal(null)}>
-          <div style={{ background: "#fff", borderRadius: 16, padding: 24, width: 340, boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }} onClick={(e) => e.stopPropagation()}>
+          <div style={{ background: "var(--color-card)", borderRadius: 16, padding: 24, width: 340, boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }} onClick={(e) => e.stopPropagation()}>
             <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>Ajustar orçamento</h3>
-            <p style={{ fontSize: 13, color: "#666", marginBottom: 16 }}>{budgetModal.name}</p>
+            <p style={{ fontSize: 13, color: "var(--color-muted-foreground)", marginBottom: 16 }}>{budgetModal.name}</p>
 
             <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
-              <button onClick={() => setBudgetDir("up")} style={{ flex: 1, padding: "8px 0", border: `2px solid ${budgetDir === "up" ? "#22c55e" : "#e2e8f0"}`, borderRadius: 10, background: budgetDir === "up" ? "#f0fdf4" : "#fff", color: budgetDir === "up" ? "#22c55e" : "#666", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>↑ Aumentar</button>
-              <button onClick={() => setBudgetDir("down")} style={{ flex: 1, padding: "8px 0", border: `2px solid ${budgetDir === "down" ? "#ef4444" : "#e2e8f0"}`, borderRadius: 10, background: budgetDir === "down" ? "#fef2f2" : "#fff", color: budgetDir === "down" ? "#ef4444" : "#666", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>↓ Reduzir</button>
+              <button onClick={() => setBudgetDir("up")} style={{ flex: 1, padding: "8px 0", border: `2px solid ${budgetDir === "up" ? "var(--color-success)" : "var(--color-border)"}`, borderRadius: 10, background: budgetDir === "up" ? "color-mix(in srgb, var(--color-success) 12%, transparent)" : "var(--color-card)", color: budgetDir === "up" ? "var(--color-success)" : "var(--color-muted-foreground)", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>↑ Aumentar</button>
+              <button onClick={() => setBudgetDir("down")} style={{ flex: 1, padding: "8px 0", border: `2px solid ${budgetDir === "down" ? "var(--color-destructive)" : "var(--color-border)"}`, borderRadius: 10, background: budgetDir === "down" ? "color-mix(in srgb, var(--color-destructive) 12%, transparent)" : "var(--color-card)", color: budgetDir === "down" ? "var(--color-destructive)" : "var(--color-muted-foreground)", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>↓ Reduzir</button>
             </div>
 
             <label style={{ display: "grid", gap: 6, marginBottom: 16 }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: "#666" }}>Percentual</span>
+              <span style={{ fontSize: 12, fontWeight: 600, color: "var(--color-muted-foreground)" }}>Percentual</span>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <input type="number" value={budgetPct} onChange={(e) => setBudgetPct(e.target.value)} min={1} max={300} style={{ flex: 1, height: 40, borderRadius: 10, border: "1px solid #d1d5db", padding: "0 12px", fontSize: 16, fontWeight: 700, textAlign: "center" }} />
-                <span style={{ fontSize: 14, fontWeight: 700, color: "#666" }}>%</span>
+                <input type="number" value={budgetPct} onChange={(e) => setBudgetPct(e.target.value)} min={1} max={300} style={{ flex: 1, height: 40, borderRadius: 10, border: "1px solid var(--color-border)", padding: "0 12px", fontSize: 16, fontWeight: 700, textAlign: "center", background: "var(--color-background)", color: "var(--color-foreground)" }} />
+                <span style={{ fontSize: 14, fontWeight: 700, color: "var(--color-muted-foreground)" }}>%</span>
               </div>
             </label>
 
             <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={() => setBudgetModal(null)} style={{ flex: 1, height: 40, borderRadius: 10, border: "1px solid #d1d5db", background: "#fff", color: "#666", fontWeight: 600, fontSize: 14, cursor: "pointer" }}>Cancelar</button>
+              <button onClick={() => setBudgetModal(null)} style={{ flex: 1, height: 40, borderRadius: 10, border: "1px solid var(--color-border)", background: "var(--color-card)", color: "var(--color-muted-foreground)", fontWeight: 600, fontSize: 14, cursor: "pointer" }}>Cancelar</button>
               <button
                 disabled={budgetLoading || !budgetPct || Number(budgetPct) <= 0}
                 onClick={async () => {
@@ -906,10 +906,10 @@ export default function AccountDetail({
 
 function DeltaBadge({ cur, prev, invert, neutral }: { cur: number; prev: number; invert?: boolean; neutral?: boolean }) {
   const d = delta(cur, prev);
-  if (!d.hasPrev) return <span style={{ fontSize: 11, color: "#bbb" }}>—</span>;
+  if (!d.hasPrev) return <span style={{ fontSize: 11, color: "var(--color-muted-foreground)" }}>—</span>;
   const up = d.pct >= 0;
   const good = invert ? !up : up;
-  const color = neutral || Math.abs(d.pct) < 0.05 ? "#999" : good ? "#16a34a" : "#dc2626";
+  const color = neutral || Math.abs(d.pct) < 0.05 ? "var(--color-muted-foreground)" : good ? "#16a34a" : "#dc2626";
   return (
     <span style={{ fontSize: 11, fontWeight: 600, color }}>
       {up ? "▲" : "▼"} {Math.abs(d.pct).toFixed(1)}%
@@ -919,11 +919,11 @@ function DeltaBadge({ cur, prev, invert, neutral }: { cur: number; prev: number;
 
 function KpiCard({ label, value, sub, cur, prev, invert, neutral }: { label: string; value: string; sub?: string; cur?: number; prev?: number; invert?: boolean; neutral?: boolean }) {
   return (
-    <div style={{ background: "#fff", border: "1px solid #eee", borderRadius: 12, padding: "14px 16px" }}>
-      <div style={{ fontSize: 11, color: "#999", letterSpacing: 0.4, fontWeight: 600 }}>{label}</div>
-      <div style={{ fontSize: 22, fontWeight: 700, marginTop: 6, color: "#111" }}>{value}</div>
+    <div style={{ background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 12, padding: "14px 16px" }}>
+      <div style={{ fontSize: 11, color: "var(--color-muted-foreground)", letterSpacing: 0.4, fontWeight: 600 }}>{label}</div>
+      <div style={{ fontSize: 22, fontWeight: 700, marginTop: 6, color: "var(--color-foreground)" }}>{value}</div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 3, gap: 6 }}>
-        <span style={{ fontSize: 12, color: "#999" }}>{sub || ""}</span>
+        <span style={{ fontSize: 12, color: "var(--color-muted-foreground)" }}>{sub || ""}</span>
         {cur != null && prev != null && <DeltaBadge cur={cur} prev={prev} invert={invert} neutral={neutral} />}
       </div>
     </div>
@@ -932,10 +932,10 @@ function KpiCard({ label, value, sub, cur, prev, invert, neutral }: { label: str
 
 function MiniKpi({ label, value, cur, prev, invert, neutral }: { label: string; value: string; cur?: number; prev?: number; invert?: boolean; neutral?: boolean }) {
   return (
-    <div style={{ background: "#fff", border: "1px solid #eee", borderRadius: 10, padding: "10px 12px" }}>
-      <div style={{ fontSize: 11, color: "#999" }}>{label}</div>
+    <div style={{ background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 10, padding: "10px 12px" }}>
+      <div style={{ fontSize: 11, color: "var(--color-muted-foreground)" }}>{label}</div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 6, marginTop: 2 }}>
-        <span style={{ fontSize: 16, fontWeight: 600 }}>{value}</span>
+        <span style={{ fontSize: 16, fontWeight: 600, color: "var(--color-foreground)" }}>{value}</span>
         {cur != null && prev != null && <DeltaBadge cur={cur} prev={prev} invert={invert} neutral={neutral} />}
       </div>
     </div>
@@ -943,7 +943,7 @@ function MiniKpi({ label, value, cur, prev, invert, neutral }: { label: string; 
 }
 
 function SectionTitle({ children, noMargin }: { children: React.ReactNode; noMargin?: boolean }) {
-  return <div style={{ fontSize: 12, fontWeight: 700, color: "#888", letterSpacing: 0.6, textTransform: "uppercase", margin: noMargin ? 0 : "8px 0 12px" }}>{children}</div>;
+  return <div style={{ fontSize: 12, fontWeight: 700, color: "var(--color-muted-foreground)", letterSpacing: 0.6, textTransform: "uppercase", margin: noMargin ? 0 : "8px 0 12px" }}>{children}</div>;
 }
 
 // Mesmo chip da linha da visão geral, para o status se ler igual antes e
@@ -951,8 +951,8 @@ function SectionTitle({ children, noMargin }: { children: React.ReactNode; noMar
 function AccountStatusChip({ status }: { status: string }) {
   const info = accountStatusInfo(status);
   const palette = info.tone === "bad"
-    ? { bg: "#fef2f2", border: "#fecaca", fg: "#b91c1c" }
-    : { bg: "#fffbeb", border: "#fde68a", fg: "#b45309" };
+    ? { bg: "color-mix(in srgb, var(--color-destructive) 14%, transparent)", border: "color-mix(in srgb, var(--color-destructive) 30%, transparent)", fg: "var(--color-destructive)" }
+    : { bg: "color-mix(in srgb, var(--color-warning) 14%, transparent)", border: "color-mix(in srgb, var(--color-warning) 30%, transparent)", fg: "var(--color-warning)" };
   return (
     <span
       title={`status na plataforma: ${status}`}
@@ -970,8 +970,8 @@ function AccountStatusChip({ status }: { status: string }) {
 // diferente do resto. Quem posiciona é o bloco de fora.
 function ChartCard({ children, height, title }: { children: React.ReactNode; height: number; title?: string }) {
   return (
-    <div style={{ background: "#fff", border: "1px solid #eee", borderRadius: 12, padding: 12 }}>
-      {title && <div style={{ fontSize: 12, color: "#999", marginBottom: 8 }}>{title}</div>}
+    <div style={{ background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 12, padding: 12 }}>
+      {title && <div style={{ fontSize: 12, color: "var(--color-muted-foreground)", marginBottom: 8 }}>{title}</div>}
       <div style={{ height }}>{children}</div>
     </div>
   );
@@ -1011,7 +1011,7 @@ function Th({
   );
 }
 function Td({ children, accent }: { children: React.ReactNode; accent?: boolean }) {
-  return <td style={{ padding: "10px 14px", textAlign: "right", color: accent ? ACCENT : "#333", fontWeight: accent ? 600 : 400 }}>{children}</td>;
+  return <td style={{ padding: "10px 14px", textAlign: "right", color: accent ? ACCENT : "var(--color-foreground)", fontWeight: accent ? 600 : 400 }}>{children}</td>;
 }
 
 // Termos de busca do Google.
@@ -1195,7 +1195,7 @@ function SearchTerms({ terms, currency, accountId }: { terms?: SearchTerm[]; cur
         <SectionTitle noMargin>Termos de busca</SectionTitle>
         {all.length > 0 && (
           <>
-            <span style={{ fontSize: 11.5, color: "var(--text-muted)" }}>
+            <span style={{ fontSize: 11.5, color: "var(--color-muted-foreground)" }}>
               {list.length}
               {list.length !== all.length ? ` de ${all.length}` : ""} termos
             </span>
@@ -1251,7 +1251,7 @@ function SearchTerms({ terms, currency, accountId }: { terms?: SearchTerm[]; cur
         <div className="ec-card ec-scroll-x" style={{ marginBottom: SECTION_GAP }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 720 }}>
             <thead>
-              <tr style={{ color: "var(--text-muted)", textAlign: "right" }}>
+              <tr style={{ color: "var(--color-muted-foreground)", textAlign: "right" }}>
                 <Th column="state" align="left" initialDirection="asc">Situação</Th>
                 <Th column="term" align="left" initialDirection="asc">Termo digitado</Th>
                 <Th column="cost">Custo</Th>
@@ -1275,7 +1275,7 @@ function SearchTerms({ terms, currency, accountId }: { terms?: SearchTerm[]; cur
                 // Gastou e não converteu, sem tratamento: é o candidato a negativar.
                 const suspect = !feito && term.state === "novo" && term.conversions === 0 && term.cost > 0;
                 return (
-                  <tr key={`${term.term}-${index}`} style={{ borderTop: "1px solid var(--border)" }}>
+                  <tr key={`${term.term}-${index}`} style={{ borderTop: "1px solid var(--color-border)" }}>
                     <td style={{ padding: "10px 14px" }}>
                       {/* O title é o que explica o rótulo. Vem junto com o
                           motivo de estar em vermelho, quando for o caso. */}
@@ -1290,7 +1290,7 @@ function SearchTerms({ terms, currency, accountId }: { terms?: SearchTerm[]; cur
                     <td style={{ padding: "10px 14px", textAlign: "left" }}>
                       <div style={{ fontWeight: 600, overflowWrap: "anywhere" }}>{term.term}</div>
                       {term.campaign && (
-                        <div style={{ fontSize: 10.5, color: "var(--text-muted)", marginTop: 2 }}>{term.campaign}</div>
+                        <div style={{ fontSize: 10.5, color: "var(--color-muted-foreground)", marginTop: 2 }}>{term.campaign}</div>
                       )}
                     </td>
                     <Td accent={suspect}>{money(term.cost, currency)}</Td>
@@ -1314,9 +1314,9 @@ function SearchTerms({ terms, currency, accountId }: { terms?: SearchTerm[]; cur
                           {ocupado ? "…" : "desfazer"}
                         </button>
                       ) : term.state === "negativado" ? (
-                        <span style={{ fontSize: 11, color: "var(--text-faint)" }}>já negativado</span>
+                        <span style={{ fontSize: 11, color: "var(--color-muted-foreground)" }}>já negativado</span>
                       ) : !term.campaignId ? (
-                        <span style={{ fontSize: 11, color: "var(--text-faint)" }} title="A campanha do termo não veio na consulta">—</span>
+                        <span style={{ fontSize: 11, color: "var(--color-muted-foreground)" }} title="A campanha do termo não veio na consulta">—</span>
                       ) : (
                         <Menu
                           size="sm"
@@ -1345,7 +1345,7 @@ function SearchTerms({ terms, currency, accountId }: { terms?: SearchTerm[]; cur
             </tbody>
           </table>
           {list.length > 12 && (
-            <div style={{ padding: "10px 14px", borderTop: "1px solid var(--border)" }}>
+            <div style={{ padding: "10px 14px", borderTop: "1px solid var(--color-border)" }}>
               <button onClick={() => setShowAll((v) => !v)} className="ec-btn" data-variant="ghost" data-size="sm">
                 {showAll ? "Mostrar só os 12 maiores" : `Ver todos os ${list.length} termos`}
               </button>
@@ -1388,7 +1388,7 @@ const EFFECTIVE_LABEL: Record<string, string> = {
 // e passa por confirmação. É um botão com role de switch, que é o que os
 // leitores de tela esperam para "ligado/desligado".
 function DeliverySwitch({ row, busy, onToggle }: { row: Row; busy: boolean; onToggle: () => void }) {
-  if (!row.status) return <span style={{ color: "var(--text-faint)", fontSize: 12 }}>—</span>;
+  if (!row.status) return <span style={{ color: "var(--color-muted-foreground)", fontSize: 12 }}>—</span>;
 
   const active = row.status === "ACTIVE";
   // Arquivado/excluído não voltam por um clique: mostra o estado e nada mais.
@@ -1437,19 +1437,19 @@ function DemoCard({ title, rows, metric, metricOf, fmt }: {
   const data = rows.map((r) => ({ key: r.key, v: metricOf(r, metric) })).filter((r) => r.v > 0);
   const max = Math.max(1, ...data.map((d) => d.v));
   return (
-    <div style={{ background: "#fff", border: "1px solid #eee", borderRadius: 12, padding: 16 }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: "#999", letterSpacing: 0.4, marginBottom: 12 }}>{title}</div>
+    <div style={{ background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 12, padding: 16 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--color-muted-foreground)", letterSpacing: 0.4, marginBottom: 12 }}>{title}</div>
       {data.length === 0 ? (
-        <div style={{ fontSize: 13, color: "#bbb" }}>Sem dados para o período.</div>
+        <div style={{ fontSize: 13, color: "var(--color-muted-foreground)" }}>Sem dados para o período.</div>
       ) : (
         <div style={{ display: "grid", gap: 8 }}>
           {data.map((d) => (
             <div key={d.key} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span style={{ fontSize: 12, color: "#555", width: 130, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={d.key}>{d.key}</span>
-              <div style={{ flex: 1, height: 8, background: "#f2f2f2", borderRadius: 4, overflow: "hidden" }}>
+              <span style={{ fontSize: 12, color: "var(--color-foreground)", width: 130, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={d.key}>{d.key}</span>
+              <div style={{ flex: 1, height: 8, background: "var(--color-muted)", borderRadius: 4, overflow: "hidden" }}>
                 <div style={{ width: `${Math.round((d.v / max) * 100)}%`, height: "100%", background: TEAL, borderRadius: 4 }} />
               </div>
-              <span style={{ fontSize: 12, color: "#333", width: 88, textAlign: "right", fontWeight: 500 }}>{fmt(d.v, metric)}</span>
+              <span style={{ fontSize: 12, color: "var(--color-foreground)", width: 88, textAlign: "right", fontWeight: 500 }}>{fmt(d.v, metric)}</span>
             </div>
           ))}
         </div>
