@@ -5,7 +5,7 @@
 :root { color-scheme: light; }
 :root.dark { color-scheme: dark; }
 
-@theme inline {
+@theme {
   --color-background: #f8fafc;
   --color-foreground: #0f172a;
   --color-card: #ffffff;
