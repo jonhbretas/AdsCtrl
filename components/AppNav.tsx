@@ -54,6 +54,7 @@ const NAV_GROUPS = [
       { href: "/tarefas", label: "Tarefas", icon: CheckSquare2 },
       { href: "/vendas", label: "ROI por Cliente", icon: DollarSign },
       { href: "/financeiro", label: "Financeiro", icon: TrendingUp },
+      { href: "/negocio", label: "Visão do Negócio", icon: BarChart3 },
       { href: "/saude", label: "Saúde da Carteira", icon: HeartPulse },
       { href: "/agenda", label: "Agenda", icon: CalendarDays },
       { href: "/relatorios", label: "Relatórios", icon: Mail },
