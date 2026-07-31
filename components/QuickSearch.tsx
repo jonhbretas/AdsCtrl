@@ -8,7 +8,6 @@ import { cn } from "@/lib/utils";
 type SearchResult = { id: string; kind: string; title: string; subtitle: string; href: string };
 const SCREENS: SearchResult[] = [
   { id: "screen:today", kind: "Tela", title: "Cockpit Hoje", subtitle: "Prioridades e pendências da operação", href: "/today" },
-  { id: "screen:decisions", kind: "Tela", title: "Central de decisões", subtitle: "Recomendações estratégicas aprováveis", href: "/decisoes" },
   { id: "screen:portfolio", kind: "Tela", title: "Portfólio", subtitle: "Visão consolidada por cliente", href: "/portfolio" },
   { id: "screen:funnel", kind: "Tela", title: "Funil 360", subtitle: "Etapas por modelo de negócio", href: "/funil" },
   { id: "screen:creatives", kind: "Tela", title: "Laboratório de Criativos", subtitle: "Diagnóstico, fadiga e desempenho", href: "/creatives" },
