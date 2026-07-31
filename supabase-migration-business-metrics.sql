@@ -29,3 +29,24 @@ create table if not exists business_metric_snapshots (
 );
 
 create index if not exists idx_business_metric_snapshots_month on business_metric_snapshots(month desc);
+
+-- Campo vazio significa "não informado"; não deve aparecer como zero no painel.
+alter table business_metric_snapshots
+  alter column active_clients drop not null,
+  alter column new_clients drop not null,
+  alter column mrr drop not null,
+  alter column new_mrr drop not null,
+  alter column investment drop not null,
+  alter column cac drop not null,
+  alter column revenue drop not null,
+  alter column expenses drop not null,
+  alter column net_profit drop not null,
+  alter column renewal_rate drop not null,
+  alter column variable_revenue drop not null,
+  alter column churned_clients drop not null,
+  alter column lost_mrr drop not null,
+  alter column delinquency_amount drop not null,
+  alter column warning_clients drop not null,
+  alter column ltv drop not null,
+  alter column avg_retention_months drop not null,
+  alter column avg_time_to_churn_months drop not null;
