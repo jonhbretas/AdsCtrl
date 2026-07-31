@@ -33,7 +33,7 @@ export default function FinanceiroPage() {
 
   async function load() {
     setLoading(true); setError(null);
-    try { const [financeResponse, recurringResponse] = await Promise.all([fetch(`/api/finance?month=${month}`, { cache: "no-store" }), fetch("/api/finance/recurring", { cache: "no-store" })]); const d = await financeResponse.json(); const recurring = await recurringResponse.json(); if (!financeResponse.ok) throw new Error(d.error || "Falha ao carregar financeiro."); setData({ ...d, rules: recurring.rules || [] }); }
+    try { const recurringResponse = await fetch("/api/finance/recurring", { cache: "no-store" }); const recurring = await recurringResponse.json(); const financeResponse = await fetch(`/api/finance?month=${month}`, { cache: "no-store" }); const d = await financeResponse.json(); if (!financeResponse.ok) throw new Error(d.error || "Falha ao carregar financeiro."); setData({ ...d, rules: recurring.rules || [] }); }
     catch (e: any) { setError(e?.message || "Falha ao carregar financeiro."); }
     finally { setLoading(false); }
   }
