@@ -18,7 +18,7 @@ const ZEN_MODELS: Record<RoutedNeed, string> = {
 };
 
 const GO_MODELS: Record<RoutedNeed, string> = {
-  fast: "gpt-5.6-luna",
+  fast: "deepseek-v4-flash",
   analysis: "deepseek-v4-flash",
   strategic: "qwen3.7-plus",
   creative: "qwen3.7-plus",
