@@ -72,6 +72,18 @@ export async function PATCH(req: Request, { params }: RouteContext) {
         { status: 503 }
       );
     }
+    if (error && /legal_name|cnpj|contact_name|contact_email|contact_phone|whatsapp_phone|drive_folder_url|contract_start_date|contract_end_date|contract_notice_days|person_type|cpf|address_|state_registration|municipal_registration|legal_representative_|billing_/.test(error.message || "")) {
+      return NextResponse.json(
+        { error: "Rode supabase-migration-client-contract-data.sql no SQL Editor do Supabase para usar os dados do contrato." },
+        { status: 503 }
+      );
+    }
+    if (error && /legal_name|cnpj|contact_name|contact_email|contact_phone|whatsapp_phone|drive_folder_url|contract_start_date|contract_end_date|contract_notice_days/.test(error.message || "")) {
+      return NextResponse.json(
+        { error: "Rode supabase-migration-client-profile.sql no SQL Editor do Supabase para usar o perfil operacional do cliente." },
+        { status: 503 }
+      );
+    }
     if (error) throw error;
     if (!data) {
       return NextResponse.json({ error: "Cliente não encontrado." }, { status: 404 });

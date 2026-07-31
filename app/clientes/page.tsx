@@ -14,11 +14,11 @@ import { Input, Collapsible, Notice, PageHeader, WideScreenHint, Field } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { CampaignTemplateList } from "@/components/CampaignTemplates";
-import { RefreshCw, AlertTriangle, Plus, X, Mail } from "lucide-react";
+import { RefreshCw, AlertTriangle, Plus, X, Mail, Phone, FolderOpen, ExternalLink, CalendarClock, FileText } from "lucide-react";
 
 interface Group { id: string; name: string; color: string; }
 interface Account { account_id: string; name: string; status: string; group_id: string | null; platform: "meta" | "google"; hidden?: boolean; linked_meta_account_id?: string | null; }
-interface ClientRecord { id: string; name: string; status: "active" | "paused" | "archived"; objective: string | null; result_family: string | null; brand_name?: string | null; primary_kpi: string | null; target_value: number | null; monthly_budget: number | null; monthly_conversion_goal: number | null; currency: string; timezone: string; budget_start_day: number; track_sales?: boolean; facebook_page_id?: string | null; instagram_business_id?: string | null; accounts: Account[]; }
+interface ClientRecord { id: string; name: string; status: "active" | "paused" | "archived"; objective: string | null; result_family: string | null; brand_name?: string | null; primary_kpi: string | null; target_value: number | null; monthly_budget: number | null; monthly_conversion_goal: number | null; currency: string; timezone: string; budget_start_day: number; track_sales?: boolean; facebook_page_id?: string | null; instagram_business_id?: string | null; legal_name?: string | null; cnpj?: string | null; person_type?: "fisica" | "juridica"; cpf?: string | null; address_street?: string | null; address_number?: string | null; address_complement?: string | null; address_neighborhood?: string | null; address_city?: string | null; address_state?: string | null; address_zip_code?: string | null; address_country?: string | null; state_registration?: string | null; municipal_registration?: string | null; legal_representative_name?: string | null; legal_representative_cpf?: string | null; legal_representative_role?: string | null; billing_email?: string | null; billing_phone?: string | null; contact_name?: string | null; contact_email?: string | null; contact_phone?: string | null; whatsapp_phone?: string | null; drive_folder_url?: string | null; contract_start_date?: string | null; contract_end_date?: string | null; contract_notice_days?: number; accounts: Account[]; }
 type ClientAdminSortKey = "name" | "objective" | "budget" | "result" | "kpi" | "target" | "cycle";
 type GroupSortKey = "name" | "accounts";
 type AccountAdminSortKey = "platform" | "name" | "status" | "client" | "group" | "visibility";
@@ -43,6 +43,7 @@ export default function ClientesPage() {
   const [newName, setNewName] = useState("");
   const [newColor, setNewColor] = useState(PALETTE[0]);
   const [busy, setBusy] = useState(false);
+  const [driveBusy, setDriveBusy] = useState<string | null>(null);
   const [clientSort, setClientSort] = usePersistentSort<ClientAdminSortKey>("adsctrl:sort:admin-clients", { key: "name", direction: "asc" }, CLIENT_ADMIN_SORT_KEYS);
   const [groupSort, setGroupSort] = usePersistentSort<GroupSortKey>("adsctrl:sort:admin-groups", { key: "name", direction: "asc" }, GROUP_SORT_KEYS);
   const [accountSort, setAccountSort] = usePersistentSort<AccountAdminSortKey>("adsctrl:sort:admin-accounts", { key: "name", direction: "asc" }, ACCOUNT_ADMIN_SORT_KEYS);
@@ -72,6 +73,16 @@ export default function ClientesPage() {
   async function toggleHidden(accountId: string, hidden: boolean) { setAccounts((prev) => prev.map((a) => a.account_id === accountId ? { ...a, hidden } : a)); try { await api("/api/accounts/hidden", { method: "POST", body: JSON.stringify({ account_id: accountId, hidden }) }); } catch (e: any) { setError(e?.message); await load(); } }
   async function linkGoogle(googleId: string, metaId: string) { setAccounts((prev) => prev.map((a) => a.account_id === googleId ? { ...a, linked_meta_account_id: metaId || null } : a)); try { await api("/api/accounts/link", { method: "POST", body: JSON.stringify({ google_account_id: googleId, meta_account_id: metaId || null }) }); await refreshClients(); } catch (e: any) { setError(e?.message); await load(); } }
   async function sync(platform: "meta" | "google") { try { const r = await api("/api/accounts/sync", { method: "POST", body: JSON.stringify({ platform }) }); await load(); setError(r.added ? `${r.added} conta(s) nova(s).` : `Sincronização ${platform} concluída.`); } catch (e: any) { setError(e?.message); } }
+  async function createDrive(client: ClientRecord) {
+    setDriveBusy(client.id); setError(null);
+    try {
+      const r = await fetch(`/api/clients/${client.id}/drive`, { method: "POST" });
+      const d = await r.json();
+      if (!r.ok || d.error) throw new Error(d.error || "Falha ao criar a pasta no Drive.");
+      setClients((prev) => prev.map((item) => item.id === client.id ? { ...item, drive_folder_url: d.client?.drive_folder_url || d.folder?.url } : item));
+    } catch (e: any) { setError(e?.message || "Falha ao criar a pasta no Drive."); }
+    finally { setDriveBusy(null); }
+  }
   async function updateClient(id: string, patch: Partial<ClientRecord>) { setClients((prev) => prev.map((c) => c.id === id ? { ...c, ...patch } : c)); try { const r = await api(`/api/clients/${id}`, { method: "PATCH", body: JSON.stringify(patch) }); const confirmed = Object.keys(patch).reduce((n, k) => { const f = k as keyof ClientRecord; (n as any)[f] = r.client?.[f] ?? patch[f]; return n; }, {} as Partial<ClientRecord>); setClients((prev) => prev.map((c) => c.id === id ? { ...c, ...confirmed } : c)); } catch (e: any) { await load(); setError(e?.message); } }
   function updateClientField(client: ClientRecord, field: string, value: any) { const patch: any = {}; patch[field] = value; updateClient(client.id, patch); }
 
@@ -140,6 +151,78 @@ export default function ClientesPage() {
               </div>
             </div>
           )}
+        </Collapsible>
+
+        {/* Perfil operacional: dados que conectam o cliente à comunicação,
+            aos documentos e ao contrato. O Drive ainda pode ser colado
+            manualmente; a criação automática entra na próxima integração. */}
+        <Collapsible id="profile" storageKey="clientes:perfil-operacional"
+          summary={<SectionHead icon="◎" title="Perfil operacional" hint="Contato, WhatsApp, Drive e vigência do contrato." meta={`${clients.filter((c) => c.contract_end_date).length} contrato(s) com data`} />}>
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-sky-500/20 bg-sky-500/5 px-3 py-2 text-xs">
+              <FolderOpen className="h-4 w-4 text-sky-600" />
+              <span className="text-muted-foreground">Para criar pastas automaticamente, conecte o Google Drive da agência.</span>
+              <a href="/api/integrations/google-drive/connect" className="ml-auto rounded-md border border-sky-500/30 px-2 py-1 text-[11px] font-semibold text-sky-600 hover:bg-sky-500/10">Conectar Drive</a>
+            </div>
+            {sortedClients.map((client) => {
+              const phone = (client.whatsapp_phone || client.contact_phone || "").replace(/\D/g, "");
+              const contractDays = client.contract_end_date ? Math.ceil((Date.parse(`${client.contract_end_date}T23:59:59`) - Date.now()) / 86400000) : null;
+              const contractTone = contractDays != null && contractDays < 0 ? "text-red-500" : contractDays != null && contractDays <= (client.contract_notice_days ?? 30) ? "text-amber-500" : "text-muted-foreground";
+              return (
+                <div key={client.id} className="rounded-lg border border-border/50 bg-card p-3 space-y-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-semibold text-sm">{client.name}</span>
+                    {client.contact_name && <span className="text-xs text-muted-foreground">· {client.contact_name}</span>}
+                    <div className="ml-auto flex flex-wrap gap-1.5">
+                      {phone && <a href={`https://wa.me/${phone}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-emerald-500/25 bg-emerald-500/10 px-2 py-1 text-[11px] font-semibold text-emerald-600"><Phone className="h-3 w-3" /> WhatsApp</a>}
+                      {client.drive_folder_url && <a href={client.drive_folder_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-sky-500/25 bg-sky-500/10 px-2 py-1 text-[11px] font-semibold text-sky-600"><FolderOpen className="h-3 w-3" /> Drive</a>}
+                    </div>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-4">
+                    <Field label="Razão social"><input key={`${client.id}-legal-${loadRevision}`} defaultValue={client.legal_name ?? ""} placeholder="Razão social" onBlur={(e) => updateClientField(client, "legal_name", e.target.value || null)} style={compactInput} /></Field>
+                    <Field label="CNPJ"><input key={`${client.id}-cnpj-${loadRevision}`} defaultValue={client.cnpj ?? ""} placeholder="00.000.000/0000-00" onBlur={(e) => updateClientField(client, "cnpj", e.target.value || null)} style={compactInput} /></Field>
+                    <Field label="Contato"><input key={`${client.id}-contact-${loadRevision}`} defaultValue={client.contact_name ?? ""} placeholder="Nome do contato" onBlur={(e) => updateClientField(client, "contact_name", e.target.value || null)} style={compactInput} /></Field>
+                    <Field label="E-mail"><input key={`${client.id}-email-${loadRevision}`} type="email" defaultValue={client.contact_email ?? ""} placeholder="contato@empresa.com" onBlur={(e) => updateClientField(client, "contact_email", e.target.value || null)} style={compactInput} /></Field>
+                    <Field label="WhatsApp"><input key={`${client.id}-wa-${loadRevision}`} defaultValue={client.whatsapp_phone ?? ""} placeholder="5511999999999" onBlur={(e) => updateClientField(client, "whatsapp_phone", e.target.value || null)} style={compactInput} /></Field>
+                    <Field label="Telefone"><input key={`${client.id}-phone-${loadRevision}`} defaultValue={client.contact_phone ?? ""} placeholder="Telefone alternativo" onBlur={(e) => updateClientField(client, "contact_phone", e.target.value || null)} style={compactInput} /></Field>
+                    <Field label="Pasta do Drive"><div className="flex gap-1"><input key={`${client.id}-drive-${loadRevision}`} type="url" defaultValue={client.drive_folder_url ?? ""} placeholder="Cole o link da pasta" onBlur={(e) => updateClientField(client, "drive_folder_url", e.target.value || null)} style={{ ...compactInput, minWidth: 0 }} />{client.drive_folder_url ? <a href={client.drive_folder_url} target="_blank" rel="noreferrer" className="inline-flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded border border-input text-muted-foreground hover:text-foreground"><ExternalLink className="h-3 w-3" /></a> : <button onClick={() => createDrive(client)} disabled={driveBusy === client.id} title="Cria a pasta e as subpastas padrão no Google Drive conectado" className="h-[30px] shrink-0 rounded border border-sky-500/30 px-2 text-[10px] font-semibold text-sky-600 hover:bg-sky-500/10 disabled:opacity-50">{driveBusy === client.id ? "…" : "Criar"}</button>}</div></Field>
+                    <Field label="Avisar antes (dias)"><input key={`${client.id}-notice-${loadRevision}`} type="number" min="0" max="365" defaultValue={client.contract_notice_days ?? 30} onBlur={(e) => updateClientField(client, "contract_notice_days", e.target.value ? Number(e.target.value) : 30)} style={compactInput} /></Field>
+                    <Field label="Início do contrato"><input key={`${client.id}-start-${loadRevision}`} type="date" defaultValue={client.contract_start_date ?? ""} onBlur={(e) => updateClientField(client, "contract_start_date", e.target.value || null)} style={compactInput} /></Field>
+                    <Field label="Fim do contrato"><input key={`${client.id}-end-${loadRevision}`} type="date" defaultValue={client.contract_end_date ?? ""} onBlur={(e) => updateClientField(client, "contract_end_date", e.target.value || null)} style={compactInput} /></Field>
+                    <div className="md:col-span-2 flex items-end gap-2 text-xs"><CalendarClock className={cn("h-4 w-4 mb-1", contractTone)} /><span className={contractTone}>{contractDays == null ? "Vigência ainda não configurada" : contractDays < 0 ? `Contrato vencido há ${Math.abs(contractDays)} dia(s)` : contractDays === 0 ? "Contrato vence hoje" : `Contrato vence em ${contractDays} dia(s)`}</span></div>
+                  </div>
+                  <div className="border-t border-border/40 pt-3 space-y-3">
+                    <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Dados para contrato e faturamento</div>
+                    <div className="grid gap-3 md:grid-cols-5">
+                      <Field label="Tipo"><select value={client.person_type ?? "juridica"} onChange={(e) => updateClientField(client, "person_type", e.target.value)} style={compactInput}><option value="juridica">Pessoa jurídica</option><option value="fisica">Pessoa física</option></select></Field>
+                      <Field label={client.person_type === "fisica" ? "CPF" : "CPF do responsável"}><input key={`${client.id}-cpf-${loadRevision}`} defaultValue={client.cpf ?? ""} placeholder="000.000.000-00" onBlur={(e) => updateClientField(client, "cpf", e.target.value || null)} style={compactInput} /></Field>
+                      <Field label="Inscrição estadual"><input key={`${client.id}-ie-${loadRevision}`} defaultValue={client.state_registration ?? ""} placeholder="Opcional" onBlur={(e) => updateClientField(client, "state_registration", e.target.value || null)} style={compactInput} /></Field>
+                      <Field label="Inscrição municipal"><input key={`${client.id}-im-${loadRevision}`} defaultValue={client.municipal_registration ?? ""} placeholder="Opcional" onBlur={(e) => updateClientField(client, "municipal_registration", e.target.value || null)} style={compactInput} /></Field>
+                      <Field label="País"><input key={`${client.id}-country-${loadRevision}`} defaultValue={client.address_country ?? "Brasil"} onBlur={(e) => updateClientField(client, "address_country", e.target.value || null)} style={compactInput} /></Field>
+                      <Field label="Representante legal"><input key={`${client.id}-rep-${loadRevision}`} defaultValue={client.legal_representative_name ?? ""} placeholder="Nome completo" onBlur={(e) => updateClientField(client, "legal_representative_name", e.target.value || null)} style={compactInput} /></Field>
+                      <Field label="CPF do representante"><input key={`${client.id}-repcpf-${loadRevision}`} defaultValue={client.legal_representative_cpf ?? ""} placeholder="000.000.000-00" onBlur={(e) => updateClientField(client, "legal_representative_cpf", e.target.value || null)} style={compactInput} /></Field>
+                      <Field label="Cargo"><input key={`${client.id}-reprule-${loadRevision}`} defaultValue={client.legal_representative_role ?? ""} placeholder="Sócio, diretor..." onBlur={(e) => updateClientField(client, "legal_representative_role", e.target.value || null)} style={compactInput} /></Field>
+                      <Field label="E-mail financeiro"><input key={`${client.id}-billingemail-${loadRevision}`} type="email" defaultValue={client.billing_email ?? ""} placeholder="financeiro@empresa.com" onBlur={(e) => updateClientField(client, "billing_email", e.target.value || null)} style={compactInput} /></Field>
+                      <Field label="Telefone financeiro"><input key={`${client.id}-billingphone-${loadRevision}`} defaultValue={client.billing_phone ?? ""} placeholder="Telefone" onBlur={(e) => updateClientField(client, "billing_phone", e.target.value || null)} style={compactInput} /></Field>
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-6">
+                      <Field label="CEP"><input key={`${client.id}-cep-${loadRevision}`} defaultValue={client.address_zip_code ?? ""} placeholder="00000-000" onBlur={(e) => updateClientField(client, "address_zip_code", e.target.value || null)} style={compactInput} /></Field>
+                      <Field label="Logradouro"><input key={`${client.id}-street-${loadRevision}`} defaultValue={client.address_street ?? ""} placeholder="Rua, avenida..." onBlur={(e) => updateClientField(client, "address_street", e.target.value || null)} style={compactInput} /></Field>
+                      <Field label="Número"><input key={`${client.id}-number-${loadRevision}`} defaultValue={client.address_number ?? ""} placeholder="123" onBlur={(e) => updateClientField(client, "address_number", e.target.value || null)} style={compactInput} /></Field>
+                      <Field label="Complemento"><input key={`${client.id}-complement-${loadRevision}`} defaultValue={client.address_complement ?? ""} placeholder="Sala, conjunto..." onBlur={(e) => updateClientField(client, "address_complement", e.target.value || null)} style={compactInput} /></Field>
+                      <Field label="Bairro"><input key={`${client.id}-neighborhood-${loadRevision}`} defaultValue={client.address_neighborhood ?? ""} onBlur={(e) => updateClientField(client, "address_neighborhood", e.target.value || null)} style={compactInput} /></Field>
+                      <Field label="Cidade / UF"><div className="flex gap-1"><input key={`${client.id}-city-${loadRevision}`} defaultValue={client.address_city ?? ""} placeholder="Cidade" onBlur={(e) => updateClientField(client, "address_city", e.target.value || null)} style={{ ...compactInput, minWidth: 0 }} /><input key={`${client.id}-state-${loadRevision}`} defaultValue={client.address_state ?? ""} placeholder="UF" maxLength={2} onBlur={(e) => updateClientField(client, "address_state", e.target.value.toUpperCase() || null)} style={{ ...compactInput, width: 52 }} /></div></Field>
+                    </div>
+                  </div>
+                  <ClientOnboarding clientId={client.id} />
+                  <ClientApprovals clientId={client.id} />
+                  <ClientBilling clientId={client.id} defaultValue={client.monthly_budget} />
+                  <ClientDocuments clientId={client.id} />
+                </div>
+              );
+            })}
+            {!sortedClients.length && <div className="text-sm text-muted-foreground">Nenhum cliente ativo.</div>}
+          </div>
         </Collapsible>
 
         {/* Orgânico: alimenta a seção de Facebook/Instagram no relatório.
@@ -352,4 +435,157 @@ function SectionHead({ icon, title, hint, meta }: { icon: string; title: string;
       <span className="ml-auto text-xs font-semibold text-muted-foreground shrink-0">{meta}</span>
     </div>
   );
+}
+
+function ClientDocuments({ clientId }: { clientId: string }) {
+  const [data, setData] = useState<{ contracts: any[]; documents: any[] }>({ contracts: [], documents: [] });
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
+  const [kind, setKind] = useState<"contract" | "document">("contract");
+  const [name, setName] = useState("");
+  const [url, setUrl] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [category, setCategory] = useState("other");
+  const [file, setFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function load() {
+    try {
+      const r = await fetch(`/api/clients/${clientId}/documents`, { cache: "no-store" });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Falha ao carregar documentos.");
+      setData({ contracts: d.contracts || [], documents: d.documents || [] });
+    } catch (e: any) { setError(e?.message || "Falha ao carregar documentos."); }
+    finally { setLoading(false); }
+  }
+  useEffect(() => { load(); }, [clientId]);
+
+  async function add() {
+    if (!name.trim()) return;
+    setBusy(true); setError(null);
+    try {
+      const r = await fetch(`/api/clients/${clientId}/documents`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind, name, drive_file_url: url || null, end_date: kind === "contract" ? endDate || null : null, expires_at: kind === "document" ? endDate || null : null, category }) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Falha ao salvar.");
+      setName(""); setUrl(""); setEndDate(""); setOpen(false); await load();
+    } catch (e: any) { setError(e?.message || "Falha ao salvar."); }
+    finally { setBusy(false); }
+  }
+
+  async function upload() {
+    if (!file) return;
+    setBusy(true); setError(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("category", kind === "contract" ? "contract" : category);
+      const r = await fetch(`/api/clients/${clientId}/drive/upload`, { method: "POST", body: form });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Falha ao enviar arquivo.");
+      setFile(null); setOpen(false); await load();
+    } catch (e: any) { setError(e?.message || "Falha ao enviar arquivo."); }
+    finally { setBusy(false); }
+  }
+
+  async function renew() {
+    if (!latestContract) return;
+    setBusy(true); setError(null);
+    try {
+      const r = await fetch(`/api/clients/${clientId}/documents`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "renewal", contract_id: latestContract.id }) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Falha ao criar renovação.");
+      await load();
+    } catch (e: any) { setError(e?.message || "Falha ao criar renovação."); }
+    finally { setBusy(false); }
+  }
+
+  const latestContract = data.contracts[0];
+  return (
+    <div className="border-t border-border/40 pt-3 space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"><FileText className="inline h-3.5 w-3.5 mr-1" />Contratos e documentos</span>
+        {latestContract && <span className="text-[11px] text-muted-foreground">· contrato: {latestContract.title}{latestContract.end_date ? ` até ${latestContract.end_date.split("-").reverse().join("/")}` : ""}</span>}
+        {latestContract && <button onClick={renew} disabled={busy} className="rounded-md border border-amber-500/30 px-2 py-1 text-[11px] font-semibold text-amber-600 hover:bg-amber-500/10 disabled:opacity-50">Renovar</button>}
+        <Link href={`/contratos/${clientId}`} className="rounded-md border border-primary/30 px-2 py-1 text-[11px] font-semibold text-primary hover:bg-primary/10">Gerar minuta</Link>
+        <button onClick={() => setOpen((v) => !v)} className="ml-auto inline-flex items-center gap-1 rounded-md border border-input px-2 py-1 text-[11px] font-semibold hover:bg-muted"><Plus className="h-3 w-3" /> Adicionar</button>
+      </div>
+      {data.documents.length > 0 && <div className="flex flex-wrap gap-1.5">{data.documents.slice(0, 5).map((doc) => doc.drive_file_url ? <a key={doc.id} href={doc.drive_file_url} target="_blank" rel="noreferrer" className="rounded-md bg-muted px-2 py-1 text-[11px] hover:text-primary">{doc.name}</a> : <span key={doc.id} className="rounded-md bg-muted px-2 py-1 text-[11px]">{doc.name}</span>)}</div>}
+      {loading && <span className="text-[11px] text-muted-foreground">Carregando acervo…</span>}
+      {error && <div className="text-[11px] text-red-500">{error}</div>}
+      {open && <div className="grid gap-2 rounded-md border border-border/50 bg-muted/20 p-2 md:grid-cols-6">
+        <select value={kind} onChange={(e) => setKind(e.target.value as "contract" | "document")} style={compactInput}><option value="contract">Contrato</option><option value="document">Documento</option></select>
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder={kind === "contract" ? "Contrato de prestação de serviços" : "Nome do documento"} style={compactInput} />
+        <input value={url} onChange={(e) => setUrl(e.target.value)} type="url" placeholder="Link do arquivo no Drive" style={compactInput} />
+        <input value={endDate} onChange={(e) => setEndDate(e.target.value)} type="date" title={kind === "contract" ? "Vencimento do contrato" : "Validade do documento"} style={compactInput} />
+        {kind === "document" && <select value={category} onChange={(e) => setCategory(e.target.value)} style={compactInput}><option value="other">Outro</option><option value="invoice">Nota fiscal</option><option value="briefing">Briefing</option><option value="addendum">Aditivo</option><option value="proof">Comprovante</option></select>}
+        <button onClick={add} disabled={busy || !name.trim()} className="rounded-md bg-primary px-3 py-1 text-[11px] font-semibold text-primary-foreground disabled:opacity-50">{busy ? "Salvando…" : "Salvar"}</button>
+        <input type="file" onChange={(e) => setFile(e.target.files?.[0] || null)} className="text-[11px] file:mr-2 file:rounded file:border-0 file:bg-muted file:px-2 file:py-1 file:text-[11px]" />
+        <button onClick={upload} disabled={busy || !file} className="rounded-md border border-sky-500/30 px-3 py-1 text-[11px] font-semibold text-sky-600 disabled:opacity-50">{busy ? "Enviando…" : "Enviar ao Drive"}</button>
+      </div>}
+    </div>
+  );
+}
+
+function ClientBilling({ clientId, defaultValue }: { clientId: string; defaultValue: number | null }) {
+  const [data, setData] = useState<{ configured: boolean; subscriptions: any[]; charges: any[]; invoices: any[] }>({ configured: false, subscriptions: [], charges: [], invoices: [] });
+  const [value, setValue] = useState(defaultValue ? String(defaultValue) : "");
+  const [dueDate, setDueDate] = useState("");
+  const [billingType, setBillingType] = useState("UNDEFINED");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [invoiceDescription, setInvoiceDescription] = useState("Gestão de tráfego pago");
+  const [invoiceValue, setInvoiceValue] = useState(defaultValue ? String(defaultValue) : "");
+  const [invoiceDate, setInvoiceDate] = useState("");
+  const [invoiceBusy, setInvoiceBusy] = useState(false);
+
+  async function load() {
+    try { const [billingResponse, invoicesResponse] = await Promise.all([fetch(`/api/clients/${clientId}/billing`, { cache: "no-store" }), fetch(`/api/clients/${clientId}/billing/invoices`, { cache: "no-store" })]); const d = await billingResponse.json(); const invoiceData = await invoicesResponse.json(); if (!billingResponse.ok) throw new Error(d.error || "Falha ao consultar cobrança."); setData({ ...d, invoices: invoiceData.invoices || [] }); }
+    catch (e: any) { setMessage(e?.message || "Falha ao consultar cobrança."); }
+  }
+  useEffect(() => { load(); }, [clientId]);
+
+  async function createSubscription() {
+    setBusy(true); setMessage(null);
+    try { const r = await fetch(`/api/clients/${clientId}/billing`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ value: Number(value), next_due_date: dueDate || undefined, billing_type: billingType }) }); const d = await r.json(); if (!r.ok) throw new Error(d.error || "Falha ao criar cobrança."); setMessage("Assinatura criada no Asaas."); await load(); }
+    catch (e: any) { setMessage(e?.message || "Falha ao criar assinatura."); }
+    finally { setBusy(false); }
+  }
+
+  async function scheduleInvoice() {
+    setInvoiceBusy(true); setMessage(null);
+    try { const r = await fetch(`/api/clients/${clientId}/billing/invoices`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ service_description: invoiceDescription, value: Number(invoiceValue || value), effective_date: invoiceDate || undefined, payment_id: latest?.asaas_payment_id || undefined }) }); const d = await r.json(); if (!r.ok) throw new Error(d.error || "Falha ao agendar NFS-e."); setMessage("NFS-e agendada no Asaas."); await load(); }
+    catch (e: any) { setMessage(e?.message || "Falha ao agendar NFS-e."); }
+    finally { setInvoiceBusy(false); }
+  }
+
+  const active = data.subscriptions.find((item) => item.status === "ACTIVE") || data.subscriptions[0];
+  const latest = data.charges[0];
+  return <div className="border-t border-border/40 pt-3 space-y-2">
+    <div className="flex flex-wrap items-center gap-2"><span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Financeiro / Asaas</span>{active && <span className="text-[11px] text-emerald-600">assinatura {active.status}</span>}{latest && <span className={cn("text-[11px]", latest.status === "OVERDUE" ? "text-red-500" : "text-muted-foreground")}>última cobrança: {latest.status}</span>}</div>
+    {!active && <div className="grid gap-2 md:grid-cols-4"><input value={value} onChange={(e) => setValue(e.target.value)} type="number" min="1" step="0.01" placeholder="Mensalidade" style={compactInput} /><input value={dueDate} onChange={(e) => setDueDate(e.target.value)} type="date" title="Primeiro vencimento" style={compactInput} /><select value={billingType} onChange={(e) => setBillingType(e.target.value)} style={compactInput}><option value="UNDEFINED">Cliente escolhe</option><option value="PIX">Pix</option><option value="BOLETO">Boleto</option><option value="CREDIT_CARD">Cartão</option></select><button onClick={createSubscription} disabled={busy || !value} className="rounded-md border border-emerald-500/30 px-2 py-1 text-[11px] font-semibold text-emerald-600 disabled:opacity-50">{busy ? "Criando…" : "Criar cobrança recorrente"}</button></div>}
+    {message && <div className="text-[11px] text-muted-foreground">{message}</div>}
+    {data.configured && active && <div className="mt-2 grid gap-2 border-t border-border/40 pt-2 md:grid-cols-4"><input value={invoiceDescription} onChange={(e) => setInvoiceDescription(e.target.value)} placeholder="Descrição do serviço" style={compactInput} /><input value={invoiceValue} onChange={(e) => setInvoiceValue(e.target.value)} type="number" min="1" step="0.01" placeholder="Valor da NFS-e" style={compactInput} /><input value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} type="date" title="Data de emissão" style={compactInput} /><button onClick={scheduleInvoice} disabled={invoiceBusy || !invoiceValue} className="rounded-md border border-violet-500/30 px-2 py-1 text-[11px] font-semibold text-violet-600 disabled:opacity-50">{invoiceBusy ? "Agendando…" : "Agendar NFS-e"}</button></div>}
+    {data.invoices[0] && <div className="text-[11px] text-muted-foreground">NFS-e: {data.invoices[0].status}{data.invoices[0].pdf_url ? <a className="ml-2 text-primary hover:underline" href={data.invoices[0].pdf_url} target="_blank" rel="noreferrer">Abrir PDF</a> : null}</div>}
+    {!data.configured && <div className="text-[11px] text-amber-600">Configure ASAAS_API_KEY no ambiente para ativar este módulo.</div>}
+  </div>;
+}
+
+function ClientOnboarding({ clientId }: { clientId: string }) {
+  const [data, setData] = useState<{ items: any[]; progress: { done: number; total: number; percent: number } } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  async function load() { try { const r = await fetch(`/api/clients/${clientId}/onboarding`, { cache: "no-store" }); const d = await r.json(); if (!r.ok) throw new Error(d.error || "Falha ao carregar onboarding."); setData(d); } catch (e: any) { setError(e?.message || "Falha ao carregar onboarding."); } }
+  useEffect(() => { load(); }, [clientId]);
+  async function setStatus(item: any, status: string) { try { const r = await fetch(`/api/clients/${clientId}/onboarding`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ item_id: item.id, status }) }); if (!r.ok) { const d = await r.json(); throw new Error(d.error || "Falha ao atualizar."); } await load(); } catch (e: any) { setError(e?.message || "Falha ao atualizar onboarding."); } }
+  return <div className="border-t border-border/40 pt-3 space-y-2"><div className="flex flex-wrap items-center gap-2"><span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Onboarding</span>{data && <span className="text-[11px] text-muted-foreground">{data.progress.done}/{data.progress.total} concluídos · {data.progress.percent}%</span>}</div>{data && <div className="h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${data.progress.percent}%` }} /></div>}{data && <div className="grid gap-1 md:grid-cols-2">{data.items.map((item) => <div key={item.id} className="flex items-center gap-2 rounded border border-border/30 px-2 py-1.5"><select value={item.status} onChange={(e) => setStatus(item, e.target.value)} className={cn("w-[105px] rounded border border-input bg-transparent px-1 py-1 text-[10px] font-semibold", item.status === "done" ? "text-emerald-600" : item.status === "blocked" ? "text-red-500" : "text-muted-foreground")}><option value="pending">Pendente</option><option value="in_progress">Em andamento</option><option value="done">Concluído</option><option value="blocked">Bloqueado</option></select><span className={cn("text-[11px]", item.status === "done" && "line-through text-muted-foreground")}>{item.title}</span></div>)}</div>}{error && <div className="text-[11px] text-red-500">{error}</div>}</div>;
+}
+
+function ClientApprovals({ clientId }: { clientId: string }) {
+  const [items, setItems] = useState<any[]>([]); const [open, setOpen] = useState(false); const [title, setTitle] = useState(""); const [description, setDescription] = useState(""); const [fileUrl, setFileUrl] = useState(""); const [message, setMessage] = useState<string | null>(null);
+  async function load() { try { const r = await fetch(`/api/clients/${clientId}/approvals`, { cache: "no-store" }); const d = await r.json(); if (!r.ok) throw new Error(d.error || "Falha ao carregar aprovações."); setItems(d.approvals || []); } catch (e: any) { setMessage(e?.message || "Falha ao carregar aprovações."); } }
+  useEffect(() => { load(); }, [clientId]);
+  async function add() { if (!title.trim()) return; const r = await fetch(`/api/clients/${clientId}/approvals`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title, description, file_url: fileUrl || null }) }); const d = await r.json(); if (!r.ok) { setMessage(d.error || "Falha ao criar solicitação."); return; } setTitle(""); setDescription(""); setFileUrl(""); setOpen(false); await load(); }
+  async function status(item: any, value: string) { const r = await fetch(`/api/clients/${clientId}/approvals`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: item.id, status: value }) }); if (!r.ok) { const d = await r.json(); setMessage(d.error || "Falha ao atualizar."); return; } await load(); }
+  const pending = items.filter((item) => item.status === "pending").length;
+  return <div className="border-t border-border/40 pt-3 space-y-2"><div className="flex items-center gap-2"><span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Aprovações</span>{pending > 0 && <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-600">{pending} pendente(s)</span>}<button onClick={() => setOpen((v) => !v)} className="ml-auto rounded-md border border-input px-2 py-1 text-[11px] font-semibold hover:bg-muted">+ Solicitar</button></div>{items.slice(0, 5).map((item) => <div key={item.id} className="flex items-center gap-2 rounded border border-border/30 px-2 py-1.5"><span className="flex-1 text-[11px]">{item.title}</span>{item.file_url && <a href={item.file_url} target="_blank" rel="noreferrer" className="text-[10px] text-primary hover:underline">arquivo</a>}<select value={item.status} onChange={(e) => status(item, e.target.value)} className={cn("rounded border border-input bg-transparent px-1 py-1 text-[10px]", item.status === "approved" ? "text-emerald-600" : item.status === "changes_requested" ? "text-amber-600" : "text-muted-foreground")}><option value="pending">Pendente</option><option value="approved">Aprovado</option><option value="changes_requested">Pedir alteração</option><option value="rejected">Rejeitado</option></select></div>)}{open && <div className="grid gap-2 rounded-md border border-border/50 bg-muted/20 p-2 md:grid-cols-4"><input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex.: Aprovar criativo da campanha" style={compactInput} /><input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Instruções" style={compactInput} /><input value={fileUrl} onChange={(e) => setFileUrl(e.target.value)} placeholder="Link do arquivo no Drive" style={compactInput} /><button onClick={add} disabled={!title.trim()} className="rounded-md bg-primary px-2 py-1 text-[11px] font-semibold text-primary-foreground disabled:opacity-50">Criar solicitação</button></div>}{message && <div className="text-[11px] text-red-500">{message}</div>}</div>;
 }

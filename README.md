@@ -38,6 +38,17 @@ Em um projeto novo (ou existente) no Supabase, execute os arquivos SQL abaixo
 | 16 | `supabase-migration-balance.sql` | Saldo vs fatura em aberto |
 | 17 | `supabase-migration-report-schedule.sql` | Dia do relatório por cliente |
 | 18 | `supabase-migration-settings.sql` | Configurações do sistema editáveis no painel |
+| 19 | `supabase-migration-client-profile.sql` | Contato, Drive e vigência contratual por cliente |
+| 20 | `supabase-migration-client-contract-data.sql` | Dados pessoais, endereço e representante legal |
+| 21 | `supabase-migration-client-contracts.sql` | Histórico de contratos e documentos por cliente |
+| 22 | `supabase-migration-integration-secrets.sql` | Segredos de integrações armazenados apenas no servidor |
+| 23 | `supabase-migration-billing.sql` | Clientes, assinaturas, cobranças e eventos do Asaas |
+| 24 | `supabase-migration-invoices.sql` | NFS-e vinculada às cobranças do Asaas |
+| 25 | `supabase-migration-agency-finance.sql` | Livro-caixa, categorias, fluxo e DRE da agência |
+| 26 | `supabase-migration-client-onboarding.sql` | Checklist de entrada e ativação por cliente |
+| 27 | Sem migration | Saúde da carteira calculada a partir de contrato, cobrança e onboarding |
+| 28 | `supabase-migration-client-approvals.sql` | Aprovações e solicitações de entregas por cliente |
+| 29 | `supabase-migration-meetings.sql` | Agenda e reuniões por cliente |
 
 **Importante:** para um projeto novo, rode do 1 ao 18 sequencialmente.
 Para atualizar um projeto existente, rode apenas as migrations que faltam,

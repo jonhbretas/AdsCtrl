@@ -62,6 +62,15 @@ function nullableNonNegativeNumber(value: unknown, field: string): number | null
   return normalized;
 }
 
+function nullableDate(value: unknown, field: string): string | null {
+  const normalized = nullableText(value, field, 10);
+  if (!normalized) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized) || Number.isNaN(Date.parse(`${normalized}T00:00:00Z`))) {
+    throw new ClientInputError(`${field} deve ser uma data válida no formato AAAA-MM-DD.`);
+  }
+  return normalized;
+}
+
 function validTimezone(value: string): boolean {
   try {
     new Intl.DateTimeFormat("pt-BR", { timeZone: value }).format();
@@ -149,6 +158,59 @@ export function clientPatchFromBody(body: unknown, creating = false): Record<str
 
   if (Object.prototype.hasOwnProperty.call(input, "notes")) {
     patch.notes = nullableText(input.notes, "notes", 5000);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(input, "person_type")) {
+    if (input.person_type !== "fisica" && input.person_type !== "juridica") {
+      throw new ClientInputError("person_type deve ser fisica ou juridica.");
+    }
+    patch.person_type = input.person_type;
+  }
+
+  for (const field of [
+    "cpf", "address_street", "address_number", "address_complement",
+    "address_neighborhood", "address_city", "address_state", "address_zip_code",
+    "address_country", "state_registration", "municipal_registration",
+    "legal_representative_name", "legal_representative_cpf", "legal_representative_role",
+    "billing_email", "billing_phone",
+  ] as const) {
+    if (Object.prototype.hasOwnProperty.call(input, field)) {
+      patch[field] = nullableText(input[field], field, field === "address_complement" ? 120 : 180);
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(input, "billing_email")) {
+    const email = patch.billing_email as string | null;
+    if (email && !/^[^@\s]+@[^@\s.]+\.[^@\s.]+$/.test(email)) {
+      throw new ClientInputError("billing_email deve ser um endereço de e-mail válido.");
+    }
+  }
+
+  for (const field of ["legal_name", "cnpj", "contact_name", "contact_email", "contact_phone", "whatsapp_phone", "drive_folder_url"] as const) {
+    if (Object.prototype.hasOwnProperty.call(input, field)) {
+      patch[field] = nullableText(input[field], field, field === "drive_folder_url" ? 500 : 180);
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(input, "contact_email")) {
+    const email = patch.contact_email as string | null;
+    if (email && !/^[^@\s]+@[^@\s.]+\.[^@\s.]+$/.test(email)) {
+      throw new ClientInputError("contact_email deve ser um endereço de e-mail válido.");
+    }
+  }
+
+  for (const field of ["contract_start_date", "contract_end_date"] as const) {
+    if (Object.prototype.hasOwnProperty.call(input, field)) {
+      patch[field] = nullableDate(input[field], field);
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(input, "contract_notice_days")) {
+    const days = Number(input.contract_notice_days);
+    if (!Number.isInteger(days) || days < 0 || days > 365) {
+      throw new ClientInputError("contract_notice_days deve ser um inteiro entre 0 e 365.");
+    }
+    patch.contract_notice_days = days;
   }
 
   if (Object.prototype.hasOwnProperty.call(input, "report_email")) {

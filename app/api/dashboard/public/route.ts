@@ -86,7 +86,7 @@ export async function GET(req: Request) {
     const period = requested in PERIODS || requested === "mtd" ? requested : "7d";
     const range = rangeFor(period);
 
-    const [{ report, cached, fetched_at }, { data: history }] = await Promise.all([
+    const [{ report, cached, fetched_at }, { data: history }, { data: approvals }] = await Promise.all([
       buildReportCached(accountId, range.since, range.until),
       supabase
         .from("report_sends")
@@ -96,6 +96,12 @@ export async function GET(req: Request) {
         .eq("dry_run", false)
         .order("range_since", { ascending: false })
         .limit(8),
+      supabase
+        .from("client_approvals")
+        .select("id,kind,title,description,file_url,status,due_date,requested_at,response_note")
+        .eq("client_id", client.id)
+        .order("requested_at", { ascending: false })
+        .limit(20),
     ]);
 
     // Cada relatório passado ganha um link assinado na hora — o histórico
@@ -124,6 +130,7 @@ export async function GET(req: Request) {
           brand: (client as any).brand_name ?? null,
         },
         reports,
+        approvals: approvals || [],
       },
       { headers: { "Cache-Control": "no-store" } }
     );

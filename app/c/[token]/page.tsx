@@ -18,6 +18,7 @@ interface DashboardPayload {
   cached: boolean; fetched_at: string;
   report: ReportPayload;
   reports: HistoryItem[];
+  approvals: { id: string; title: string; description?: string | null; file_url?: string | null; status: string; due_date?: string | null }[];
   error?: string;
 }
 
@@ -37,6 +38,7 @@ export default function ClientDashboardPage() {
   const [data, setData] = useState<DashboardPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [approvalBusy, setApprovalBusy] = useState<string | null>(null);
   const { compact, choose, docWidth, shellRef, printDocument } = useReadingMode();
 
   useEffect(() => {
@@ -49,6 +51,16 @@ export default function ClientDashboardPage() {
       .finally(() => alive && setLoading(false));
     return () => { alive = false; };
   }, [token, period]);
+
+  async function respondApproval(id: string, status: "approved" | "changes_requested") {
+    setApprovalBusy(id);
+    try {
+      const response = await fetch("/api/approvals/public", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, id, status }) });
+      const payload = await response.json(); if (!response.ok || payload.error) throw new Error(payload.error || "Falha ao responder.");
+      setData((current) => current ? { ...current, approvals: current.approvals.map((item) => item.id === id ? { ...item, status } : item) } : current);
+    } catch (e: any) { setError(e?.message || "Falha ao registrar resposta."); }
+    finally { setApprovalBusy(null); }
+  }
 
   return (
     <div className="doc-light min-h-screen">
@@ -131,6 +143,14 @@ export default function ClientDashboardPage() {
                 </a>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+      {data && data.approvals?.some((item) => item.status === "pending") && (
+        <div className="no-print max-w-[740px] mx-auto px-4 pb-10">
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-5">
+            <h3 className="text-[11px] font-bold uppercase tracking-wider text-amber-700 mb-3">Aprovações pendentes</h3>
+            <div className="space-y-2">{data.approvals.filter((item) => item.status === "pending").map((item) => <div key={item.id} className="rounded-lg border border-border/50 bg-card p-3"><div className="text-sm font-semibold">{item.title}</div>{item.description && <div className="mt-1 text-xs text-muted-foreground">{item.description}</div>}{item.file_url && <a href={item.file_url} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs text-primary hover:underline">Abrir arquivo</a>}<div className="mt-3 flex gap-2"><button onClick={() => respondApproval(item.id, "approved")} disabled={approvalBusy === item.id} className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">Aprovar</button><button onClick={() => respondApproval(item.id, "changes_requested")} disabled={approvalBusy === item.id} className="rounded-md border border-amber-500/40 px-3 py-1.5 text-xs font-semibold text-amber-700 disabled:opacity-50">Pedir alteração</button></div></div>)}</div>
           </div>
         </div>
       )}

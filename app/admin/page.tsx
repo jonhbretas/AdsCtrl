@@ -18,7 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { AlertTriangle, RefreshCw, Users, Mail, Save, Activity } from "lucide-react";
 
-type SettingKey = "brand_name" | "brand_description" | "report_from_email" | "report_reply_to" | "report_test_email" | "task_alert_email" | "report_hour";
+type SettingKey = "brand_name" | "brand_description" | "report_from_email" | "report_reply_to" | "report_test_email" | "task_alert_email" | "report_hour" | "contractor_legal_name" | "contractor_document" | "contractor_representative_name" | "contractor_representative_cpf" | "contractor_address_street" | "contractor_address_number" | "contractor_address_complement" | "contractor_address_neighborhood" | "contractor_address_city" | "contractor_address_state" | "contractor_address_zip_code" | "contractor_email" | "contractor_phone" | "contractor_pix_key" | "contractor_bank" | "contractor_agency_account" | "contractor_forum" | "witness_one_name" | "witness_one_cpf" | "witness_two_name" | "witness_two_cpf";
 // Um horário só para todos os relatórios, cedo na manhã do cliente. Vinte e
 // quatro opções por cliente eram configuração demais para uma decisão que na
 // prática é sempre "antes de o dia começar".
@@ -36,6 +36,30 @@ const EMAIL_FIELDS: { key: SettingKey; label: string; placeholder: string; help:
   { key: "report_reply_to", label: "Responder para", placeholder: "voce@seudominio.com", help: "Para onde vai a resposta do cliente. Útil quando o remetente é uma caixa sem entrada." },
   { key: "report_test_email", label: "E-mail de teste", placeholder: "voce@gmail.com", help: 'Destino do botão "Enviar teste para mim". Nunca vai para o cliente.' },
   { key: "task_alert_email", label: "Lembretes internos", placeholder: "voce@gmail.com", help: "Recebe o resumo diário de tarefas atrasadas e projetos no prazo final." },
+];
+
+const CONTRACTOR_FIELDS: { key: SettingKey; label: string; placeholder: string; help: string }[] = [
+  { key: "contractor_legal_name", label: "Razão social / nome", placeholder: "Nome da agência ou empresa", help: "Parte que aparecerá como CONTRATADA." },
+  { key: "contractor_document", label: "CNPJ ou CPF", placeholder: "00.000.000/0000-00", help: "Documento da agência ou do dono da plataforma." },
+  { key: "contractor_representative_name", label: "Representante legal", placeholder: "Nome completo", help: "Pessoa que assina pela CONTRATADA." },
+  { key: "contractor_representative_cpf", label: "CPF do representante", placeholder: "000.000.000-00", help: "CPF exibido no bloco de assinatura." },
+  { key: "contractor_address_street", label: "Logradouro", placeholder: "Rua, avenida...", help: "Endereço da CONTRATADA." },
+  { key: "contractor_address_number", label: "Número", placeholder: "473", help: "Número do endereço." },
+  { key: "contractor_address_complement", label: "Complemento", placeholder: "Sala, conjunto...", help: "Opcional." },
+  { key: "contractor_address_neighborhood", label: "Bairro", placeholder: "Centro", help: "Bairro do endereço." },
+  { key: "contractor_address_city", label: "Cidade", placeholder: "Foz do Iguaçu", help: "Cidade da CONTRATADA." },
+  { key: "contractor_address_state", label: "UF", placeholder: "PR", help: "Estado da CONTRATADA." },
+  { key: "contractor_address_zip_code", label: "CEP", placeholder: "85856-480", help: "CEP da CONTRATADA." },
+  { key: "contractor_email", label: "E-mail", placeholder: "contato@agencia.com", help: "Contato formal da CONTRATADA." },
+  { key: "contractor_phone", label: "WhatsApp / telefone", placeholder: "+55 45 99999-9999", help: "Contato operacional no contrato." },
+  { key: "contractor_pix_key", label: "Chave Pix", placeholder: "Chave para pagamentos", help: "Usada na cláusula de pagamentos." },
+  { key: "contractor_bank", label: "Banco", placeholder: "Banco e titular", help: "Dados bancários opcionais." },
+  { key: "contractor_agency_account", label: "Agência / conta", placeholder: "0001 / 000000-0", help: "Dados bancários opcionais." },
+  { key: "contractor_forum", label: "Foro", placeholder: "Foz do Iguaçu/PR", help: "Foro padrão da minuta." },
+  { key: "witness_one_name", label: "Testemunha I", placeholder: "Nome completo", help: "Opcional." },
+  { key: "witness_one_cpf", label: "CPF testemunha I", placeholder: "000.000.000-00", help: "Opcional." },
+  { key: "witness_two_name", label: "Testemunha II", placeholder: "Nome completo", help: "Opcional." },
+  { key: "witness_two_cpf", label: "CPF testemunha II", placeholder: "000.000.000-00", help: "Opcional." },
 ];
 
 const STATE_STYLE: Record<Integration["state"], { badge: "success" | "warning" | "secondary" | "destructive"; label: string }> = {
@@ -169,6 +193,14 @@ export default function ConfigPage() {
             A chave da API do Resend continua só no ambiente (<code>RESEND_API_KEY</code>) — segredo não entra
             em tabela que o painel lê.
           </p>
+        </Collapsible>
+
+        <Collapsible id="contractor" storageKey="config:contratada"
+          summary={<SectionHead icon="§" title="Dados da CONTRATADA" hint="Dono da plataforma/agência para os contratos." meta={draft.contractor_legal_name || "não configurada"} />}>
+          <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+            {CONTRACTOR_FIELDS.map(renderField)}
+          </div>
+          <p className="text-[11px] text-muted-foreground mt-3">Esses dados ficam separados do cadastro dos clientes e serão usados como a parte CONTRATADA nas minutas.</p>
         </Collapsible>
 
         <Collapsible id="envio" storageKey="config:envio" defaultOpen

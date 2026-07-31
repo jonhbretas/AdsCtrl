@@ -20,6 +20,8 @@ import {
   DollarSign,
   Users,
   Mail,
+  HeartPulse,
+  CalendarDays,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { appBrandName } from "@/lib/brand";
@@ -51,6 +53,9 @@ const NAV_GROUPS = [
     items: [
       { href: "/tarefas", label: "Tarefas", icon: CheckSquare2 },
       { href: "/vendas", label: "ROI por Cliente", icon: DollarSign },
+      { href: "/financeiro", label: "Financeiro", icon: TrendingUp },
+      { href: "/saude", label: "Saúde da Carteira", icon: HeartPulse },
+      { href: "/agenda", label: "Agenda", icon: CalendarDays },
       { href: "/relatorios", label: "Relatórios", icon: Mail },
     ],
   },

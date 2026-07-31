@@ -20,7 +20,8 @@ const CRON_APIS = ["/api/collect", "/api/reports/send"];
 // /r/ = relatório de um período fechado · /c/ = painel do cliente.
 const PUBLIC_REPORT_PAGE = "/r/";
 const PUBLIC_DASHBOARD_PAGE = "/c/";
-const PUBLIC_APIS = ["/api/report/public", "/api/dashboard/public"];
+const PUBLIC_APIS = ["/api/report/public", "/api/dashboard/public", "/api/approvals/public"];
+const WEBHOOK_APIS = ["/api/webhooks/asaas"];
 
 function isApiPath(pathname: string): boolean {
   return pathname === "/api" || pathname.startsWith("/api/");
@@ -68,6 +69,10 @@ export async function proxy(request: NextRequest) {
 
   // Link assinado do relatório: chega sem sessão, por definição.
   if (isSignedReportPath(pathname)) return NextResponse.next();
+
+  // Webhooks externos não possuem cookie da sessão; a própria rota valida
+  // o token enviado pelo provedor.
+  if (WEBHOOK_APIS.includes(pathname)) return NextResponse.next();
 
   // O cron é independente da sessão do dashboard e continua operacional
   // durante uma eventual configuração inicial das variáveis de autenticação.
