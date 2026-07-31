@@ -7,7 +7,17 @@ function monthDate(year: number, month: number, day: number) { return `${year}-$
 async function syncRuleEntries(sb: ReturnType<typeof getServiceClient>, rule: any) {
   const start = new Date(`${rule.starts_on}T00:00:00Z`); const now = new Date(); const currentMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)); const generationStart = start > currentMonth ? start : currentMonth; const end = rule.ends_on ? new Date(`${rule.ends_on}T00:00:00Z`) : new Date(Date.UTC(generationStart.getUTCFullYear(), generationStart.getUTCMonth() + 12, 1)); const entries = [];
   for (let cursor = new Date(Date.UTC(generationStart.getUTCFullYear(), generationStart.getUTCMonth(), 1)); cursor <= end; cursor.setUTCMonth(cursor.getUTCMonth() + 1)) { const due = monthDate(cursor.getUTCFullYear(), cursor.getUTCMonth(), rule.day_of_month); if (due < rule.starts_on || (rule.ends_on && due > rule.ends_on)) continue; entries.push({ client_id: rule.client_id, category_id: rule.category_id, kind: rule.kind, status: "planned", description: rule.description, amount: rule.amount, due_date: due, source: "recurring", external_id: `${rule.id}:${due}`, recurrence: "monthly", notes: `Gerado pela receita recorrente ${rule.id}`, updated_at: new Date().toISOString() }); }
-  if (entries.length) { const { error } = await sb.from("financial_entries").upsert(entries, { onConflict: "source,external_id" }); if (error) throw error; }
+  if (entries.length) {
+    // A sincronização é somente de criação. Nunca faça upsert em linhas já
+    // existentes: isso desfazia confirmações e alterações de categoria feitas
+    // pelo usuário sempre que o financeiro era recarregado.
+    const externalIds = entries.map((entry: any) => entry.external_id);
+    const { data: existing, error: existingError } = await sb.from("financial_entries").select("external_id").eq("source", "recurring").in("external_id", externalIds);
+    if (existingError) throw existingError;
+    const known = new Set((existing || []).map((entry: any) => entry.external_id));
+    const missing = entries.filter((entry: any) => !known.has(entry.external_id));
+    if (missing.length) { const { error } = await sb.from("financial_entries").insert(missing); if (error) throw error; }
+  }
   return entries.length;
 }
 
