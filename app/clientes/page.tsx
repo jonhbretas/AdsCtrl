@@ -169,6 +169,8 @@ export default function ClientesPage() {
   }
   function confirmCnpjData() {
     const d = cnpjLookup.data; if (!d) return;
+    const phoneDigits = String(d.ddd_telefone_1 || "").replace(/\D/g, "");
+    const phoneFormatted = phoneDigits.length === 10 ? `(${phoneDigits.slice(0, 2)}) ${phoneDigits.slice(2, 6)}-${phoneDigits.slice(6)}` : phoneDigits.length === 11 ? `(${phoneDigits.slice(0, 2)}) ${phoneDigits.slice(2, 7)}-${phoneDigits.slice(7)}` : phoneDigits;
     setClientForm((old) => ({
       ...old,
       name: old.name || d.nome_fantasia || d.razao_social || "",
@@ -181,6 +183,10 @@ export default function ClientesPage() {
       address_city: d.municipio || old.address_city,
       address_state: d.uf || old.address_state,
       address_country: "Brasil",
+      // E-mail/telefone da Receita são do estabelecimento, não do signatário —
+      // caem no financeiro, e o de assinatura/WhatsApp continuam manuais.
+      billing_email: old.billing_email || d.email || "",
+      billing_phone: old.billing_phone || phoneFormatted || "",
     }));
     setCnpjConfirmed(true);
   }
@@ -437,13 +443,23 @@ export default function ClientesPage() {
             {cnpjLookup.status === "error" && <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-500">{cnpjLookup.error}</div>}
             {cnpjLookup.status === "done" && cnpjLookup.data && (() => {
               const d = cnpjLookup.data; const ativa = /ativa/i.test(d.descricao_situacao_cadastral || "");
+              const phoneDigits = String(d.ddd_telefone_1 || "").replace(/\D/g, "");
+              const phonePreview = phoneDigits.length === 10 ? `(${phoneDigits.slice(0, 2)}) ${phoneDigits.slice(2, 6)}-${phoneDigits.slice(6)}` : phoneDigits.length === 11 ? `(${phoneDigits.slice(0, 2)}) ${phoneDigits.slice(2, 7)}-${phoneDigits.slice(7)}` : phoneDigits;
+              const row = (label: string, value: unknown) => <div><span className="text-muted-foreground">{label}:</span> {value ? <span>{String(value)}</span> : <span className="italic text-muted-foreground/70">não informado pela Receita</span>}</div>;
               return <div className="space-y-3 rounded-lg border border-emerald-500/25 bg-emerald-500/5 p-4">
                 <div className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-600" /><span className="text-sm font-semibold">Dados encontrados na Receita Federal</span></div>
                 <div className="grid gap-1 text-xs sm:grid-cols-2">
-                  <div><span className="text-muted-foreground">Razão social:</span> {d.razao_social}</div>
-                  {d.nome_fantasia && <div><span className="text-muted-foreground">Nome fantasia:</span> {d.nome_fantasia}</div>}
+                  {row("Razão social", d.razao_social)}
+                  {row("Nome fantasia", d.nome_fantasia)}
                   <div><span className="text-muted-foreground">Situação:</span> <span className={cn("font-semibold", ativa ? "text-emerald-600" : "text-red-500")}>{d.descricao_situacao_cadastral || "—"}</span></div>
-                  <div className="sm:col-span-2"><span className="text-muted-foreground">Endereço:</span> {[d.logradouro, d.numero, d.bairro, d.municipio, d.uf].filter(Boolean).join(", ")}{d.cep ? ` · ${d.cep}` : ""}</div>
+                  {row("CEP", d.cep)}
+                  {row("Logradouro", d.logradouro)}
+                  {row("Número", d.numero)}
+                  {row("Complemento", d.complemento)}
+                  {row("Bairro", d.bairro)}
+                  {row("Cidade / UF", d.municipio ? `${d.municipio} / ${d.uf || ""}` : null)}
+                  {row("E-mail (Receita)", d.email)}
+                  {row("Telefone (Receita)", phonePreview)}
                 </div>
                 {!ativa && <div className="text-[11px] font-semibold text-red-500">Situação cadastral não é ATIVA — confira antes de seguir.</div>}
                 <div className="flex flex-wrap justify-end gap-2">
