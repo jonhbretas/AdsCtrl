@@ -14,6 +14,7 @@ import { Input, Collapsible, Notice, PageHeader, WideScreenHint, Field } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { CampaignTemplateList } from "@/components/CampaignTemplates";
+import { BrDateInput } from "@/components/BrDateInput";
 import { RefreshCw, AlertTriangle, Plus, X, Mail, Phone, FolderOpen, ExternalLink, CalendarClock, FileText } from "lucide-react";
 
 interface Group { id: string; name: string; color: string; }
@@ -206,8 +207,8 @@ export default function ClientesPage() {
                     <Field label="Telefone"><input key={`${client.id}-phone-${loadRevision}`} defaultValue={client.contact_phone ?? ""} placeholder="Telefone alternativo" onBlur={(e) => updateClientField(client, "contact_phone", e.target.value || null)} style={compactInput} /></Field>
                     <Field label="Pasta do Drive"><div className="flex gap-1"><input key={`${client.id}-drive-${loadRevision}`} type="url" defaultValue={client.drive_folder_url ?? ""} placeholder="Cole o link da pasta" onBlur={(e) => updateClientField(client, "drive_folder_url", e.target.value || null)} style={{ ...compactInput, minWidth: 0 }} />{client.drive_folder_url ? <a href={client.drive_folder_url} target="_blank" rel="noreferrer" className="inline-flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded border border-input text-muted-foreground hover:text-foreground"><ExternalLink className="h-3 w-3" /></a> : <button onClick={() => createDrive(client)} disabled={driveBusy === client.id} title="Cria a pasta e as subpastas padrão no Google Drive conectado" className="h-[30px] shrink-0 rounded border border-sky-500/30 px-2 text-[10px] font-semibold text-sky-600 hover:bg-sky-500/10 disabled:opacity-50">{driveBusy === client.id ? "…" : "Criar"}</button>}</div></Field>
                     <Field label="Avisar antes (dias)"><input key={`${client.id}-notice-${loadRevision}`} type="number" min="0" max="365" defaultValue={client.contract_notice_days ?? 30} onBlur={(e) => updateClientField(client, "contract_notice_days", e.target.value ? Number(e.target.value) : 30)} style={compactInput} /></Field>
-                    <Field label="Início do contrato"><input key={`${client.id}-start-${loadRevision}`} type="date" defaultValue={client.contract_start_date ?? ""} onBlur={(e) => updateClientField(client, "contract_start_date", e.target.value || null)} style={compactInput} /></Field>
-                    <Field label="Fim do contrato"><input key={`${client.id}-end-${loadRevision}`} type="date" defaultValue={client.contract_end_date ?? ""} onBlur={(e) => updateClientField(client, "contract_end_date", e.target.value || null)} style={compactInput} /></Field>
+                    <Field label="Início do contrato"><BrDateInput value={client.contract_start_date} onChange={(value) => updateClientField(client, "contract_start_date", value || null)} style={compactInput} /></Field>
+                    <Field label="Fim do contrato"><BrDateInput value={client.contract_end_date} onChange={(value) => updateClientField(client, "contract_end_date", value || null)} style={compactInput} /></Field>
                     <div className="md:col-span-2 flex items-end gap-2 text-xs"><CalendarClock className={cn("h-4 w-4 mb-1", contractTone)} /><span className={contractTone}>{contractDays == null ? "Vigência ainda não configurada" : contractDays < 0 ? `Contrato vencido há ${Math.abs(contractDays)} dia(s)` : contractDays === 0 ? "Contrato vence hoje" : `Contrato vence em ${contractDays} dia(s)`}</span></div>
                   </div>
                   <div className="border-t border-border/40 pt-3 space-y-3">

@@ -25,6 +25,25 @@ export const num = (v: number) => (v || 0).toLocaleString("pt-BR", { maximumFrac
 
 export const pct = (v: number) => `${(v || 0).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`;
 
+/** Datas exibidas para o usuário: padrão brasileiro com hífen. */
+export function brDate(value: string | Date | null | undefined): string {
+  if (!value) return "";
+  if (typeof value === "string") {
+    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) return `${match[3]}-${match[2]}-${match[1]}`;
+  }
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${String(date.getDate()).padStart(2, "0")}-${String(date.getMonth() + 1).padStart(2, "0")}-${date.getFullYear()}`;
+}
+
+export function brDateTime(value: string | Date | null | undefined): string {
+  if (!value) return "";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${brDate(date)} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
 // Prioridade para escolher o "resultado" principal de uma conta.
 const RESULT_PRIORITY = [
   "conversions",

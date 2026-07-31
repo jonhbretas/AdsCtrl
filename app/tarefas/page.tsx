@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input, Select } from "@/components/ui";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { BrDateInput } from "@/components/BrDateInput";
 import { Plus, X, ArrowLeft, ArrowRight, ExternalLink, RefreshCw, AlertTriangle, CheckCircle2, MessageSquare, ListChecks, Calendar } from "lucide-react";
 
 // --- Types ---
@@ -26,7 +27,7 @@ const COLUMNS: { key: Task["status"]; label: string; hint: string }[] = [
   { key: "done", label: "Feito", hint: "últimos 14 dias" },
 ];
 const todayIso = () => new Date().toISOString().slice(0, 10);
-const brDate = (iso: string) => iso.split("-").reverse().join("/");
+const brDate = (iso: string) => iso.split("-").reverse().join("-");
 
 function GroupBadge({ group }: { group: GroupRef }) {
   return <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap" style={{ backgroundColor: group.color + "22", color: group.color }}>{group.name}</span>;
@@ -292,7 +293,7 @@ function ProjectsSection({ projects, tasks, clients, filter, loading, onFilter, 
                 {label && !done && <span className={cn("text-[11px] font-semibold", label.tone === "late" ? "text-red-500" : label.tone === "today" ? "text-amber-500" : "text-muted-foreground")}>· {label.tone === "late" ? `atrasado desde ${brDate(p.due_date!)}` : label.text}</span>}
                 {done && <Badge variant="success" className="text-[10px]">concluído</Badge>}
                 <div className="ml-auto flex items-center gap-1">
-                  <Input type="date" value={p.due_date || ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => update(p, { due_date: e.target.value || null })} disabled={busy === p.id} className="w-28 h-7 text-[11px]" />
+                  <BrDateInput value={p.due_date || ""} onChange={(value) => update(p, { due_date: value || null })} disabled={busy === p.id} className="w-28 h-7 text-[11px]" />
                   <Button variant="ghost" size="sm" disabled={busy === p.id} onClick={() => update(p, { status: done ? "active" : "done" })} className="h-7 text-xs">{done ? "reabrir" : "✓ concluir"}</Button>
                   <Button variant="ghost" size="sm" disabled={busy === p.id} onClick={() => removeProject(p)} className="h-7 text-xs text-muted-foreground hover:text-destructive"><X className="h-3 w-3" /></Button>
                 </div>
@@ -417,7 +418,7 @@ function TaskDetailModal({ task, owner, clients, projects, onPatch, onStats, onC
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Field label="Cliente"><Select value={task.client_id || ""} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => onPatch({ client_id: e.target.value || null })}><option value="">sem cliente</option>{clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</Select></Field>
           <Field label="Projeto"><Select value={task.project_id || ""} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => onPatch({ project_id: e.target.value || null })}><option value="">sem projeto</option>{projects.filter((p) => p.status === "active" || p.id === task.project_id).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</Select></Field>
-          <Field label="Prazo"><Input type="date" value={task.due_date || ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => onPatch({ due_date: e.target.value || null })} /></Field>
+          <Field label="Prazo"><BrDateInput value={task.due_date || ""} onChange={(value) => onPatch({ due_date: value || null })} /></Field>
           <Field label="Coluna"><Select value={task.status} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => onPatch({ status: e.target.value })}>{COLUMNS.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}</Select></Field>
           <Field label="Urgência"><Button type="button" variant={task.priority === "high" ? "destructive" : "secondary"} size="sm" className="w-full justify-center" onClick={() => onPatch({ priority: task.priority === "high" ? "normal" : "high" })}>{task.priority === "high" ? "● urgente" : "○ normal"}</Button></Field>
           {owner?.group && <Field label="Grupo"><span className="text-sm text-muted-foreground">{owner.group.name}</span></Field>}
