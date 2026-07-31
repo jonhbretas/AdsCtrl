@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input, Select, Notice, PageHeader, WideScreenHint, Field } from "@/components/ui";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { brDate } from "@/lib/format";
 import { RefreshCw, AlertTriangle, CheckCircle2, XCircle, HelpCircle, ExternalLink, Search, ChevronDown, ChevronUp, Copy, Check } from "lucide-react";
 
 type Connection = { index: number; user_id: string | null; name: string; status: "ok" | "partial" | "error"; error: string | null; account_count: number; business_count: number; };
@@ -92,7 +93,7 @@ export default function MetaAssetsPage() {
                   <div key={b.id} className="flex items-center gap-3 p-2.5 rounded-lg border border-border/50">
                     <div className="flex-1 min-w-0"><div className="text-sm font-semibold truncate">{b.name}</div><div className="text-[11px] text-muted-foreground">ID: {b.id}</div></div>
                     <Badge variant={b.verification_status === "verified" ? "success" : "warning"} className="text-[10px]">{b.verification_status || "não verificado"}</Badge>
-                    <span className="text-xs text-muted-foreground">{b.created_time ? new Date(b.created_time).toLocaleDateString("pt-BR") : ""}</span>
+                    <span className="text-xs text-muted-foreground">{b.created_time ? brDate(b.created_time) : ""}</span>
                   </div>
                 ))}</div>
               )}

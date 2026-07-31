@@ -38,7 +38,7 @@ import {
   SortState,
   usePersistentSort,
 } from "@/components/SortableHeader";
-import { money, num, delta, accountStatusInfo, RESULT_FAMILIES, RESULT_FAMILY_BY_SLUG } from "@/lib/format";
+import { money, num, delta, brDate, accountStatusInfo, RESULT_FAMILIES, RESULT_FAMILY_BY_SLUG } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -1243,7 +1243,7 @@ function OperationalLinks({ accountId, accountName, platform, balance, currency,
   const runwayDays = finance?.runway_days ?? null;
   const formatCurrency = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: currency || "BRL" }).format(v);
   const runwayText = runwayDays == null ? null : runwayDays < 1 ? `${Math.max(1, Math.round(runwayDays * 24))}h` : runwayDays < 10 ? `${runwayDays.toFixed(1)} dias` : `${Math.round(runwayDays)} dias`;
-  const depletionText = finance?.estimated_depletion_date ? new Date(`${finance.estimated_depletion_date}T12:00:00`).toLocaleDateString("pt-BR") : null;
+  const depletionText = finance?.estimated_depletion_date ? brDate(finance.estimated_depletion_date) : null;
 
   async function copy(value: string, key: string) {
     try { await navigator.clipboard.writeText(value); setCopied(key); setTimeout(() => setCopied(null), 1800); }

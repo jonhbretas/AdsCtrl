@@ -15,6 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { CampaignTemplateList } from "@/components/CampaignTemplates";
 import { BrDateInput } from "@/components/BrDateInput";
+import { brDate } from "@/lib/format";
 import { RefreshCw, AlertTriangle, Plus, X, Mail, Phone, FolderOpen, ExternalLink, CalendarClock, FileText } from "lucide-react";
 
 interface Group { id: string; name: string; color: string; }
@@ -526,7 +527,7 @@ function ClientDocuments({ clientId }: { clientId: string }) {
     <div className="border-t border-border/40 pt-3 space-y-2">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"><FileText className="inline h-3.5 w-3.5 mr-1" />Contratos e documentos</span>
-        {latestContract && <span className="text-[11px] text-muted-foreground">· contrato: {latestContract.title}{latestContract.end_date ? ` até ${latestContract.end_date.split("-").reverse().join("/")}` : ""}</span>}
+        {latestContract && <span className="text-[11px] text-muted-foreground">· contrato: {latestContract.title}{latestContract.end_date ? ` até ${brDate(latestContract.end_date)}` : ""}</span>}
         {latestContract && <button onClick={renew} disabled={busy} className="rounded-md border border-amber-500/30 px-2 py-1 text-[11px] font-semibold text-amber-600 hover:bg-amber-500/10 disabled:opacity-50">Renovar</button>}
         <Link href={`/contratos/${clientId}`} className="rounded-md border border-primary/30 px-2 py-1 text-[11px] font-semibold text-primary hover:bg-primary/10">Gerar minuta</Link>
         <button onClick={() => setOpen((v) => !v)} className="ml-auto inline-flex items-center gap-1 rounded-md border border-input px-2 py-1 text-[11px] font-semibold hover:bg-muted"><Plus className="h-3 w-3" /> Adicionar</button>

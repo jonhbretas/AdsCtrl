@@ -67,7 +67,7 @@ export interface TaskDigest {
   todayTasks: number;
 }
 
-const brDate = (iso: string) => iso.split("-").reverse().join("/");
+const brDate = (iso: string) => iso.split("-").reverse().join("-");
 
 function escapeHtml(value: string): string {
   return value

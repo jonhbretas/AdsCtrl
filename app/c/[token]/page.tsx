@@ -7,6 +7,7 @@ import ReportDocument, { ReportPayload } from "@/components/ReportDocument";
 import { ModeToggle, useReadingMode } from "@/components/ReadingMode";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { brDateTime } from "@/lib/format";
 
 interface HistoryItem {
   since: string; until: string; sent_at: string; url: string;
@@ -29,7 +30,7 @@ const PERIODS: { key: string; label: string }[] = [
   { key: "mtd", label: "Mês atual" },
 ];
 
-const brDate = (iso: string) => { const [y, m, d] = iso.split("-"); return `${d}/${m}/${y}`; };
+const brDate = (iso: string) => { const [y, m, d] = iso.split("-"); return `${d}-${m}-${y}`; };
 
 export default function ClientDashboardPage() {
   const params = useParams<{ token: string }>();
@@ -100,7 +101,7 @@ export default function ClientDashboardPage() {
           <span className="text-[11px] text-muted-foreground ml-2">
             {brDate(data.range.since)} a {brDate(data.range.until)}
             {" · "}
-            {new Date(data.fetched_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
+            {brDateTime(data.fetched_at)}
           </span>
         )}
       </div>
@@ -138,7 +139,7 @@ export default function ClientDashboardPage() {
                   <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
                   <span className="text-xs font-semibold text-foreground">{brDate(item.since)} a {brDate(item.until)}</span>
                   <span className="flex-1" />
-                  <span className="text-[11px] text-muted-foreground">enviado em {new Date(item.sent_at).toLocaleDateString("pt-BR")}</span>
+                  <span className="text-[11px] text-muted-foreground">enviado em {brDate(item.sent_at)}</span>
                   <ChevronRight className="h-3.5 w-3.5 text-primary group-hover:translate-x-0.5 transition-transform" />
                 </a>
               ))}

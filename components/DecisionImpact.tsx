@@ -39,7 +39,7 @@ function sortFamilies(families: string[]): string[] {
 }
 
 const dec = (v: number, digits = 2) => v.toFixed(digits).replace(".", ",");
-const brDate = (iso: string) => iso.split("-").reverse().join("/");
+const brDate = (iso: string) => iso.split("-").reverse().join("-");
 
 // Variação relativa. `betterWhenUp` inverte o julgamento para custo.
 function Delta({ from, to, betterWhenUp = true }: { from: number; to: number; betterWhenUp?: boolean }) {

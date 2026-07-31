@@ -16,7 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Notice, PageHeader, Field } from "@/components/ui";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { RESULT_FAMILY_BY_SLUG } from "@/lib/format";
+import { RESULT_FAMILY_BY_SLUG, brDate } from "@/lib/format";
 import { AlertTriangle, Users, Send, Link2, Check, ExternalLink, Search, Zap } from "lucide-react";
 
 interface Account { account_id: string; name: string; platform: "meta" | "google"; }
@@ -263,7 +263,7 @@ function DeliveryCard({
             {client.report_enabled
               ? `Toda ${WEEKDAYS[weekday].toLowerCase()}, ${hourLabel} · fuso ${client.timezone || "America/Sao_Paulo"}`
               : "Sem envio automático."}
-            {client.report_last_sent_at && ` · último envio ${new Date(client.report_last_sent_at).toLocaleDateString("pt-BR")}`}
+            {client.report_last_sent_at && ` · último envio ${brDate(client.report_last_sent_at)}`}
           </div>
         </div>
         <button

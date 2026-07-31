@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { brDate } from "@/lib/format";
 import { Save, Copy, Trash2, Plus, ChevronDown, ChevronUp } from "lucide-react";
 
 interface Template {
@@ -111,7 +112,7 @@ export function CampaignTemplateList({
                   <div className="flex-1 min-w-0">
                     <div className="font-semibold truncate">{t.name}</div>
                     <div className="text-[10px] text-muted-foreground">
-                      {new Date(t.createdAt).toLocaleDateString("pt-BR")}
+                      {brDate(t.createdAt)}
                       {t.sourceAccountName && <> · {t.sourceAccountName}</>}
                     </div>
                   </div>
