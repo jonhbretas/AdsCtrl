@@ -177,7 +177,7 @@ export default function VendasPage() {
             <select value={meses} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setMeses(Number(e.target.value))} className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm">{[3, 6, 12, 24].map((n) => <option key={n} value={n}>{n}</option>)}</select>
           </label>
           <Button variant="ghost" size="sm" onClick={() => carregar()} disabled={carregando}><RefreshCw className={cn("h-3.5 w-3.5 mr-1", carregando && "animate-spin")} /> Atualizar</Button>
-          <Link href="/admin#clients"><Button variant="secondary" size="sm"><Settings className="h-3.5 w-3.5 mr-1" /> Clientes</Button></Link>
+          <Link href="/clientes#clients"><Button variant="secondary" size="sm"><Settings className="h-3.5 w-3.5 mr-1" /> Clientes</Button></Link>
         </div>
       </div>
 
@@ -191,7 +191,7 @@ export default function VendasPage() {
           <p className="text-lg mb-1">◷</p>
           <p className="font-semibold text-foreground">Nenhum cliente marcado para acompanhar vendas</p>
           <p className="text-xs mt-1">Em Configurações, marque "Acompanhar vendas reais" em cada cliente.</p>
-          <Link href="/admin#clients"><Button variant="default" size="sm" className="mt-3"><Settings className="h-3.5 w-3.5 mr-1" /> Configurações</Button></Link>
+            <Link href="/clientes#clients"><Button variant="default" size="sm" className="mt-3"><Settings className="h-3.5 w-3.5 mr-1" /> Configurações</Button></Link>
         </CardContent></Card>
       )}
 
