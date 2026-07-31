@@ -54,6 +54,11 @@ export async function PATCH(req: Request) {
     if (supabaseEnvMissing()) return NextResponse.json({ error: "Supabase não configurado." }, { status: 503 });
     const body = await req.json().catch(() => null); if (!body?.id) return NextResponse.json({ error: "Lançamento não informado." }, { status: 400 });
     const patch: Record<string, any> = { updated_at: new Date().toISOString() };
+    if (body.description !== undefined) { if (!String(body.description).trim()) return NextResponse.json({ error: "Informe uma descrição." }, { status: 400 }); patch.description = String(body.description).trim().slice(0, 180); }
+    if (body.amount !== undefined) { const amount = Number(body.amount); if (!Number.isFinite(amount) || amount <= 0) return NextResponse.json({ error: "O valor deve ser maior que zero." }, { status: 400 }); patch.amount = amount; }
+    if (body.due_date !== undefined) { if (!/^\d{4}-\d{2}-\d{2}$/.test(String(body.due_date))) return NextResponse.json({ error: "Data inválida." }, { status: 400 }); patch.due_date = String(body.due_date); }
+    if (body.client_id !== undefined) patch.client_id = body.client_id || null;
+    if (body.category_id !== undefined) patch.category_id = body.category_id || null;
     if (body.status) patch.status = body.status;
     if (body.status === "confirmed") patch.paid_at = new Date().toISOString();
     if (body.status === "planned") patch.paid_at = null;
