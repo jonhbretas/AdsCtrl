@@ -34,7 +34,12 @@ function cleanConfig(kind: ClientAlertKind, raw: unknown): { config: Record<stri
   if (kind === "region") {
     const regions = (Array.isArray(input.regions) ? input.regions : []).map((region: unknown) => String(region || "").trim()).filter(Boolean);
     if (!regions.length) return { config: {}, error: "Informe ao menos uma região obrigatória." };
-    return { config: { regions: [...new Set(regions)].slice(0, 50) } };
+    return {
+      config: {
+        regions: [...new Set(regions)].slice(0, 50),
+        warn_outside: input.warn_outside === true,
+      },
+    };
   }
   if (kind === "creative_age") {
     const maxAgeDays = Number(input.max_age_days);

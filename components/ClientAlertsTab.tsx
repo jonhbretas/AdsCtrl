@@ -58,7 +58,8 @@ function configSummary(rule: Rule, currency: string): string {
   }
   if (rule.kind === "region") {
     const regions: string[] = rule.config.regions || [];
-    return regions.length ? regions.join(" · ") : "sem regiões";
+    const base = regions.length ? regions.join(" · ") : "sem regiões";
+    return rule.config.warn_outside ? `${base} · avisar se rodar fora` : base;
   }
   return `Sem criativo novo há mais de ${rule.config.max_age_days || 20} dias`;
 }
@@ -256,6 +257,7 @@ function RuleFormModal({ clientId, currency, initial, onClose, onSaved }: { clie
   const [maxCpl, setMaxCpl] = useState(initial?.config.max_cpl != null ? String(initial.config.max_cpl) : "");
   const [periodDays, setPeriodDays] = useState(initial?.config.period_days || 7);
   const [regions, setRegions] = useState(initial?.config.regions?.join("\n") || "");
+  const [warnOutside, setWarnOutside] = useState(initial?.config.warn_outside === true);
   const [maxAgeDays, setMaxAgeDays] = useState(initial?.config.max_age_days != null ? String(initial.config.max_age_days) : "20");
   const [enabled, setEnabled] = useState(initial?.enabled !== false);
   const [busy, setBusy] = useState(false);
@@ -263,7 +265,7 @@ function RuleFormModal({ clientId, currency, initial, onClose, onSaved }: { clie
 
   function configForKind(): Record<string, any> {
     if (kind === "cpl") return { max_cpl: Number(maxCpl), period_days: Number(periodDays) };
-    if (kind === "region") return { regions: regions.split("\n").map((region: string) => region.trim()).filter(Boolean) };
+    if (kind === "region") return { regions: regions.split("\n").map((region: string) => region.trim()).filter(Boolean), warn_outside: warnOutside };
     return { max_age_days: Number(maxAgeDays) };
   }
 
@@ -318,11 +320,20 @@ function RuleFormModal({ clientId, currency, initial, onClose, onSaved }: { clie
           )}
 
           {kind === "region" && (
-            <div className="grid gap-1.5">
-              <label className={labelClass}>Regiões que precisam receber anúncio (uma por linha)</label>
-              <textarea value={regions} onChange={(e) => setRegions(e.target.value)} rows={4} placeholder={"Búzios\nCabo Frio\nArmação dos Búzios"} className="w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring" />
-              <span className="text-[10.5px] text-muted-foreground">Se qualquer uma delas ficar sem segmentação nos conjuntos ativos, você recebe o alerta.</span>
-            </div>
+            <>
+              <div className="grid gap-1.5">
+                <label className={labelClass}>Regiões que precisam receber anúncio (uma por linha)</label>
+                <textarea value={regions} onChange={(e) => setRegions(e.target.value)} rows={4} placeholder={"Búzios\nCabo Frio\nArmação dos Búzios"} className="w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring" />
+                <span className="text-[10.5px] text-muted-foreground">Se qualquer uma delas ficar sem segmentação nos conjuntos ativos, você recebe o alerta.</span>
+              </div>
+              <label className="flex items-start gap-2 text-xs text-foreground">
+                <input type="checkbox" checked={warnOutside} onChange={(e) => setWarnOutside(e.target.checked)} className="mt-0.5 rounded border-border accent-primary" />
+                <span>
+                  <span className="font-semibold">Avisar se estiver rodando para fora das aprovadas</span>
+                  <span className="block text-[10.5px] text-muted-foreground">Se um conjunto segmentar outro estado ou região fora da lista (ex.: São Paulo em vez de Búzios/Cabo Frio), você é avisado. A lista funciona como whitelist.</span>
+                </span>
+              </label>
+            </>
           )}
 
           {kind === "creative_age" && (

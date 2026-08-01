@@ -68,8 +68,8 @@ async function fetchDeliveryFacts(
 
   const collectNames = (targeting: any) => {
     const geo = targeting?.geo_locations || {};
-    for (const region of geo.regions || []) if (region?.name) facts.regions.add(normalize(String(region.name)));
-    for (const city of geo.cities || []) if (city?.name) facts.cities.add(normalize(String(city.name)));
+    for (const region of geo.regions || []) if (region?.name) facts.regions.add(String(region.name).trim());
+    for (const city of geo.cities || []) if (city?.name) facts.cities.add(String(city.name).trim());
   };
 
   try {
@@ -166,16 +166,46 @@ function evaluateCpl(rule: ClientAlertRule, metrics: { spend: number; results: R
   return null;
 }
 
+// A lista funciona como whitelist: com warn_outside, qualquer estado/cidade
+// segmentado fora dela vira alerta (o país — Brasil — é ignorado de propósito).
+// O casamento ignora acentos/caixa e aceita nome que contenha o aprovado ou
+// vice-versa ("São Paulo" casa com "São Paulo" e com "São Paulo - Capital").
 function evaluateRegions(rule: ClientAlertRule, facts: { regions: Set<string>; cities: Set<string> }): ClientAlertEvaluation["alert"] {
   const required: string[] = (rule.config.regions || []).map((region: unknown) => String(region || "").trim()).filter(Boolean);
   if (!required.length) return { level: "warning", title: "Regra de região sem lista", detail: "Informe ao menos uma região que precisa receber anúncio." };
-  const targeted = new Set<string>([...facts.regions, ...facts.cities]);
-  const missing = required.filter((region) => !targeted.has(normalize(region)) && ![...targeted].some((name) => name.includes(normalize(region)) || normalize(region).includes(name)));
-  if (!missing.length) return null;
+
+  const approvedRaw = [...new Set(required)];
+  const approved = approvedRaw.map(normalize).filter(Boolean);
+  const targetedRaw = [...new Set([...facts.regions, ...facts.cities])];
+  const targeted = targetedRaw.map(normalize).filter(Boolean);
+
+  const matchesApproved = (name: string) => approved.some((a) => a && (a.includes(name) || name.includes(a)));
+
+  // Regiões obrigatórias que não estão sendo segmentadas.
+  const missing = approvedRaw.filter((region) => {
+    const name = normalize(region);
+    return name && !targeted.some((t) => t && (t.includes(name) || name.includes(t)));
+  });
+
+  // Tráfego fora das aprovadas (opcional): estado/cidade segmentado que não
+  // casa com nenhuma aprovada. O país de origem não é flagrado.
+  const unexpected = rule.config.warn_outside
+    ? targetedRaw.filter((raw) => {
+        const name = normalize(raw);
+        if (!name || name === "brasil" || name === "brazil") return false;
+        return !matchesApproved(name);
+      })
+    : [];
+
+  if (!missing.length && !unexpected.length) return null;
+
+  const parts: string[] = [];
+  if (missing.length) parts.push(`Sem tráfego em: ${missing.join(", ")}.`);
+  if (unexpected.length) parts.push(`Tráfego fora das aprovadas: ${unexpected.map((name) => name.charAt(0).toUpperCase() + name.slice(1)).join(", ")}.`);
   return {
     level: "warning",
-    title: `Sem tráfego em: ${missing.join(", ")}`,
-    detail: `Nenhum anúncio da conta está segmentando ${missing.join(", ")}. Confira se o conjunto da região não foi pausado ou substituído por engano.`,
+    title: missing.length ? `Sem tráfego em: ${missing.join(", ")}` : "Tráfego fora das regiões aprovadas",
+    detail: `${parts.join(" ")} Confira a segmentação dos conjuntos ativos.`,
   };
 }
 
