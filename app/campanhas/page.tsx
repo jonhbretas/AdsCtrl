@@ -10,7 +10,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowLeft, ChevronDown, ChevronRight, Copy, Plus, RefreshCw } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, ChevronDown, ChevronRight, Copy, MessageCircle, Plus, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -22,6 +22,7 @@ import {
 import { compareSortValues, SortButton, SortState, usePersistentSort } from "@/components/SortableHeader";
 import DuplicateCampaign from "@/components/DuplicateCampaign";
 import AccountChanges from "@/components/AccountChanges";
+import { buildWhatsAppReport, monthPeriodLabel } from "@/lib/whatsapp-report";
 
 interface Row {
   id: string; name: string; spend: number; impressions: number; clicks: number;
@@ -35,6 +36,8 @@ interface Detail {
   availableResults: string[];
   result_family?: string | null;
   error?: string;
+  kpis?: { spend: number; results: Record<string, number>; values?: Record<string, number> };
+  breakdowns?: { region?: { key: string; spend: number }[]; platform?: { key: string; spend: number }[] };
 }
 interface AccountInfo { account_id: string; name: string; platform: "meta" | "google"; hidden?: boolean; currency?: string }
 
@@ -82,6 +85,7 @@ export default function CampaignsPage() {
   const [duplicateAd, setDuplicateAd] = useState<{ id: string; name: string } | null>(null);
   const [duplicateCP, setDuplicateCP] = useState<{ id: string; name: string } | null>(null);
   const [newCampaign, setNewCampaign] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
   const [tableSort, setTableSort] = usePersistentSort<ResultKey>("adsctrl:sort:campanhas", { key: "spend", direction: "desc" }, SORT_KEYS);
 
   const range = useMemo(() => ({ since: isoDaysAgo(14), until: isoDaysAgo(1) }), []);
@@ -310,6 +314,7 @@ export default function CampaignsPage() {
             <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           </div>
           <Button variant="ghost" size="sm" onClick={async () => { try { await reload(); flash("Dados atualizados."); } catch (e: any) { flash(e.message, true); } }}><RefreshCw className="h-3.5 w-3.5 mr-1" /> Atualizar</Button>
+          <Button variant="ghost" size="sm" onClick={() => setReportOpen(true)} disabled={!accountId} title="Resumo curto para colar no WhatsApp (fechamento mensal)"><MessageCircle className="h-3.5 w-3.5 mr-1" /> Resumo</Button>
           <Button size="sm" onClick={() => setNewCampaign(true)} disabled={!isMeta} title={isMeta ? "Criar campanha" : "Criar campanha só na Meta"}>
             <Plus className="h-3.5 w-3.5 mr-1" /> Nova campanha
           </Button>
@@ -470,6 +475,7 @@ export default function CampaignsPage() {
       {duplicateAd && <DuplicateSameModal noun="anúncio" name={duplicateAd.name} onClose={() => setDuplicateAd(null)} onSubmit={async (suffix) => { const ok = await handleDuplicateSame("ad", duplicateAd.id, suffix); if (ok) setDuplicateAd(null); return ok; }} />}
       {duplicateCP && <DuplicateCampaign sourceAccountId={accountId} campaignId={duplicateCP.id} campaignName={duplicateCP.name} onClose={() => setDuplicateCP(null)} />}
       {newCampaign && <NewCampaignModal onClose={() => setNewCampaign(false)} onSubmit={async (name, objective, status) => { const ok = await handleNewCampaign(name, objective, status); if (ok) setNewCampaign(false); return ok; }} />}
+      {reportOpen && <WhatsAppReportModal accountId={accountId} accountName={account?.name || "Conta"} currency={account?.currency} onClose={() => setReportOpen(false)} />}
     </div>
   );
 }
@@ -612,6 +618,115 @@ function Overlay({ children, onClose }: { children: React.ReactNode; onClose: ()
         {children}
       </div>
     </div>
+  );
+}
+
+function firstOfMonth() {
+  const d = new Date();
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-01`;
+}
+
+function todayIso() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+// Resumo pronto para colar no WhatsApp: o que foi feito na conta, de forma
+// curta — quanto, onde (objetivo/região/plataforma) e o resultado.
+function WhatsAppReportModal({ accountId, accountName, currency, onClose }: { accountId: string; accountName: string; currency?: string; onClose: () => void }) {
+  const [period, setPeriod] = useState<"month" | "14d">("month");
+  const [data, setData] = useState<Detail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const periodRange = useMemo(() => {
+    if (period === "14d") return { since: isoDaysAgo(14), until: isoDaysAgo(1) };
+    return { since: firstOfMonth(), until: todayIso() };
+  }, [period]);
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true); setError(null);
+    const platform = accountId.startsWith("google:") ? "google" : "meta";
+    fetch(`/api/account/detail?account_id=${encodeURIComponent(accountId)}&platform=${platform}&since=${periodRange.since}&until=${periodRange.until}`, { cache: "no-store" })
+      .then(async (r) => {
+        const text = await r.text();
+        const d = text ? JSON.parse(text) : {};
+        if (!r.ok || d.error) throw new Error(d.error || `Falha (HTTP ${r.status}).`);
+        return d as Detail;
+      })
+      .then((d) => alive && setData(d))
+      .catch((e) => alive && setError(e?.message ?? "Erro ao carregar."))
+      .finally(() => alive && setLoading(false));
+    return () => { alive = false; };
+  }, [accountId, periodRange.since, periodRange.until]);
+
+  const report = useMemo(() => {
+    if (!data) return "";
+    const k = data.kpis?.results || {};
+    const values = data.kpis?.values || {};
+    const spend = data.kpis?.spend || 0;
+    const vendas = pickVal(k, PURCHASE_KEYS);
+    const totalConversions = Object.values(k).reduce((acc, v) => acc + v, 0);
+    const results = vendas > 0 ? vendas : totalConversions > 0 ? totalConversions : null;
+    const cpr = results ? spend / results : null;
+    const valorVendas = pickVal(values, PURCHASE_KEYS);
+    const roas = valorVendas > 0 && spend > 0 ? valorVendas / spend : null;
+    return buildWhatsAppReport({
+      accountName,
+      currency: currency || "BRL",
+      periodLabel: period === "month" ? monthPeriodLabel() : "Últimos 14 dias",
+      campaigns: data.campaigns.map((row) => ({ name: row.name, objective: row.objective, spend: row.spend })),
+      regions: data.breakdowns?.region || [],
+      platforms: data.breakdowns?.platform || [],
+      totalSpend: spend,
+      results,
+      cpr,
+      roas,
+    });
+  }, [data, accountName, currency, period]);
+
+  async function copy() {
+    if (!report) return;
+    try {
+      await navigator.clipboard.writeText(report);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2200);
+    } catch {
+      window.prompt("Copie o texto:", report);
+    }
+  }
+
+  return (
+    <Overlay onClose={onClose}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-base font-bold">Resumo para WhatsApp</h3>
+          <p className="mt-0.5 text-xs text-muted-foreground">Pronto para colar — negrito, emojis e leitura rápida. Ideal para o fechamento mensal.</p>
+        </div>
+        <button type="button" onClick={onClose} className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Fechar">✕</button>
+      </div>
+
+      <div className="mt-3 flex items-center gap-1 p-1 rounded-lg bg-muted/50 border border-border/50">
+        <button type="button" onClick={() => setPeriod("month")} className={cn("flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors", period === "month" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>Mês atual</button>
+        <button type="button" onClick={() => setPeriod("14d")} className={cn("flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors", period === "14d" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>Últimos 14 dias</button>
+      </div>
+
+      <div className="mt-3">
+        {loading && <div className="grid place-items-center rounded-lg border border-border/50 bg-muted/20 py-10 text-xs text-muted-foreground">Gerando resumo…</div>}
+        {error && <div className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-600 dark:text-red-400">{error}</div>}
+        {!loading && !error && report && (
+          <pre onClick={(e) => { const range = document.createRange(); range.selectNodeContents(e.currentTarget); const sel = window.getSelection(); sel?.removeAllRanges(); sel?.addRange(range); }} className="max-h-72 overflow-y-auto whitespace-pre-wrap rounded-lg border border-border/50 bg-muted/20 p-3 text-xs leading-5 text-foreground select-text cursor-text">{report}</pre>
+        )}
+      </div>
+
+      <div className="mt-3 flex justify-end gap-2">
+        <Button variant="ghost" size="sm" onClick={onClose}>Fechar</Button>
+        <Button size="sm" onClick={copy} disabled={!report || loading} className="min-w-32">
+          {copied ? <><Check className="h-3.5 w-3.5 mr-1" /> Copiado!</> : <><Copy className="h-3.5 w-3.5 mr-1" /> Copiar para o WhatsApp</>}
+        </Button>
+      </div>
+    </Overlay>
   );
 }
 
