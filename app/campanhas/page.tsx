@@ -1,15 +1,16 @@
 "use client";
 
 // app/campanhas/page.tsx
-// Tela dedicada às campanhas de uma conta: tabela limpa por nível
-// (campanhas / conjuntos / anúncios) com pausar/reativar, orçamento (CP e CJ),
-// duplicar (CP entre contas; CJ e anúncio na própria conta) e criação de CP.
+// Tela dedicada às campanhas de uma conta, em árvore: expandir a campanha
+// mostra os conjuntos dela; expandir o conjunto mostra os anúncios. Cada
+// nível tem pausar/reativar, orçamento (CP e CJ), duplicar (CP entre contas;
+// CJ e anúncio na própria conta) e a criação de CP fica no topo.
 // O dashboard leva a esta tela ao clicar no cliente/conta.
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowLeft, ChevronDown, Copy, Plus, RefreshCw } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ChevronDown, ChevronRight, Copy, Plus, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -26,6 +27,7 @@ interface Row {
   ctr: number; cpm: number; objective?: string; thumbnail?: string;
   status?: string; effective_status?: string;
   results: Record<string, number>; values: Record<string, number>;
+  campaign_id?: string; adset_id?: string;
 }
 interface Detail {
   campaigns: Row[]; adsets: Row[]; ads: Row[];
@@ -35,11 +37,9 @@ interface Detail {
 }
 interface AccountInfo { account_id: string; name: string; platform: "meta" | "google"; hidden?: boolean; currency?: string }
 
-type Level = "campaigns" | "adsets" | "ads";
+type RowLevel = "campaign" | "adset" | "ad";
 type ResultKey = "name" | "spend" | "impressions" | "clicks" | "ctr" | "result" | "cpr" | "roas";
 const SORT_KEYS: readonly ResultKey[] = ["name", "spend", "impressions", "clicks", "ctr", "result", "cpr", "roas"];
-const LEVEL_NOUN: Record<Level, string> = { campaigns: "a campanha", adsets: "o conjunto", ads: "o anúncio" };
-const LEVEL_TITLE: Record<Level, string> = { campaigns: "Campanhas", adsets: "Conjuntos", ads: "Anúncios" };
 
 const FAMILY_PREFIX = "family:";
 const ACTION_PREFIX = "action:";
@@ -64,13 +64,6 @@ function resultValue(results: Record<string, number> | undefined, selection: str
   return key ? pickVal(results, [key]) : 0;
 }
 
-function selectionLabel(selection: string): string {
-  if (selection.startsWith(FAMILY_PREFIX)) {
-    return RESULT_FAMILY_BY_SLUG[selection.slice(FAMILY_PREFIX.length)]?.label || selection;
-  }
-  return resultLabel(selection.startsWith(ACTION_PREFIX) ? selection.slice(ACTION_PREFIX.length) : selection);
-}
-
 export default function CampaignsPage() {
   const router = useRouter();
   const [accounts, setAccounts] = useState<AccountInfo[]>([]);
@@ -78,10 +71,11 @@ export default function CampaignsPage() {
   const [detail, setDetail] = useState<Detail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<Level>("campaigns");
   const [result, setResult] = useState<string | null>(null);
   const [note, setNote] = useState<{ text: string; bad?: boolean } | null>(null);
   const [changing, setChanging] = useState<string | null>(null);
+  const [openCampaigns, setOpenCampaigns] = useState<Set<string>>(new Set());
+  const [openAdsets, setOpenAdsets] = useState<Set<string>>(new Set());
   const [budget, setBudget] = useState<{ level: "campaign" | "adset"; id: string; name: string } | null>(null);
   const [duplicateCJ, setDuplicateCJ] = useState<{ id: string; name: string } | null>(null);
   const [duplicateAd, setDuplicateAd] = useState<{ id: string; name: string } | null>(null);
@@ -93,7 +87,6 @@ export default function CampaignsPage() {
   const account = accounts.find((item) => item.account_id === accountId);
   const isMeta = account?.platform === "meta";
 
-  // Leitura do ?account= da URL (padrão das demais telas, sem useSearchParams).
   useEffect(() => {
     const requested = new URLSearchParams(window.location.search).get("account") || "";
     const stored = window.localStorage.getItem("adsctrl:selected-account") || "";
@@ -121,6 +114,7 @@ export default function CampaignsPage() {
     if (!accountId) return;
     let alive = true;
     setLoading(true); setError(null);
+    setOpenCampaigns(new Set()); setOpenAdsets(new Set());
     const platform = accountId.startsWith("google:") ? "google" : "meta";
     fetch(`/api/account/detail?account_id=${encodeURIComponent(accountId)}&platform=${platform}&since=${range.since}&until=${range.until}`, { cache: "no-store" })
       .then(async (r) => {
@@ -141,27 +135,52 @@ export default function CampaignsPage() {
     return () => { alive = false; };
   }, [accountId, range.since, range.until]);
 
-  const rows = useMemo(() => {
-    if (!detail) return [];
-    const source = tab === "campaigns" ? detail.campaigns : tab === "adsets" ? detail.adsets : detail.ads;
-    const rowValue = (row: Row) => {
-      const rowResult = resultValue(row.results, result);
-      const purchaseValue = pickVal(row.values, PURCHASE_KEYS);
-      switch (tableSort.key) {
-        case "name": return row.name;
-        case "spend": return row.spend;
-        case "impressions": return row.impressions;
-        case "clicks": return row.clicks;
-        case "ctr": return row.ctr;
-        case "result": return rowResult;
-        case "cpr": return rowResult > 0 ? row.spend / rowResult : null;
-        case "roas": return purchaseValue > 0 && row.spend > 0 ? purchaseValue / row.spend : null;
-      }
+  // Árvore: conjuntos agrupados pela campanha mãe, anúncios pelo conjunto.
+  const adsetsByCampaign = useMemo(() => {
+    const map = new Map<string, Row[]>();
+    for (const row of detail?.adsets || []) {
+      const key = row.campaign_id || "__sem_campanha__";
+      const list = map.get(key) || [];
+      list.push(row);
+      map.set(key, list);
+    }
+    return map;
+  }, [detail]);
+
+  const adsByAdset = useMemo(() => {
+    const map = new Map<string, Row[]>();
+    for (const row of detail?.ads || []) {
+      const key = row.adset_id || "__sem_conjunto__";
+      const list = map.get(key) || [];
+      list.push(row);
+      map.set(key, list);
+    }
+    return map;
+  }, [detail]);
+
+  const sortRows = useMemo(() => {
+    return (rows: Row[]) => {
+      const rowValue = (row: Row) => {
+        const rowResult = resultValue(row.results, result);
+        const purchaseValue = pickVal(row.values, PURCHASE_KEYS);
+        switch (tableSort.key) {
+          case "name": return row.name;
+          case "spend": return row.spend;
+          case "impressions": return row.impressions;
+          case "clicks": return row.clicks;
+          case "ctr": return row.ctr;
+          case "result": return rowResult;
+          case "cpr": return rowResult > 0 ? row.spend / rowResult : null;
+          case "roas": return purchaseValue > 0 && row.spend > 0 ? purchaseValue / row.spend : null;
+        }
+      };
+      return [...rows].sort(
+        (left, right) => compareSortValues(rowValue(left), rowValue(right), tableSort.direction) || compareSortValues(left.name, right.name, "asc")
+      );
     };
-    return [...source].sort(
-      (left, right) => compareSortValues(rowValue(left), rowValue(right), tableSort.direction) || compareSortValues(left.name, right.name, "asc")
-    );
-  }, [detail, tab, result, tableSort]);
+  }, [tableSort, result]);
+
+  const sortedCampaigns = useMemo(() => sortRows(detail?.campaigns || []), [sortRows, detail]);
 
   function flash(text: string, bad = false) {
     setNote({ text, bad });
@@ -174,24 +193,31 @@ export default function CampaignsPage() {
     router.push(`/campanhas?account=${encodeURIComponent(next)}`);
   }
 
-  async function toggleDelivery(row: Row) {
+  function toggleSet(set: Set<string>, setter: (next: Set<string>) => void, id: string) {
+    const next = new Set(set);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    setter(next);
+  }
+
+  async function toggleDelivery(level: RowLevel, row: Row) {
     if (!isMeta || !row.status) return;
     const next = row.status === "ACTIVE" ? "PAUSED" : "ACTIVE";
     const verb = next === "PAUSED" ? "Pausar" : "Reativar";
-    if (!window.confirm(`${verb} ${LEVEL_NOUN[tab]} "${row.name}"?`)) return;
+    const noun = level === "campaign" ? "a campanha" : level === "adset" ? "o conjunto" : "o anúncio";
+    if (!window.confirm(`${verb} ${noun} "${row.name}"?`)) return;
     setChanging(row.id);
     setNote(null);
     try {
       const r = await fetch("/api/account/status", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ account_id: accountId, level: tab === "campaigns" ? "campaign" : tab === "adsets" ? "adset" : "ad", id: row.id, status: next }),
+        body: JSON.stringify({ account_id: accountId, level, id: row.id, status: next }),
       });
       const d = await r.json();
       if (!r.ok || d.error) throw new Error(d.error || "Falha.");
       setDetail((current) => {
         if (!current) return current;
-        const key = tab;
+        const key = level === "campaign" ? "campaigns" : level === "adset" ? "adsets" : "ads";
         const nextRows = current[key].map((item) => item.id === row.id ? { ...item, status: next, effective_status: next === "PAUSED" ? "PAUSED" : item.effective_status } : item);
         return { ...current, [key]: nextRows };
       });
@@ -261,7 +287,8 @@ export default function CampaignsPage() {
     );
   }
 
-  const countFor = (level: Level) => detail?.[level].length ?? 0;
+  const counts = detail ? { campaigns: detail.campaigns.length, adsets: detail.adsets.length, ads: detail.ads.length } : null;
+  const rowCount = counts ? `${counts.campaigns} campanha${counts.campaigns === 1 ? "" : "s"} · ${counts.adsets} conjunto${counts.adsets === 1 ? "" : "s"} · ${counts.ads} anúncio${counts.ads === 1 ? "" : "s"}` : "";
 
   return (
     <div className="p-4 md:p-6 md:ml-56 pb-20 md:pb-6 space-y-4 animate-fade-in">
@@ -272,7 +299,7 @@ export default function CampaignsPage() {
             <Link href="/" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground no-underline"><ArrowLeft className="h-3 w-3" /> Visão Geral</Link>
           </div>
           <h1 className="mt-1 text-2xl font-bold tracking-tight truncate">{account?.name || "Campanhas"}</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Estrutura e veiculação · últimos 14 dias · {account ? (account.platform === "google" ? "Google Ads" : "Meta Ads") : "—"}</p>
+          <p className="text-sm text-muted-foreground mt-0.5">Estrutura e veiculação · últimos 14 dias · {account ? (account.platform === "google" ? "Google Ads" : "Meta Ads") : "—"}{counts ? ` · ${rowCount}` : ""}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative">
@@ -308,101 +335,116 @@ export default function CampaignsPage() {
         </div>
       )}
 
-      {/* Tabs + resultado */}
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-1 p-1 rounded-lg bg-muted/50 border border-border/50">
-          {(["campaigns", "adsets", "ads"] as const).map((level) => (
-            <button key={level} onClick={() => setTab(level)} className={cn("px-3 py-1.5 text-xs font-medium rounded-md transition-colors", tab === level ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
-              {LEVEL_TITLE[level]} <span className="opacity-60">({countFor(level)})</span>
-            </button>
-          ))}
-        </div>
-        <div className="ml-auto flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Resultado:</span>
-          <select value={result ?? ""} onChange={(e) => setResult(e.target.value)} className="h-8 rounded-lg border border-border/50 bg-muted/30 px-2 text-xs outline-none focus:ring-2 focus:ring-ring/30">
-            <optgroup label="Resultado do negócio">
-              {RESULT_FAMILIES.map((f) => <option key={f.slug} value={`${FAMILY_PREFIX}${f.slug}`}>{f.label}</option>)}
+      {/* Resultado */}
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-muted-foreground">Resultado:</span>
+        <select value={result ?? ""} onChange={(e) => setResult(e.target.value)} className="h-8 rounded-lg border border-border/50 bg-muted/30 px-2 text-xs outline-none focus:ring-2 focus:ring-ring/30">
+          <optgroup label="Resultado do negócio">
+            {RESULT_FAMILIES.map((f) => <option key={f.slug} value={`${FAMILY_PREFIX}${f.slug}`}>{f.label}</option>)}
+          </optgroup>
+          {orderedResults(detail?.availableResults || []).length > 0 && (
+            <optgroup label="Detalhado (como a Meta reporta)">
+              {orderedResults(detail?.availableResults || []).map((type) => <option key={type} value={`${ACTION_PREFIX}${type}`}>{resultLabel(type)}</option>)}
             </optgroup>
-            {orderedResults(detail?.availableResults || []).length > 0 && (
-              <optgroup label="Detalhado (como a Meta reporta)">
-                {orderedResults(detail?.availableResults || []).map((type) => <option key={type} value={`${ACTION_PREFIX}${type}`}>{resultLabel(type)}</option>)}
-              </optgroup>
-            )}
-          </select>
-        </div>
+          )}
+        </select>
+        <span className="ml-auto hidden text-[10px] text-muted-foreground sm:block">Clique na campanha para ver os conjuntos; clique no conjunto para ver os anúncios.</span>
       </div>
 
-      {/* Tabela */}
+      {/* Árvore */}
       <Card className="min-w-0 overflow-hidden">
         <div className="overflow-x-auto">
-          <div className="min-w-[860px]">
-            <div className="grid grid-cols-[44px_1.6fr_0.9fr_0.9fr_0.8fr_0.7fr_0.9fr_0.8fr_0.8fr_190px] gap-2 px-4 py-2.5 border-b border-border/50 bg-muted/30 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider items-center">
+          <div className="min-w-[900px]">
+            <div className="grid grid-cols-[26px_44px_1.8fr_1fr_0.9fr_0.9fr_0.8fr_0.7fr_0.9fr_0.8fr_0.8fr_180px] gap-2 px-4 py-2.5 border-b border-border/50 bg-muted/30 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider items-center">
+              <span />
               <span>No ar</span>
-              <SortHeader sortKey="name" sort={tableSort} onSort={setTableSort} align="left">{tab === "ads" ? "Anúncio" : tab === "adsets" ? "Conjunto" : "Campanha"}</SortHeader>
-              {tab === "campaigns" && <SortHeader sortKey="name" sort={tableSort} onSort={setTableSort}>Objetivo</SortHeader>}
+              <SortHeader sortKey="name" sort={tableSort} onSort={setTableSort} align="left">Nome</SortHeader>
+              <SortHeader sortKey="name" sort={tableSort} onSort={setTableSort}>Objetivo</SortHeader>
               <SortHeader sortKey="spend" sort={tableSort} onSort={setTableSort} initialDirection="desc">Investimento</SortHeader>
               <SortHeader sortKey="impressions" sort={tableSort} onSort={setTableSort} initialDirection="desc">Impressões</SortHeader>
               <SortHeader sortKey="clicks" sort={tableSort} onSort={setTableSort} initialDirection="desc">Cliques</SortHeader>
               <SortHeader sortKey="ctr" sort={tableSort} onSort={setTableSort} initialDirection="desc">CTR</SortHeader>
               <SortHeader sortKey="result" sort={tableSort} onSort={setTableSort} initialDirection="desc">Resultado</SortHeader>
               <SortHeader sortKey="cpr" sort={tableSort} onSort={setTableSort}>CPR</SortHeader>
-              {tab === "campaigns" && <SortHeader sortKey="roas" sort={tableSort} onSort={setTableSort} initialDirection="desc">ROAS</SortHeader>}
+              <SortHeader sortKey="roas" sort={tableSort} onSort={setTableSort} initialDirection="desc">ROAS</SortHeader>
               <span className="text-right">Ações</span>
             </div>
 
-            {loading && !detail && (
-              <div className="py-12 text-center text-sm text-muted-foreground">Carregando…</div>
-            )}
-            {!loading && detail && rows.length === 0 && (
-              <div className="py-12 text-center text-sm text-muted-foreground">Nenhum {tab === "ads" ? "anúncio" : tab === "adsets" ? "conjunto" : "campanha"} no período.</div>
+            {loading && !detail && <div className="py-12 text-center text-sm text-muted-foreground">Carregando…</div>}
+            {!loading && detail && sortedCampaigns.length === 0 && (
+              <div className="py-12 text-center text-sm text-muted-foreground">Nenhuma campanha no período. Use "Nova campanha" para começar.</div>
             )}
 
-            {rows.map((row) => {
-              const res = resultValue(row.results, result);
-              const rv = pickVal(row.values, PURCHASE_KEYS);
+            {sortedCampaigns.map((campaign) => {
+              const campaignOpen = openCampaigns.has(campaign.id);
+              const children = sortRows(adsetsByCampaign.get(campaign.id) || []);
               return (
-                <div key={row.id} className="grid grid-cols-[44px_1.6fr_0.9fr_0.9fr_0.8fr_0.7fr_0.9fr_0.8fr_0.8fr_190px] gap-2 px-4 py-3 items-center border-b border-border/30 last:border-b-0 transition-colors hover:bg-accent/20">
-                  <DeliverySwitch row={row} busy={changing === row.id} onToggle={() => toggleDelivery(row)} metaOnly={isMeta} />
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    {tab === "ads" && row.thumbnail && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={row.thumbnail} alt="" width={30} height={30} className="rounded-md object-cover shrink-0" />
-                    )}
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium truncate" title={row.name}>{row.name}</div>
-                      {row.status && row.status !== "ACTIVE" && row.status !== "PAUSED" && (
-                        <div className="text-[10px] text-muted-foreground">status: {row.status.toLowerCase().replace(/_/g, " ")}</div>
-                      )}
+                <div key={campaign.id} className="border-b border-border/30 last:border-b-0">
+                  <CampaignRow
+                    row={campaign}
+                    level="campaign"
+                    expanded={campaignOpen}
+                    childCount={children.length}
+                    childNoun="conjunto"
+                    onToggleExpand={() => toggleSet(openCampaigns, setOpenCampaigns, campaign.id)}
+                    onToggleDelivery={() => toggleDelivery("campaign", campaign)}
+                    busy={changing === campaign.id}
+                    metaOnly={isMeta}
+                    result={result}
+                    currency={account?.currency}
+                    onBudget={() => setBudget({ level: "campaign", id: campaign.id, name: campaign.name })}
+                    onDuplicate={() => setDuplicateCP({ id: campaign.id, name: campaign.name })}
+                  />
+                  {campaignOpen && (
+                    <div className="bg-muted/[0.07]">
+                      {children.length === 0 && <EmptyChildren text="Sem conjuntos nesta campanha." depth={1} />}
+                      {children.map((adset) => {
+                        const adsetOpen = openAdsets.has(adset.id);
+                        const ads = sortRows(adsByAdset.get(adset.id) || []);
+                        return (
+                          <div key={adset.id} className="border-t border-border/20">
+                            <CampaignRow
+                              row={adset}
+                              level="adset"
+                              expanded={adsetOpen}
+                              childCount={ads.length}
+                              childNoun="anúncio"
+                              onToggleExpand={() => toggleSet(openAdsets, setOpenAdsets, adset.id)}
+                              onToggleDelivery={() => toggleDelivery("adset", adset)}
+                              busy={changing === adset.id}
+                              metaOnly={isMeta}
+                              result={result}
+                              currency={account?.currency}
+                              onBudget={() => setBudget({ level: "adset", id: adset.id, name: adset.name })}
+                              onDuplicate={() => setDuplicateCJ({ id: adset.id, name: adset.name })}
+                              depth={1}
+                            />
+                            {adsetOpen && (
+                              <div className="bg-muted/[0.04]">
+                                {ads.length === 0 && <EmptyChildren text="Sem anúncios neste conjunto." depth={2} />}
+                                {ads.map((ad) => (
+                                  <CampaignRow
+                                    key={ad.id}
+                                    row={ad}
+                                    level="ad"
+                                    expanded={false}
+                                    onToggleExpand={() => {}}
+                                    onToggleDelivery={() => toggleDelivery("ad", ad)}
+                                    busy={changing === ad.id}
+                                    metaOnly={isMeta}
+                                    result={result}
+                                    currency={account?.currency}
+                                    onDuplicate={() => setDuplicateAd({ id: ad.id, name: ad.name })}
+                                    depth={2}
+                                  />
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
-                  </div>
-                  {tab === "campaigns" && (
-                    <div className="text-xs text-muted-foreground truncate" title={row.objective}>{row.objective || "—"}</div>
                   )}
-                  <div className="text-right text-sm font-semibold">{money(row.spend, account?.currency)}</div>
-                  <div className="text-right text-sm text-foreground/80">{num(row.impressions)}</div>
-                  <div className="text-right text-sm text-foreground/80">{num(row.clicks)}</div>
-                  <div className="text-right text-sm text-foreground/80">{pct(row.ctr)}</div>
-                  <div className={cn("text-right text-sm font-semibold", res > 0 ? "text-foreground" : "text-muted-foreground")}>{res > 0 ? num(res) : "—"}</div>
-                  <div className="text-right text-sm text-foreground/80">{res > 0 ? money(row.spend / res, account?.currency) : "—"}</div>
-                  {tab === "campaigns" && (
-                    <div className="text-right text-xs text-emerald-500 font-medium">{rv > 0 && row.spend > 0 ? `${(rv / row.spend).toFixed(1)}x` : "—"}</div>
-                  )}
-                  <div className="flex items-center gap-1.5 justify-end">
-                    {(tab === "campaigns" || tab === "adsets") && (
-                      <button type="button" onClick={() => setBudget({ level: tab === "campaigns" ? "campaign" : "adset", id: row.id, name: row.name })} disabled={!isMeta} title="Ajustar orçamento" className="rounded-md border border-border/60 bg-muted/20 px-2 py-1 text-[10px] font-semibold text-foreground hover:border-primary/40 disabled:cursor-not-allowed disabled:opacity-40">Orçamento</button>
-                    )}
-                    <button type="button"
-                      onClick={() => {
-                        if (tab === "campaigns") setDuplicateCP({ id: row.id, name: row.name });
-                        else if (tab === "adsets") setDuplicateCJ({ id: row.id, name: row.name });
-                        else setDuplicateAd({ id: row.id, name: row.name });
-                      }}
-                      disabled={!isMeta}
-                      title={tab === "campaigns" ? "Duplicar campanha para outra conta" : tab === "adsets" ? "Duplicar conjunto nesta conta" : "Duplicar anúncio neste conjunto"}
-                      className="inline-flex items-center gap-1 rounded-md border border-border/60 bg-muted/20 px-2 py-1 text-[10px] font-semibold text-foreground hover:border-primary/40 disabled:cursor-not-allowed disabled:opacity-40">
-                      <Copy className="h-2.5 w-2.5" /> Duplicar
-                    </button>
-                  </div>
                 </div>
               );
             })}
@@ -420,7 +462,107 @@ export default function CampaignsPage() {
   );
 }
 
-/* ------------------------------ subcomponentes ----------------------------- */
+/* ------------------------------ linhas da árvore --------------------------- */
+
+const LEVEL_PILL: Record<RowLevel, { label: string; className: string }> = {
+  campaign: { label: "CP", className: "bg-blue-500/10 text-blue-600 dark:text-blue-400" },
+  adset: { label: "CJ", className: "bg-sky-500/10 text-sky-600 dark:text-sky-400" },
+  ad: { label: "AD", className: "bg-violet-500/10 text-violet-600 dark:text-violet-400" },
+};
+
+function CampaignRow({
+  row, level, expanded, childCount, childNoun, onToggleExpand, onToggleDelivery, busy, metaOnly, result, currency, onBudget, onDuplicate, depth = 0,
+}: {
+  row: Row; level: RowLevel; expanded: boolean; childCount?: number; childNoun?: string;
+  onToggleExpand: () => void; onToggleDelivery: () => void; busy: boolean; metaOnly: boolean;
+  result: string | null; currency?: string; onBudget?: () => void; onDuplicate: () => void; depth?: number;
+}) {
+  const res = resultValue(row.results, result);
+  const rv = pickVal(row.values, PURCHASE_KEYS);
+  const pill = LEVEL_PILL[level];
+  const hasChildren = level !== "ad" && childCount != null && childCount > 0;
+
+  return (
+    <div
+      onClick={level === "ad" ? undefined : onToggleExpand}
+      className={cn(
+        "group grid grid-cols-[26px_44px_1.8fr_1fr_0.9fr_0.9fr_0.8fr_0.7fr_0.9fr_0.8fr_0.8fr_180px] gap-2 px-4 py-2.5 items-center transition-colors",
+        level === "ad" ? "cursor-default" : "cursor-pointer hover:bg-accent/20",
+        expanded && "bg-accent/10"
+      )}
+      style={{ paddingLeft: `calc(1rem + ${depth * 1.75}rem)` }}
+    >
+      <span className="text-muted-foreground">
+        {level !== "ad" && (expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />)}
+      </span>
+
+      <span onClick={(e) => e.stopPropagation()}>
+        <DeliverySwitch row={row} busy={busy} onToggle={onToggleDelivery} metaOnly={metaOnly} />
+      </span>
+
+      <div className="flex items-center gap-2 min-w-0">
+        {level === "ad" && row.thumbnail && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={row.thumbnail} alt="" width={28} height={28} className="rounded-md object-cover shrink-0" />
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className={cn("shrink-0 rounded px-1 py-0.5 text-[8.5px] font-bold", pill.className)}>{pill.label}</span>
+            <span className="text-sm font-medium truncate" title={row.name}>{row.name}</span>
+          </div>
+          {row.status && row.status !== "ACTIVE" && row.status !== "PAUSED" && (
+            <div className="text-[10px] text-muted-foreground">status: {row.status.toLowerCase().replace(/_/g, " ")}</div>
+          )}
+        </div>
+        {hasChildren && (
+          <span className="hidden shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-semibold text-muted-foreground lg:inline">{childCount} {childNoun}{childCount === 1 ? "" : "s"}</span>
+        )}
+      </div>
+
+      <div className="text-xs text-muted-foreground truncate" title={row.objective}>{level === "campaign" ? (row.objective || "—") : ""}</div>
+      <div className="text-right text-sm font-semibold">{money(row.spend, currency)}</div>
+      <div className="text-right text-sm text-foreground/80">{num(row.impressions)}</div>
+      <div className="text-right text-sm text-foreground/80">{num(row.clicks)}</div>
+      <div className="text-right text-sm text-foreground/80">{pct(row.ctr)}</div>
+      <div className={cn("text-right text-sm font-semibold", res > 0 ? "text-foreground" : "text-muted-foreground")}>{res > 0 ? num(res) : "—"}</div>
+      <div className="text-right text-sm text-foreground/80">{res > 0 ? money(row.spend / res, currency) : "—"}</div>
+      <div className="text-right text-xs text-emerald-500 font-medium">{level === "campaign" && rv > 0 && row.spend > 0 ? `${(rv / row.spend).toFixed(1)}x` : "—"}</div>
+
+      <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+        {level !== "ad" && onBudget && (
+          <ActionButton onClick={onBudget} disabled={!metaOnly} title="Ajustar orçamento">Orçamento</ActionButton>
+        )}
+        <ActionButton onClick={onDuplicate} disabled={!metaOnly} title={level === "campaign" ? "Duplicar campanha para outra conta" : level === "adset" ? "Duplicar conjunto nesta conta" : "Duplicar anúncio neste conjunto"}>
+          <Copy className="h-2.5 w-2.5" /> Duplicar
+        </ActionButton>
+      </div>
+    </div>
+  );
+}
+
+function EmptyChildren({ text, depth }: { text: string; depth: number }) {
+  return (
+    <div className="px-4 py-3 text-[11px] text-muted-foreground" style={{ paddingLeft: `calc(1.75rem + ${depth * 1.75}rem)` }}>
+      {text}
+    </div>
+  );
+}
+
+function ActionButton({ children, onClick, disabled, title }: { children: React.ReactNode; onClick: () => void; disabled?: boolean; title?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[10px] font-semibold text-foreground shadow-sm transition-colors hover:border-primary/40 hover:bg-accent/50 disabled:cursor-not-allowed disabled:opacity-40"
+    >
+      {children}
+    </button>
+  );
+}
+
+/* ------------------------------ cabeçalho --------------------------------- */
 
 function SortHeader({ children, sortKey, sort, onSort, align = "right", initialDirection = "asc" }: {
   children: React.ReactNode; sortKey: ResultKey; sort: SortState<ResultKey>; onSort: (next: SortState<ResultKey>) => void;
@@ -448,6 +590,8 @@ function DeliverySwitch({ row, busy, onToggle, metaOnly }: { row: Row; busy: boo
     </button>
   );
 }
+
+/* ------------------------------ modais ------------------------------------ */
 
 function Overlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
   return (

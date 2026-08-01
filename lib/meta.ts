@@ -460,6 +460,11 @@ export interface RowInsight {
   // ou fora do período de veiculação).
   status?: string;
   effective_status?: string;
+  // Pai no nível acima: a tela de campanhas agrupa conjuntos dentro da
+  // campanha e anúncios dentro do conjunto. Insights não trazem isso — vem
+  // de uma consulta separada aos objetos (ver getAccountDetail).
+  campaign_id?: string;
+  adset_id?: string;
   // Conjunto (ou campanha com um conjunto assim dentro) rodando o país
   // inteiro sem nenhum recorte de localização. Ver fetchBroadLocationAdSets.
   broad_location?: boolean;
@@ -610,6 +615,18 @@ async function fetchAdThumbnails(actId: string, token: string): Promise<Record<s
   } catch {
     return {};
   }
+}
+
+// Mapa objeto -> pai: adset -> campaign_id, ad -> adset_id. O endpoint de
+// insights não devolve o pai no nível abaixo, então vem dos próprios objetos.
+async function fetchParentMap(actId: string, level: "adset" | "ad", token: string): Promise<Record<string, string>> {
+  const endpoint = level === "adset" ? "adsets" : "ads";
+  const field = level === "adset" ? "campaign_id" : "adset_id";
+  const url = `${GRAPH}/${actId}/${endpoint}?fields=id,${field}&limit=200&access_token=${token}`;
+  const rows = await fbGetAll<any>(url);
+  const map: Record<string, string> = {};
+  for (const row of rows) if (row[field]) map[row.id] = String(row[field]);
+  return map;
 }
 
 // KPI agregado da conta (sem time_increment, para reach correto).
@@ -1341,6 +1358,8 @@ export async function getAccountDetail(
     adsetStatus,
     adStatus,
     broadLocation,
+    adsetParents,
+    adParents,
   ] = await Promise.all([
     fetchAccountKpis(actId, since, until, token),
     fetchAccountKpis(actId, prev.since, prev.until, token).catch(() => EMPTY_KPIS),
@@ -1379,6 +1398,10 @@ export async function getAccountDetail(
     fetchStatuses(actId, "adset", token).catch(() => ({})),
     fetchStatuses(actId, "ad", token).catch(() => ({})),
     fetchBroadLocationAdSets(actId, token).catch(() => []),
+    // Parentesco para a tela de campanhas (conjunto -> campanha, anúncio ->
+    // conjunto). Falhar aqui só perde o agrupamento; as linhas continuam.
+    fetchParentMap(actId, "adset", token).catch(() => ({}) as Record<string, string>),
+    fetchParentMap(actId, "ad", token).catch(() => ({}) as Record<string, string>),
   ]);
 
   // Anexa thumbnails aos anúncios.
@@ -1395,6 +1418,11 @@ export async function getAccountDetail(
   applyStatus(campaigns, campaignStatus);
   applyStatus(adsets, adsetStatus);
   applyStatus(ads, adStatus);
+
+  // Parentesco (conjunto -> campanha, anúncio -> conjunto) para a tela de
+  // campanhas montar a árvore CP > CJ > anúncio.
+  for (const row of adsets) row.campaign_id = adsetParents[row.id];
+  for (const row of ads) row.adset_id = adParents[row.id];
 
   // Marca a linha do conjunto direto (é onde a localização mora) e sobe o
   // aviso para a campanha mãe: a aba de Campanhas é a que abre primeiro, e o
