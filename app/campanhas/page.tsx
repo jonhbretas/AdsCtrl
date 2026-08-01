@@ -22,6 +22,7 @@ import {
 import { compareSortValues, SortButton, SortState, usePersistentSort } from "@/components/SortableHeader";
 import DuplicateCampaign from "@/components/DuplicateCampaign";
 import AccountChanges from "@/components/AccountChanges";
+import StrategicSummaryCard from "@/components/StrategicSummaryCard";
 import { buildWhatsAppReport, monthPeriodLabel } from "@/lib/whatsapp-report";
 
 interface Row {
@@ -37,7 +38,7 @@ interface Detail {
   result_family?: string | null;
   error?: string;
   kpis?: { spend: number; results: Record<string, number>; values?: Record<string, number> };
-  breakdowns?: { region?: { key: string; spend: number }[]; platform?: { key: string; spend: number }[] };
+  breakdowns?: { region?: { key: string; spend: number }[]; platform?: { key: string; spend: number }[]; age_gender?: { key: string; spend: number }[] };
 }
 interface AccountInfo { account_id: string; name: string; platform: "meta" | "google"; hidden?: boolean; currency?: string }
 
@@ -357,6 +358,9 @@ export default function CampaignsPage() {
         <span className="ml-auto hidden text-[10px] text-muted-foreground sm:block">Clique na campanha para ver os conjuntos; clique no conjunto para ver os anúncios.</span>
       </div>
 
+      {/* Resumo estratégico: o norte do mês da conta */}
+      {accountId && <StrategicSummaryCard accountId={accountId} />}
+
       {/* Árvore */}
       <Card className="min-w-0 overflow-hidden">
         <div className="overflow-x-auto">
@@ -457,6 +461,15 @@ export default function CampaignsPage() {
           </div>
         </div>
       </Card>
+
+      {/* Segmentações: faixa etária, região anunciada e plataforma */}
+      {detail && (
+        <SegmentationSection
+          breakdowns={detail.breakdowns}
+          currency={account?.currency}
+          totalSpend={detail.kpis?.spend || 0}
+        />
+      )}
 
       {/* Últimas edições + impacto das decisões (Meta mostra o impacto) */}
       {accountId && (
@@ -609,6 +622,75 @@ function DeliverySwitch({ row, busy, onToggle, metaOnly }: { row: Row; busy: boo
   );
 }
 
+/* ------------------------------ segmentações ------------------------------ */
+
+const PLATFORM_LABELS: Record<string, string> = {
+  facebook: "Facebook",
+  instagram: "Instagram",
+  messenger: "Messenger",
+  audience_network: "Rede de audiência",
+};
+
+function genderLabel(gender: string): string {
+  if (gender === "female") return "Feminino";
+  if (gender === "male") return "Masculino";
+  if (gender === "unknown") return "Não informado";
+  return gender;
+}
+
+function ageGenderLabel(key: string): string {
+  const [age, gender] = key.split("·").map((part) => part.trim());
+  return `${age} · ${genderLabel(gender || "")}`;
+}
+
+function SegBlock({ title, rows, color, currency }: { title: string; rows: { key: string; spend: number }[]; color: string; currency?: string }) {
+  const total = rows.reduce((acc, row) => acc + row.spend, 0);
+  const max = Math.max(...rows.map((row) => row.spend), 1);
+  if (!rows.length) return null;
+  return (
+    <div className="rounded-lg border border-border/50 bg-card p-3">
+      <h3 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">{title}</h3>
+      <div className="mt-2.5 space-y-2">
+        {rows.map((row) => (
+          <div key={row.key} className="grid grid-cols-[110px_1fr_64px] items-center gap-2">
+            <span className="truncate text-[10.5px] text-foreground/80" title={row.key}>{row.key}</span>
+            <div className="h-2.5 rounded bg-muted overflow-hidden">
+              <div className="h-full rounded transition-all" style={{ width: `${Math.max((row.spend / max) * 100, 2)}%`, background: color }} />
+            </div>
+            <span className="text-right text-[10.5px] tabular-nums text-muted-foreground">{total ? `${Math.round((row.spend / total) * 100)}%` : "—"}</span>
+          </div>
+        ))}
+      </div>
+      <div className="mt-2 text-right text-[9.5px] text-muted-foreground/70">por investimento · {money(total, currency)}</div>
+    </div>
+  );
+}
+
+function SegmentationSection({ breakdowns, currency, totalSpend }: { breakdowns?: Detail["breakdowns"]; currency?: string; totalSpend: number }) {
+  const platform = (breakdowns?.platform || []).filter((row) => row.spend > 0).map((row) => ({ key: PLATFORM_LABELS[row.key] || row.key, spend: row.spend })).sort((a, b) => b.spend - a.spend).slice(0, 6);
+  const region = (breakdowns?.region || []).filter((row) => row.spend > 0).slice(0, 10);
+  const ageGender = (breakdowns?.age_gender || []).filter((row) => row.spend > 0).slice(0, 12).map((row) => ({ key: ageGenderLabel(row.key), spend: row.spend }));
+
+  if (!platform.length && !region.length && !ageGender.length) return null;
+
+  return (
+    <Card className="p-4">
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h2 className="text-sm font-semibold">Segmentações</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">Para quem o anúncio foi entregue no período — plataforma, região e faixa etária.</p>
+        </div>
+        <span className="text-[10px] text-muted-foreground">Investimento total: {money(totalSpend, currency)}</span>
+      </div>
+      <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <SegBlock title="Plataforma" rows={platform} color="#38bdf8" currency={currency} />
+        <SegBlock title="Região anunciada" rows={region} color="#34d399" currency={currency} />
+        <SegBlock title="Idade e gênero" rows={ageGender} color="#a78bfa" currency={currency} />
+      </div>
+    </Card>
+  );
+}
+
 /* ------------------------------ modais ------------------------------------ */
 
 function Overlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
@@ -635,6 +717,7 @@ function todayIso() {
 function WhatsAppReportModal({ accountId, accountName, currency, onClose }: { accountId: string; accountName: string; currency?: string; onClose: () => void }) {
   const [period, setPeriod] = useState<"month" | "14d">("month");
   const [data, setData] = useState<Detail | null>(null);
+  const [revenue, setRevenue] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -646,7 +729,7 @@ function WhatsAppReportModal({ accountId, accountName, currency, onClose }: { ac
 
   useEffect(() => {
     let alive = true;
-    setLoading(true); setError(null);
+    setLoading(true); setError(null); setRevenue(null);
     const platform = accountId.startsWith("google:") ? "google" : "meta";
     fetch(`/api/account/detail?account_id=${encodeURIComponent(accountId)}&platform=${platform}&since=${periodRange.since}&until=${periodRange.until}`, { cache: "no-store" })
       .then(async (r) => {
@@ -658,33 +741,51 @@ function WhatsAppReportModal({ accountId, accountName, currency, onClose }: { ac
       .then((d) => alive && setData(d))
       .catch((e) => alive && setError(e?.message ?? "Erro ao carregar."))
       .finally(() => alive && setLoading(false));
+
+    // Valor faturado: vendas informadas por cliente (a conta pertence a um
+    // cliente via client_ad_accounts). Falha aqui não derruba o resumo.
+    (async () => {
+      try {
+        const [salesRes, clientsRes] = await Promise.all([
+          fetch("/api/sales?months=1", { cache: "no-store" }),
+          fetch("/api/clients", { cache: "no-store" }),
+        ]);
+        const [salesData, clientsData] = await Promise.all([salesRes.json(), clientsRes.json()]);
+        if (!alive) return;
+        const client = (clientsData.clients || []).find((item: any) => (item.accounts || []).some((acc: any) => acc.account_id === accountId));
+        const row = (salesData.rows || []).find((item: any) => String(item.name || "").toLowerCase().trim() === String(client?.name || "").toLowerCase().trim());
+        const month = row?.months?.[0];
+        if (month && month.revenue != null) setRevenue(Number(month.revenue) || 0);
+      } catch {
+        // sem faturado no resumo é aceitável
+      }
+    })();
+
     return () => { alive = false; };
   }, [accountId, periodRange.since, periodRange.until]);
 
   const report = useMemo(() => {
     if (!data) return "";
     const k = data.kpis?.results || {};
-    const values = data.kpis?.values || {};
     const spend = data.kpis?.spend || 0;
     const vendas = pickVal(k, PURCHASE_KEYS);
     const totalConversions = Object.values(k).reduce((acc, v) => acc + v, 0);
     const results = vendas > 0 ? vendas : totalConversions > 0 ? totalConversions : null;
     const cpr = results ? spend / results : null;
-    const valorVendas = pickVal(values, PURCHASE_KEYS);
-    const roas = valorVendas > 0 && spend > 0 ? valorVendas / spend : null;
+    const activeCreatives = data.ads.filter((row) => row.status === "ACTIVE" || row.effective_status === "ACTIVE").length;
     return buildWhatsAppReport({
       accountName,
       currency: currency || "BRL",
       periodLabel: period === "month" ? monthPeriodLabel() : "Últimos 14 dias",
       campaigns: data.campaigns.map((row) => ({ name: row.name, objective: row.objective, spend: row.spend })),
       regions: data.breakdowns?.region || [],
-      platforms: data.breakdowns?.platform || [],
+      creatives: { total: data.ads.length, active: activeCreatives },
       totalSpend: spend,
       results,
       cpr,
-      roas,
+      revenue,
     });
-  }, [data, accountName, currency, period]);
+  }, [data, accountName, currency, period, revenue]);
 
   async function copy() {
     if (!report) return;

@@ -1,11 +1,11 @@
-// app/api/client-alert-rules/evaluate/route.ts
-// Avalia as regras de alerta de UM cliente agora (botão "Testar regras").
+// app/api/account-alert-rules/evaluate/route.ts
+// Avalia as regras de alerta de UMA conta agora (botão "Testar regras").
 // A coleta também avalia, mas aqui o resultado é imediato, para a tela
 // mostrar o que cada regra encontrou antes de esperar o cron.
 
 import { NextResponse } from "next/server";
 import { getServiceClient, supabaseEnvMissing } from "@/lib/supabase";
-import { evaluateClientRules } from "@/lib/client-alerts";
+import { evaluateAccountRules } from "@/lib/account-alerts";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -14,10 +14,10 @@ export async function POST(request: Request) {
   try {
     if (supabaseEnvMissing()) return NextResponse.json({ error: "Supabase não configurado." }, { status: 503 });
     const body = await request.json().catch(() => null);
-    const clientId = String(body?.client_id || "").trim();
-    if (!clientId) return NextResponse.json({ error: "client_id é obrigatório." }, { status: 400 });
+    const accountId = String(body?.account_id || "").trim().replace(/^act_/, "");
+    if (!accountId) return NextResponse.json({ error: "account_id é obrigatório." }, { status: 400 });
 
-    const evaluations = await evaluateClientRules(getServiceClient(), clientId);
+    const evaluations = await evaluateAccountRules(getServiceClient(), accountId);
     return NextResponse.json({
       evaluated: evaluations.map((entry) => ({
         id: entry.rule.id,

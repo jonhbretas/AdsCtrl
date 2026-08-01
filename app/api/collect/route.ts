@@ -513,11 +513,11 @@ async function runCollect(triggerSource: "manual" | "cron", platform: CollectSco
   await persistAlerts(alerts, processedAccountIds);
   // O que exige ação minha vira tarefa no quadro, com o contexto pronto.
   await openTasksForAlerts(alerts);
-  // Regras de alerta por cliente (CPL, regiões obrigatórias, criativos).
+  // Regras de alerta por CONTA (CPL, regiões obrigatórias, criativos).
   // Falha aqui não derruba a coleta: os alertas de conta já foram salvos.
   try {
-    const { evaluateAllClientRules } = await import("@/lib/client-alerts");
-    await evaluateAllClientRules(sb);
+    const { evaluateAllAccountRules } = await import("@/lib/account-alerts");
+    await evaluateAllAccountRules(sb);
   } catch {
     // tabela ausente (migração não rodada) ou erro transitório
   }

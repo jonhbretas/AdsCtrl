@@ -1,25 +1,29 @@
-// lib/client-alerts.ts
-// Alertas por CLIENTE: regras configuradas na tela de Metas do cliente e
-// avaliadas na coleta (e sob demanda pelo botão "Testar"). Cada regra vira
-// NO MÁXIMO uma linha em client_alerts (unique rule_id): ativa enquanto a
-// condição valer, resolvida quando passar.
+// lib/account-alerts.ts
+// Alertas por CONTA DE ANÚNCIOS: regras configuradas na Central de Alertas
+// (painel "Alertas personalizados") e avaliadas na coleta (e sob demanda pelo
+// botão "Testar"). Cada regra vira NO MÁXIMO uma linha em account_alerts
+// (unique rule_id): ativa enquanto a condição valer, resolvida quando passa.
 //
 // Tipos de regra:
 //  - cpl:          custo por lead acima do teto nos últimos N dias
 //  - region:       região obrigatória sem anúncio rodando (ex.: Búzios/Cabo
-//                  Frio) — significa tráfego parado para aquele público
+//                  Frio) — tráfego parado para aquele público; com
+//                  warn_outside, também avisa tráfego fora das aprovadas
 //  - creative_age: nenhum criativo novo há mais de N dias
+//
+// As regras de segmentação/criativo só fazem sentido na Meta (o Google não
+// expõe targeting por esta via); a UI marca isso.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { tokenByIndex, GRAPH } from "./meta";
 import { pickVal } from "./format";
 
-export type ClientAlertKind = "cpl" | "region" | "creative_age";
+export type AccountAlertKind = "cpl" | "region" | "creative_age" | "strategy_review";
 
-export interface ClientAlertRule {
+export interface AccountAlertRule {
   id: string;
-  client_id: string;
-  kind: ClientAlertKind;
+  account_id: string;
+  kind: AccountAlertKind;
   name: string;
   config: Record<string, any>;
   enabled: boolean;
@@ -27,22 +31,8 @@ export interface ClientAlertRule {
   updated_at?: string;
 }
 
-export interface ClientAlertOutcome {
-  id: string;
-  rule_id: string;
-  client_id: string;
-  kind: ClientAlertKind;
-  level: "warning" | "critical";
-  title: string;
-  detail: string;
-  first_seen_at: string;
-  last_seen_at: string;
-  resolved: boolean;
-  resolved_at: string | null;
-}
-
-export interface ClientAlertEvaluation {
-  rule: ClientAlertRule;
+export interface AccountAlertEvaluation {
+  rule: AccountAlertRule;
   ok: boolean;
   alert: { level: "warning" | "critical"; title: string; detail: string } | null;
 }
@@ -59,7 +49,20 @@ function normalize(value: string): string {
   return value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
 }
 
-// Meta: conjuntos com segmentação + anúncios com data de criação, por conta.
+async function fetchAll(url: string): Promise<any[]> {
+  const out: any[] = [];
+  let next: string | undefined = url;
+  while (next) {
+    const res: Response = await fetch(next);
+    if (!res.ok) throw new Error(`Meta API ${res.status}`);
+    const json: any = await res.json();
+    out.push(...(json.data || []));
+    next = json.paging?.next;
+  }
+  return out;
+}
+
+// Meta: conjuntos com segmentação + anúncios com data de criação, da conta.
 async function fetchDeliveryFacts(
   actId: string,
   token: string
@@ -77,7 +80,7 @@ async function fetchDeliveryFacts(
     const adsets = await fetchAll(adsetsUrl);
     for (const adset of adsets) collectNames(adset.targeting);
   } catch {
-    // Falha de listagem não derruba a avaliação das outras contas/regras.
+    // Falha de listagem não derruba a avaliação das outras regras.
   }
 
   try {
@@ -96,43 +99,12 @@ async function fetchDeliveryFacts(
   return facts;
 }
 
-async function fetchAll(url: string): Promise<any[]> {
-  const out: any[] = [];
-  let next: string | undefined = url;
-  while (next) {
-    const res: Response = await fetch(next);
-    if (!res.ok) throw new Error(`Meta API ${res.status}`);
-    const json: any = await res.json();
-    out.push(...(json.data || []));
-    next = json.paging?.next;
-  }
-  return out;
-}
-
-async function clientMetaAccounts(sb: SupabaseClient, clientId: string): Promise<{ account_id: string; name: string; token_ref: number }[]> {
-  const { data: links } = await sb.from("client_ad_accounts").select("account_id").eq("client_id", clientId);
-  if (!links?.length) return [];
-  const ids = links.map((link: any) => link.account_id);
-  const { data: accounts } = await sb
-    .from("ad_accounts")
-    .select("account_id,name,token_ref")
-    .eq("platform", "meta")
-    .eq("hidden", false)
-    .in("account_id", ids);
-  return (accounts || []).map((account: any) => ({
-    account_id: account.account_id,
-    name: account.name || account.account_id,
-    token_ref: typeof account.token_ref === "number" ? account.token_ref : 0,
-  }));
-}
-
-// Métricas dos últimos N dias somadas das contas do cliente (tabela local,
-// alimentada pela coleta — não faz chamada à Meta).
-async function clientMetrics(sb: SupabaseClient, accountIds: string[], since: string): Promise<{ spend: number; results: Record<string, number> }> {
+// Métricas dos últimos N dias da conta (tabela local, alimentada pela coleta).
+async function accountMetrics(sb: SupabaseClient, accountId: string, since: string): Promise<{ spend: number; results: Record<string, number> }> {
   const { data } = await sb
     .from("daily_account_metrics")
-    .select("account_id, metric_date, spend, results")
-    .in("account_id", accountIds)
+    .select("spend, results")
+    .eq("account_id", accountId)
     .gte("metric_date", since);
   const totals = { spend: 0, results: {} as Record<string, number> };
   for (const row of data || []) {
@@ -145,7 +117,7 @@ async function clientMetrics(sb: SupabaseClient, accountIds: string[], since: st
   return totals;
 }
 
-function evaluateCpl(rule: ClientAlertRule, metrics: { spend: number; results: Record<string, number> }): ClientAlertEvaluation["alert"] {
+function evaluateCpl(rule: AccountAlertRule, metrics: { spend: number; results: Record<string, number> }): AccountAlertEvaluation["alert"] {
   const maxCpl = Number(rule.config.max_cpl);
   if (!Number.isFinite(maxCpl) || maxCpl <= 0) return { level: "warning", title: "Regra de CPL sem teto configurado", detail: "Defina o custo máximo por lead para esta regra." };
   const periodDays = Number(rule.config.period_days) || 7;
@@ -170,7 +142,7 @@ function evaluateCpl(rule: ClientAlertRule, metrics: { spend: number; results: R
 // segmentado fora dela vira alerta (o país — Brasil — é ignorado de propósito).
 // O casamento ignora acentos/caixa e aceita nome que contenha o aprovado ou
 // vice-versa ("São Paulo" casa com "São Paulo" e com "São Paulo - Capital").
-function evaluateRegions(rule: ClientAlertRule, facts: { regions: Set<string>; cities: Set<string> }): ClientAlertEvaluation["alert"] {
+function evaluateRegions(rule: AccountAlertRule, facts: { regions: Set<string>; cities: Set<string> }): AccountAlertEvaluation["alert"] {
   const required: string[] = (rule.config.regions || []).map((region: unknown) => String(region || "").trim()).filter(Boolean);
   if (!required.length) return { level: "warning", title: "Regra de região sem lista", detail: "Informe ao menos uma região que precisa receber anúncio." };
 
@@ -181,14 +153,11 @@ function evaluateRegions(rule: ClientAlertRule, facts: { regions: Set<string>; c
 
   const matchesApproved = (name: string) => approved.some((a) => a && (a.includes(name) || name.includes(a)));
 
-  // Regiões obrigatórias que não estão sendo segmentadas.
   const missing = approvedRaw.filter((region) => {
     const name = normalize(region);
     return name && !targeted.some((t) => t && (t.includes(name) || name.includes(t)));
   });
 
-  // Tráfego fora das aprovadas (opcional): estado/cidade segmentado que não
-  // casa com nenhuma aprovada. O país de origem não é flagrado.
   const unexpected = rule.config.warn_outside
     ? targetedRaw.filter((raw) => {
         const name = normalize(raw);
@@ -209,11 +178,11 @@ function evaluateRegions(rule: ClientAlertRule, facts: { regions: Set<string>; c
   };
 }
 
-function evaluateCreativeAge(rule: ClientAlertRule, newestAd: string | null): ClientAlertEvaluation["alert"] {
+function evaluateCreativeAge(rule: AccountAlertRule, newestAd: string | null): AccountAlertEvaluation["alert"] {
   const maxAgeDays = Number(rule.config.max_age_days);
   if (!Number.isFinite(maxAgeDays) || maxAgeDays <= 0) return { level: "warning", title: "Regra de criativos sem limite", detail: "Defina há quantos dias sem criativo novo você quer ser avisado." };
   if (!newestAd) {
-    return { level: "warning", title: "Nenhum anúncio encontrado", detail: "Não há anúncios nas contas do cliente. Verifique se a veiculação está de pé." };
+    return { level: "warning", title: "Nenhum anúncio encontrado", detail: "Não há anúncios nesta conta. Verifique se a veiculação está de pé." };
   }
   const ageDays = (Date.now() - Date.parse(newestAd)) / 86400000;
   if (ageDays > maxAgeDays) {
@@ -227,69 +196,91 @@ function evaluateCreativeAge(rule: ClientAlertRule, newestAd: string | null): Cl
   return null;
 }
 
-// Avalia as regras habilitadas de um cliente e persiste o resultado em
-// client_alerts (uma linha por regra). Devolve o resumo por regra.
-export async function evaluateClientRules(sb: SupabaseClient, clientId: string): Promise<ClientAlertEvaluation[]> {
+// Revisão mensal da estratégia: o resumo estratégico da conta precisa ser
+// atualizado dentro do prazo (default 30 dias), senão o alerta lembra.
+function evaluateStrategyReview(rule: AccountAlertRule, updatedAt: string | null): AccountAlertEvaluation["alert"] {
+  const maxAgeDays = Number(rule.config.max_age_days) || 30;
+  if (!updatedAt) {
+    return { level: "warning", title: "Resumo estratégico não preenchido", detail: "Preencha o resumo estratégico da conta (público alvo, regiões, cidades, melhores ofertas) na tela de campanhas para ter o norte do mês." };
+  }
+  const ageDays = (Date.now() - Date.parse(updatedAt)) / 86400000;
+  if (ageDays > maxAgeDays) {
+    const rounded = Math.round(ageDays);
+    return {
+      level: "warning",
+      title: `Resumo estratégico desatualizado há ${rounded} dias`,
+      detail: `A última atualização foi em ${new Date(updatedAt).toLocaleDateString("pt-BR")}. Confira se o plano do mês segue alinhado (público, regiões, ofertas) e atualize o resumo.`,
+    };
+  }
+  return null;
+}
+
+// Avalia as regras habilitadas de UMA conta e persiste o resultado em
+// account_alerts (uma linha por regra). Devolve o resumo por regra.
+export async function evaluateAccountRules(sb: SupabaseClient, accountId: string): Promise<AccountAlertEvaluation[]> {
   const { data: rules } = await sb
-    .from("client_alert_rules")
+    .from("account_alert_rules")
     .select("*")
-    .eq("client_id", clientId)
+    .eq("account_id", accountId)
     .eq("enabled", true);
   if (!rules?.length) return [];
 
-  const evaluations: ClientAlertEvaluation[] = [];
-  const metaAccounts = await clientMetaAccounts(sb, clientId);
-  const accountIds = metaAccounts.map((account) => account.account_id);
-  const today = new Date().toISOString();
+  const { data: account } = await sb
+    .from("ad_accounts")
+    .select("platform, token_ref")
+    .eq("account_id", accountId.replace(/^act_/, ""))
+    .maybeSingle();
+  const isMeta = account?.platform === "meta";
+  const token = tokenByIndex(typeof account?.token_ref === "number" ? account.token_ref : 0);
+  const actId = accountId.replace(/^act_/, "");
+  const fullActId = actId.startsWith("act_") ? actId : `act_${actId}`;
 
-  // Fatos da Meta (só quando há regra que precisa deles).
   const needsDelivery = rules.some((rule: any) => rule.kind === "region" || rule.kind === "creative_age");
-  const deliveryFacts = new Map<string, Awaited<ReturnType<typeof fetchDeliveryFacts>>>();
-  if (needsDelivery) {
-    await Promise.all(
-      metaAccounts.map(async (account) => {
-        const actId = account.account_id.replace(/^act_/, "");
-        const facts = await fetchDeliveryFacts(actId.startsWith("act_") ? actId : `act_${actId}`, tokenByIndex(account.token_ref)).catch(() => null);
-        deliveryFacts.set(account.account_id, facts || { regions: new Set(), cities: new Set(), newestAd: null });
-      })
-    );
-  }
+  const deliveryFacts = needsDelivery && isMeta
+    ? await fetchDeliveryFacts(fullActId, token).catch(() => ({ regions: new Set<string>(), cities: new Set<string>(), newestAd: null }))
+    : { regions: new Set<string>(), cities: new Set<string>(), newestAd: null };
 
-  // Fatos de métricas (regra de CPL).
   const cplRules = rules.filter((rule: any) => rule.kind === "cpl");
   const metricsByPeriod = new Map<number, { spend: number; results: Record<string, number> }>();
   for (const rule of cplRules) {
     const period = Number(rule.config.period_days) || 7;
     if (!metricsByPeriod.has(period)) {
-      metricsByPeriod.set(period, await clientMetrics(sb, accountIds, daysAgoIso(period)));
+      metricsByPeriod.set(period, await accountMetrics(sb, accountId.replace(/^act_/, ""), daysAgoIso(period)));
     }
   }
 
   const now = new Date().toISOString();
+  const evaluations: AccountAlertEvaluation[] = [];
 
-  for (const rule of (rules as ClientAlertRule[])) {
-    let alert: ClientAlertEvaluation["alert"] = null;
+  // Data da última atualização do resumo estratégico (uma consulta só).
+  let strategyUpdatedAt: string | null = null;
+  if (rules.some((rule: any) => rule.kind === "strategy_review")) {
+    const { data: strategy } = await sb
+      .from("account_strategies")
+      .select("updated_at")
+      .eq("account_id", accountId.replace(/^act_/, ""))
+      .maybeSingle();
+    strategyUpdatedAt = strategy?.updated_at || null;
+  }
+
+  for (const rule of (rules as AccountAlertRule[])) {
+    let alert: AccountAlertEvaluation["alert"] = null;
     if (rule.kind === "cpl") {
       alert = evaluateCpl(rule, metricsByPeriod.get(Number(rule.config.period_days) || 7) || { spend: 0, results: {} });
     } else if (rule.kind === "region") {
-      const regions = new Set<string>();
-      const cities = new Set<string>();
-      for (const facts of deliveryFacts.values()) {
-        for (const region of facts.regions) regions.add(region);
-        for (const city of facts.cities) cities.add(city);
-      }
-      alert = evaluateRegions(rule, { regions, cities });
+      alert = isMeta ? evaluateRegions(rule, deliveryFacts) : { level: "warning", title: "Regra de região só funciona na Meta", detail: "O Google Ads não expõe a segmentação por esta via. Use o painel do Google para conferir as localizações." };
     } else if (rule.kind === "creative_age") {
-      const newest = [...deliveryFacts.values()].map((facts) => facts.newestAd).filter(Boolean).sort().pop() || null;
-      alert = evaluateCreativeAge(rule, newest);
+      alert = isMeta ? evaluateCreativeAge(rule, deliveryFacts.newestAd) : { level: "warning", title: "Regra de criativo só funciona na Meta", detail: "O Google Ads não expõe a data de criação dos anúncios por esta via." };
+    } else if (rule.kind === "strategy_review") {
+      alert = evaluateStrategyReview(rule, strategyUpdatedAt);
     }
     evaluations.push({ rule, ok: !alert, alert });
 
     if (alert) {
-      await sb.from("client_alerts").upsert(
+      await sb.from("account_alerts").upsert(
         {
           rule_id: rule.id,
-          client_id: clientId,
+          account_id: accountId.replace(/^act_/, ""),
           kind: rule.kind,
           level: alert.level,
           title: alert.title,
@@ -302,7 +293,7 @@ export async function evaluateClientRules(sb: SupabaseClient, clientId: string):
       );
     } else {
       await sb
-        .from("client_alerts")
+        .from("account_alerts")
         .update({ resolved: true, resolved_at: now })
         .eq("rule_id", rule.id)
         .eq("resolved", false);
@@ -312,17 +303,17 @@ export async function evaluateClientRules(sb: SupabaseClient, clientId: string):
   return evaluations;
 }
 
-// Avalia todas as regras de todos os clientes (chamado pela coleta).
-export async function evaluateAllClientRules(sb: SupabaseClient): Promise<number> {
-  const { data: rules } = await sb.from("client_alert_rules").select("client_id").eq("enabled", true);
+// Avalia as regras de todas as contas com regras ativas (chamado pela coleta).
+export async function evaluateAllAccountRules(sb: SupabaseClient): Promise<number> {
+  const { data: rules } = await sb.from("account_alert_rules").select("account_id").eq("enabled", true);
   if (!rules?.length) return 0;
-  const clientIds = [...new Set(rules.map((rule: any) => rule.client_id))];
+  const accountIds = [...new Set(rules.map((rule: any) => rule.account_id))];
   let evaluated = 0;
-  for (const clientId of clientIds) {
+  for (const accountId of accountIds) {
     try {
-      evaluated += (await evaluateClientRules(sb, clientId)).length;
+      evaluated += (await evaluateAccountRules(sb, accountId)).length;
     } catch {
-      // Regra de um cliente não pode derrubar a avaliação dos demais.
+      // Regra de uma conta não pode derrubar a avaliação das demais.
     }
   }
   return evaluated;

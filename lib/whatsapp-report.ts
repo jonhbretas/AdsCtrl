@@ -1,8 +1,8 @@
 // lib/whatsapp-report.ts
 // Resumo de mídia pronto para copiar e colar no WhatsApp: formatação nativa
 // do app (*negrito*), emojis e frases curtas. A pedido dos clientes no
-// fechamento mensal: quanto foi gasto, onde (objetivo/região/plataforma) e o
-// resultado — sem jargão de plataforma.
+// fechamento mensal: quanto foi gasto, por campanha, região, criativos,
+// faturado e ROI — sem jargão de plataforma.
 
 export interface ReportRow {
   key: string;
@@ -11,11 +11,11 @@ export interface ReportRow {
 
 const OBJECTIVE_LABELS: Record<string, string> = {
   OUTCOME_AWARENESS: "Reconhecimento",
-  OUTCOME_TRAFFIC: "Tráfego (visitas ao link)",
-  OUTCOME_ENGAGEMENT: "Engajamento (seguidores/grupo)",
-  OUTCOME_LEADS: "Leads (cadastros)",
-  OUTCOME_SALES: "Vendas (e-commerce)",
-  OUTCOME_APP_PROMOTION: "Promoção de app",
+  OUTCOME_TRAFFIC: "Tráfego",
+  OUTCOME_ENGAGEMENT: "Engajamento",
+  OUTCOME_LEADS: "Leads",
+  OUTCOME_SALES: "Vendas",
+  OUTCOME_APP_PROMOTION: "App",
   OUTCOME_VIDEO_VIEWS: "Views de vídeo",
   OUTCOME_CONVERSIONS: "Conversões",
   OUTCOME_MESSENGER: "Mensagens",
@@ -30,12 +30,16 @@ const PLATFORM_LABELS: Record<string, string> = {
 };
 
 export function objectiveLabel(objective?: string): string {
-  if (!objective) return "Outros";
+  if (!objective) return "—";
   return OBJECTIVE_LABELS[objective] || objective.toLowerCase().replace(/_/g, " ");
 }
 
 function money(value: number, currency: string): string {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: currency || "BRL", maximumFractionDigits: 0 }).format(value || 0);
+}
+
+function num(value: number): string {
+  return new Intl.NumberFormat("pt-BR").format(value || 0);
 }
 
 function pct(part: number, total: number): string {
@@ -57,13 +61,14 @@ export function buildWhatsAppReport(input: {
   periodLabel: string;
   campaigns: { name: string; objective?: string; spend: number }[];
   regions: ReportRow[];
-  platforms: ReportRow[];
+  creatives: { total: number; active: number };
   totalSpend: number;
   results: number | null;
   cpr: number | null;
-  roas: number | null;
+  /** Valor faturado no período (vendas informadas), quando houver. */
+  revenue: number | null;
 }): string {
-  const { accountName, currency, periodLabel, campaigns, regions, platforms, totalSpend, results, cpr, roas } = input;
+  const { accountName, currency, periodLabel, campaigns, regions, creatives, totalSpend, results, cpr, revenue } = input;
   const lines: string[] = [];
 
   lines.push(`📊 *Resumo de Mídia — ${accountName}*`);
@@ -71,19 +76,14 @@ export function buildWhatsAppReport(input: {
   lines.push("");
   lines.push(`💰 *Investimento total:* ${money(totalSpend, currency)}`);
 
-  // Por objetivo (o "de que forma": link, seguidores, grupo, vendas...).
-  const byObjective = new Map<string, number>();
-  for (const campaign of campaigns) {
-    const label = objectiveLabel(campaign.objective);
-    byObjective.set(label, (byObjective.get(label) || 0) + campaign.spend);
-  }
-  const objectives = [...byObjective.entries()].map(([key, spend]) => ({ key, spend })).sort((a, b) => b.spend - a.spend);
-  const visibleObjectives = topRows(objectives, 4);
-  if (visibleObjectives.length > 0) {
+  // Por campanha (o nome já diz o tipo; o rótulo do objetivo reforça).
+  const visibleCampaigns = topRows(campaigns.map((campaign) => ({ key: campaign.name, spend: campaign.spend })), 5);
+  if (visibleCampaigns.length > 0) {
     lines.push("");
-    lines.push("📌 *Onde foi investido:*");
-    for (const item of visibleObjectives) {
-      lines.push(`• 🎯 ${item.key} — ${money(item.spend, currency)} (${pct(item.spend, totalSpend)})`);
+    lines.push("📌 *Campanhas (top 5):*");
+    for (const item of visibleCampaigns) {
+      const campaign = campaigns.find((entry) => entry.name === item.key);
+      lines.push(`• 🎯 ${item.key}${campaign?.objective ? ` (${objectiveLabel(campaign.objective)})` : ""} — ${money(item.spend, currency)} (${pct(item.spend, totalSpend)})`);
     }
   }
 
@@ -91,34 +91,35 @@ export function buildWhatsAppReport(input: {
   const visibleRegions = topRows(regions, 4);
   if (visibleRegions.length > 0) {
     lines.push("");
-    lines.push("📍 *Por região (top 4):*");
+    lines.push("📍 *Regiões (top 4):*");
     for (const item of visibleRegions) {
       lines.push(`• ${item.key} — ${money(item.spend, currency)} (${pct(item.spend, totalSpend)})`);
     }
   }
 
-  // Por plataforma (Facebook × Instagram × rede de audiência).
-  const visiblePlatforms = topRows(platforms, 3);
-  if (visiblePlatforms.length > 0) {
+  // Criativos em veiculação.
+  lines.push("");
+  lines.push(`🎬 *Criativos:* ${num(creatives.active)} ativo(s) · ${num(creatives.total)} no total`);
+
+  // Faturado e ROI (vendas informadas ÷ investimento).
+  if (revenue != null && revenue > 0) {
     lines.push("");
-    lines.push("📱 *Plataformas:*");
-    for (const item of visiblePlatforms) {
-      lines.push(`• ${PLATFORM_LABELS[item.key] || item.key} — ${pct(item.spend, totalSpend)}`);
-    }
+    lines.push(`💰 *Valor faturado:* ${money(revenue, currency)}`);
+    lines.push(`📈 *ROI:* ${totalSpend > 0 ? (revenue / totalSpend).toFixed(2).replace(".", ",") : "—"}x (faturamento ÷ investimento)`);
   }
 
   if (results != null) {
     lines.push("");
-    lines.push(`🎯 *Resultados:* ${new Intl.NumberFormat("pt-BR").format(results)}${cpr ? ` · custo por resultado ${money(cpr, currency)}` : ""}${roas ? ` · ROAS ${roas.toFixed(1)}x` : ""}`);
+    lines.push(`🎯 *Resultados:* ${num(results)}${cpr ? ` · custo por resultado ${money(cpr, currency)}` : ""}`);
   }
 
   // Leitura rápida em uma linha, sem jargão.
-  const topObjective = visibleObjectives[0];
+  const topCampaign = visibleCampaigns[0];
   const topRegion = visibleRegions[0];
-  if (topObjective) {
+  if (topCampaign) {
     const parte = topRegion
-      ? `A maior parte da verba (${pct(topObjective.spend, totalSpend)}) foi para *${topObjective.key.toLowerCase()}*, concentrada em *${topRegion.key}*.`
-      : `A maior parte da verba (${pct(topObjective.spend, totalSpend)}) foi para *${topObjective.key.toLowerCase()}*.`;
+      ? `A maior parte da verba (${pct(topCampaign.spend, totalSpend)}) foi para *${topCampaign.key.toLowerCase()}*, concentrada em *${topRegion.key}*.`
+      : `A maior parte da verba (${pct(topCampaign.spend, totalSpend)}) foi para *${topCampaign.key.toLowerCase()}*.`;
     lines.push("");
     lines.push(`✍️ *Leitura rápida:* ${parte}`);
   }
