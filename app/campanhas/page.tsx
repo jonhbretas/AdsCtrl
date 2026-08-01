@@ -196,9 +196,15 @@ export default function CampaignsPage() {
   }
 
   function selectAccount(next: string) {
+    // Atualiza o estado direto (a página não remonta em troca de query da
+    // mesma rota — router.push deixava o seletor sem efeito) e espelha a
+    // URL para virar link compartilhável.
     window.localStorage.setItem("adsctrl:selected-account", next);
     window.dispatchEvent(new CustomEvent("adsctrl:account-selected", { detail: next }));
-    router.push(`/campanhas?account=${encodeURIComponent(next)}`);
+    setAccountId(next);
+    const url = new URL(window.location.href);
+    url.searchParams.set("account", next);
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
   }
 
   function toggleSet(set: Set<string>, setter: (next: Set<string>) => void, id: string) {
