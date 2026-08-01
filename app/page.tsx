@@ -31,6 +31,7 @@ import {
   SortState,
   usePersistentSort,
 } from "@/components/SortableHeader";
+import QuickAccess from "@/components/QuickAccess";
 import { money, num, delta, brDate, accountStatusInfo, RESULT_FAMILIES, RESULT_FAMILY_BY_SLUG } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -960,6 +961,13 @@ export default function Dashboard() {
                         {a.hidden ? "—" : <ArrowRight className="h-3.5 w-3.5 inline" />}
                       </div>
                     </div>
+
+                    {/* Acessos rápidos da conta (não navegam para campanhas) */}
+                    {!a.hidden && (
+                      <div className="border-t border-border/10 px-4" onClick={(e) => e.stopPropagation()}>
+                        <QuickAccess accountId={a.account_id} accountName={a.name} platform={a.platform} balance={a.balance} currency={a.currency} compact />
+                      </div>
+                    )}
                   </div>
                 );
               })}

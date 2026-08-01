@@ -7,7 +7,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   LayoutDashboard, Target, CheckSquare2, TrendingUp, Palette, Search, Bell, Settings, LogOut,
   Menu, X, ChevronRight, ChevronDown, BarChart3, DollarSign, Users, Mail, HeartPulse, CalendarDays,
-  BrainCircuit,
+  BrainCircuit, Megaphone,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { appBrandName } from "@/lib/brand";
@@ -33,6 +33,7 @@ const NAV_GROUPS: NavGroup[] = [
   { key: "diagnosis", label: "Análise", hint: "resultado e oportunidades", icon: BarChart3, items: [
     { href: "/portfolio", label: "Portfólio", icon: Users },
     { href: "/funil", label: "Funil 360", icon: BarChart3 },
+    { href: "/campanhas", label: "Campanhas", icon: Megaphone },
     { href: "/creatives", label: "Criativos", icon: Palette },
     { href: "/meta-assets", label: "Raio-X", icon: Search },
   ] },

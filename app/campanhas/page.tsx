@@ -21,6 +21,7 @@ import {
 } from "@/lib/format";
 import { compareSortValues, SortButton, SortState, usePersistentSort } from "@/components/SortableHeader";
 import DuplicateCampaign from "@/components/DuplicateCampaign";
+import AccountChanges from "@/components/AccountChanges";
 
 interface Row {
   id: string; name: string; spend: number; impressions: number; clicks: number;
@@ -451,6 +452,17 @@ export default function CampaignsPage() {
           </div>
         </div>
       </Card>
+
+      {/* Últimas edições + impacto das decisões (Meta mostra o impacto) */}
+      {accountId && (
+        <section>
+          <div className="mb-1">
+            <h2 className="text-sm font-semibold">Últimas edições</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">O que foi alterado na conta no período — pausas, orçamentos, lances e criativos{isMeta ? " · o botão abaixo mostra o antes/depois de cada decisão" : ""}.</p>
+          </div>
+          <AccountChanges accountId={accountId} platform={accountId.startsWith("google:") ? "google" : "meta"} since={range.since} until={range.until} />
+        </section>
+      )}
 
       {/* Modais */}
       {budget && <BudgetModal accountId={accountId} level={budget.level} id={budget.id} name={budget.name} currency={account?.currency} onClose={() => setBudget(null)} onDone={(msg) => { setBudget(null); flash(msg); reload().catch(() => {}); }} />}
