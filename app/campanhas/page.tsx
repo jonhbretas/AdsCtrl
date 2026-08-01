@@ -362,11 +362,11 @@ export default function CampaignsPage() {
         <span className="text-xs text-muted-foreground">Resultado:</span>
         <select value={result ?? ""} onChange={(e) => setResult(e.target.value)} className="h-8 rounded-lg border border-border/50 bg-muted/30 px-2 text-xs outline-none focus:ring-2 focus:ring-ring/30">
           <optgroup label="Resultado do negócio">
-            {RESULT_FAMILIES.map((f) => <option key={f.slug} value={`${FAMILY_PREFIX}${f.slug}`}>{f.label}</option>)}
+            {RESULT_FAMILIES.map((f) => <option key={f.slug} value={`${FAMILY_PREFIX}${f.slug}`}>{f.label} ({num(resultValue(detail?.kpis?.results, `${FAMILY_PREFIX}${f.slug}`))})</option>)}
           </optgroup>
           {orderedResults(detail?.availableResults || []).length > 0 && (
             <optgroup label="Detalhado (como a Meta reporta)">
-              {orderedResults(detail?.availableResults || []).map((type) => <option key={type} value={`${ACTION_PREFIX}${type}`}>{resultLabel(type)}</option>)}
+              {orderedResults(detail?.availableResults || []).map((type) => <option key={type} value={`${ACTION_PREFIX}${type}`}>{resultLabel(type)} ({num((detail?.kpis?.results || {})[type] || 0)})</option>)}
             </optgroup>
           )}
         </select>
