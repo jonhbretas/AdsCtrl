@@ -16,7 +16,7 @@ import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import {
-  money, num, pct, pickVal, resultLabel, pickPrimaryResult, orderedResults, brDate,
+  money, num, pct, pickVal, resultLabel, pickPrimaryResult, orderedResults, brDate, objectiveLabel,
   RESULT_FAMILIES, RESULT_FAMILY_BY_SLUG, PURCHASE_KEYS,
 } from "@/lib/format";
 import { compareSortValues, SortButton, SortState, usePersistentSort } from "@/components/SortableHeader";
@@ -618,7 +618,7 @@ function CampaignRow({
         )}
       </div>
 
-      <div className="text-xs text-muted-foreground truncate" title={row.objective}>{level === "campaign" ? (row.objective || "—") : ""}</div>
+      <div className="text-xs text-muted-foreground truncate" title={row.objective}>{level === "campaign" ? objectiveLabel(row.objective) : ""}</div>
       <div className="text-right text-sm font-semibold">{money(row.spend, currency)}</div>
       <div className="text-right text-sm text-foreground/80">{num(row.impressions)}</div>
       <div className="text-right text-sm text-foreground/80">{num(row.clicks)}</div>

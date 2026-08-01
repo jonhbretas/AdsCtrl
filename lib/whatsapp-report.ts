@@ -4,23 +4,12 @@
 // fechamento mensal: quanto foi gasto, por campanha, região, criativos,
 // faturado e ROI — sem jargão de plataforma.
 
+import { objectiveLabel } from "./format";
+
 export interface ReportRow {
   key: string;
   spend: number;
 }
-
-const OBJECTIVE_LABELS: Record<string, string> = {
-  OUTCOME_AWARENESS: "Reconhecimento",
-  OUTCOME_TRAFFIC: "Tráfego",
-  OUTCOME_ENGAGEMENT: "Engajamento",
-  OUTCOME_LEADS: "Leads",
-  OUTCOME_SALES: "Vendas",
-  OUTCOME_APP_PROMOTION: "App",
-  OUTCOME_VIDEO_VIEWS: "Views de vídeo",
-  OUTCOME_CONVERSIONS: "Conversões",
-  OUTCOME_MESSENGER: "Mensagens",
-  OUTCOME_OTHER: "Outros",
-};
 
 const PLATFORM_LABELS: Record<string, string> = {
   facebook: "Facebook",
@@ -28,11 +17,6 @@ const PLATFORM_LABELS: Record<string, string> = {
   messenger: "Messenger",
   audience_network: "Rede de audiência",
 };
-
-export function objectiveLabel(objective?: string): string {
-  if (!objective) return "—";
-  return OBJECTIVE_LABELS[objective] || objective.toLowerCase().replace(/_/g, " ");
-}
 
 function money(value: number, currency: string): string {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: currency || "BRL", maximumFractionDigits: 0 }).format(value || 0);

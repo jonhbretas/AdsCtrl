@@ -5,6 +5,26 @@ function safeCurrency(currency?: string) {
   return /^[A-Z]{3}$/.test(normalized) ? normalized : "BRL";
 }
 
+// Objetivos de campanha da Meta em português (para a coluna "Objetivo" e
+// para os resumos). Valores não mapeados caem para o texto cru, legível.
+export const OBJECTIVE_LABELS: Record<string, string> = {
+  OUTCOME_AWARENESS: "Reconhecimento",
+  OUTCOME_TRAFFIC: "Tráfego",
+  OUTCOME_ENGAGEMENT: "Engajamento",
+  OUTCOME_LEADS: "Leads",
+  OUTCOME_SALES: "Vendas",
+  OUTCOME_APP_PROMOTION: "App",
+  OUTCOME_VIDEO_VIEWS: "Views de vídeo",
+  OUTCOME_CONVERSIONS: "Conversões",
+  OUTCOME_MESSENGER: "Mensagens",
+  OUTCOME_OTHER: "Outros",
+};
+
+export function objectiveLabel(objective?: string): string {
+  if (!objective) return "—";
+  return OBJECTIVE_LABELS[objective] || objective.toLowerCase().replace(/_/g, " ");
+}
+
 export const money = (v: number, currency = "BRL", digits = 2) =>
   new Intl.NumberFormat("pt-BR", {
     style: "currency",
