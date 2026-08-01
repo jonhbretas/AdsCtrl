@@ -780,10 +780,47 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function monthRangeIso(monthIso: string): { since: string; until: string } {
+  const [year, month] = monthIso.split("-").map(Number);
+  const since = `${year}-${String(month).padStart(2, "0")}-01`;
+  const until = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
+  return { since, until };
+}
+
+function currentMonthIso(): string {
+  const d = new Date();
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function prevMonthIso(): string {
+  const d = new Date();
+  d.setUTCMonth(d.getUTCMonth() - 1);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthLabel(iso: string): string {
+  const [year, month] = iso.split("-").map(Number);
+  return new Date(year, month - 1, 1).toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+}
+
 // Resumo pronto para colar no WhatsApp: o que foi feito na conta, de forma
 // curta — quanto, onde (objetivo/região/plataforma) e o resultado.
+type ReportPeriod = "month" | "prevMonth" | "monthPick" | "7d" | "14d" | "21d" | "custom";
+const REPORT_PERIODS: { key: ReportPeriod; label: string }[] = [
+  { key: "month", label: "Mês atual" },
+  { key: "prevMonth", label: "Mês anterior" },
+  { key: "monthPick", label: "Mês específico" },
+  { key: "7d", label: "7 dias" },
+  { key: "14d", label: "14 dias" },
+  { key: "21d", label: "21 dias" },
+  { key: "custom", label: "Personalizado" },
+];
+
 function WhatsAppReportModal({ accountId, accountName, currency, onClose }: { accountId: string; accountName: string; currency?: string; onClose: () => void }) {
-  const [period, setPeriod] = useState<"month" | "14d">("month");
+  const [period, setPeriod] = useState<ReportPeriod>("month");
+  const [monthPick, setMonthPick] = useState(currentMonthIso());
+  const [customSince, setCustomSince] = useState(isoDaysAgo(21));
+  const [customUntil, setCustomUntil] = useState(isoDaysAgo(1));
   const [data, setData] = useState<Detail | null>(null);
   const [revenue, setRevenue] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -791,9 +828,29 @@ function WhatsAppReportModal({ accountId, accountName, currency, onClose }: { ac
   const [copied, setCopied] = useState(false);
 
   const periodRange = useMemo(() => {
-    if (period === "14d") return { since: isoDaysAgo(14), until: isoDaysAgo(1) };
-    return { since: firstOfMonth(), until: todayIso() };
-  }, [period]);
+    switch (period) {
+      case "month": return { since: firstOfMonth(), until: todayIso() };
+      case "prevMonth": return monthRangeIso(prevMonthIso());
+      case "monthPick": return monthRangeIso(monthPick);
+      case "7d": return { since: isoDaysAgo(7), until: isoDaysAgo(1) };
+      case "14d": return { since: isoDaysAgo(14), until: isoDaysAgo(1) };
+      case "21d": return { since: isoDaysAgo(21), until: isoDaysAgo(1) };
+      case "custom": return { since: customSince, until: customUntil };
+    }
+  }, [period, monthPick, customSince, customUntil]);
+
+  const periodLabel = useMemo(() => {
+    const fmt = (iso: string) => new Date(iso + "T00:00:00Z").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
+    switch (period) {
+      case "month": return monthPeriodLabel();
+      case "prevMonth": return `Mês anterior (${monthLabel(prevMonthIso())})`;
+      case "monthPick": return `Mês de ${monthLabel(monthPick)}`;
+      case "7d": return "Últimos 7 dias";
+      case "14d": return "Últimos 14 dias";
+      case "21d": return "Últimos 21 dias";
+      case "custom": return `Período ${fmt(periodRange.since)} a ${fmt(periodRange.until)}`;
+    }
+  }, [period, monthPick, periodRange]);
 
   useEffect(() => {
     let alive = true;
@@ -810,19 +867,20 @@ function WhatsAppReportModal({ accountId, accountName, currency, onClose }: { ac
       .catch((e) => alive && setError(e?.message ?? "Erro ao carregar."))
       .finally(() => alive && setLoading(false));
 
-    // Valor faturado: vendas informadas por cliente (a conta pertence a um
-    // cliente via client_ad_accounts). Falha aqui não derruba o resumo.
+    // Valor faturado: vendas informadas por cliente, no MÊS do período
+    // escolhido (a conta pertence a um cliente via client_ad_accounts).
     (async () => {
       try {
         const [salesRes, clientsRes] = await Promise.all([
-          fetch("/api/sales?months=1", { cache: "no-store" }),
+          fetch("/api/sales?months=6", { cache: "no-store" }),
           fetch("/api/clients", { cache: "no-store" }),
         ]);
         const [salesData, clientsData] = await Promise.all([salesRes.json(), clientsRes.json()]);
         if (!alive) return;
         const client = (clientsData.clients || []).find((item: any) => (item.accounts || []).some((acc: any) => acc.account_id === accountId));
         const row = (salesData.rows || []).find((item: any) => String(item.name || "").toLowerCase().trim() === String(client?.name || "").toLowerCase().trim());
-        const month = row?.months?.[0];
+        const targetMonth = periodRange.until.slice(0, 7);
+        const month = (row?.months || []).find((item: any) => String(item.month || "").startsWith(targetMonth));
         if (month && month.revenue != null) setRevenue(Number(month.revenue) || 0);
       } catch {
         // sem faturado no resumo é aceitável
@@ -844,7 +902,7 @@ function WhatsAppReportModal({ accountId, accountName, currency, onClose }: { ac
     return buildWhatsAppReport({
       accountName,
       currency: currency || "BRL",
-      periodLabel: period === "month" ? monthPeriodLabel() : "Últimos 14 dias",
+      periodLabel,
       campaigns: data.campaigns.map((row) => ({ name: row.name, objective: row.objective, spend: row.spend })),
       regions: data.breakdowns?.region || [],
       creatives: { total: data.ads.length, active: activeCreatives },
@@ -853,7 +911,7 @@ function WhatsAppReportModal({ accountId, accountName, currency, onClose }: { ac
       cpr,
       revenue,
     });
-  }, [data, accountName, currency, period, revenue]);
+  }, [data, accountName, currency, periodLabel, revenue]);
 
   async function copy() {
     if (!report) return;
@@ -876,10 +934,28 @@ function WhatsAppReportModal({ accountId, accountName, currency, onClose }: { ac
         <button type="button" onClick={onClose} className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Fechar">✕</button>
       </div>
 
-      <div className="mt-3 flex items-center gap-1 p-1 rounded-lg bg-muted/50 border border-border/50">
-        <button type="button" onClick={() => setPeriod("month")} className={cn("flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors", period === "month" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>Mês atual</button>
-        <button type="button" onClick={() => setPeriod("14d")} className={cn("flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors", period === "14d" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>Últimos 14 dias</button>
+      <div className="mt-3 flex flex-wrap items-center gap-1 p-1 rounded-lg bg-muted/50 border border-border/50">
+        {REPORT_PERIODS.map((option) => (
+          <button key={option.key} type="button" onClick={() => setPeriod(option.key)} className={cn("rounded-md px-3 py-1.5 text-xs font-medium transition-colors", period === option.key ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>{option.label}</button>
+        ))}
       </div>
+
+      {period === "monthPick" && (
+        <div className="mt-2 flex items-center gap-2">
+          <label className="text-[10.5px] text-muted-foreground">Mês:</label>
+          <input type="month" value={monthPick} onChange={(e) => { if (e.target.value) setMonthPick(e.target.value); }} max={currentMonthIso()} className="h-8 rounded-lg border border-border/50 bg-muted/30 px-2 text-xs outline-none focus:ring-2 focus:ring-ring/30" />
+          <span className="text-xs text-muted-foreground">{monthLabel(monthPick)}</span>
+        </div>
+      )}
+
+      {period === "custom" && (
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+          <BrDateInput value={customSince} onChange={(value) => setCustomSince(value)} max={customUntil} className="h-8 px-2.5 text-xs rounded-lg border border-border/50 bg-muted/30 focus:outline-none focus:ring-2 focus:ring-ring/30" />
+          <span className="text-muted-foreground">→</span>
+          <BrDateInput value={customUntil} onChange={(value) => setCustomUntil(value)} min={customSince} max={isoDaysAgo(0)} className="h-8 px-2.5 text-xs rounded-lg border border-border/50 bg-muted/30 focus:outline-none focus:ring-2 focus:ring-ring/30" />
+          <span className="text-xs text-muted-foreground">{brDate(periodRange.since)} → {brDate(periodRange.until)}</span>
+        </div>
+      )}
 
       <div className="mt-3">
         {loading && <div className="grid place-items-center rounded-lg border border-border/50 bg-muted/20 py-10 text-xs text-muted-foreground">Gerando resumo…</div>}
