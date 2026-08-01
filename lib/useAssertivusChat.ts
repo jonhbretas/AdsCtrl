@@ -7,7 +7,7 @@ export type Need = "auto" | "fast" | "analysis" | "strategic" | "creative";
 export type Routing = { label: string; automatic: boolean; provider: string; model: string };
 export type Diagnostic = { provider: string; configured: boolean; ok: boolean; reason?: string };
 export type ChatMessage = { role: "user" | "assistant"; content: string; mode?: "ai" | "internal"; routing?: Routing; diagnostics?: Diagnostic[] };
-export type Account = { account_id: string; name: string; platform: "meta" | "google"; hidden?: boolean };
+export type Account = { account_id: string; name: string; platform: "meta" | "google"; hidden?: boolean; group_id?: string | null };
 export type AiStatus = { providers: { id: string; label: string; configured: boolean }[]; active: string | null; activeLabel: string | null };
 
 export const NEEDS: { value: Need; label: string }[] = [
@@ -98,5 +98,5 @@ export function useAssertivusChat() {
   function stop() { abortRef.current?.abort(); }
   function clearHistory() { setMessages([GREETING]); }
 
-  return { pathname, messages, input, setInput, busy, accounts, accountId, changeAccount, need, setNeed, alertCount, aiStatus, endRef, ask, stop, clearHistory };
+  return { pathname, messages, setMessages, input, setInput, busy, accounts, accountId, changeAccount, need, setNeed, alertCount, aiStatus, endRef, ask, stop, clearHistory };
 }
