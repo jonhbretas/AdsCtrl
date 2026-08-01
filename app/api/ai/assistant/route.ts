@@ -166,6 +166,7 @@ export async function POST(req: Request) {
       mode: providerResult ? "ai" : "internal",
       warning: providerResult ? null : "Os provedores externos ficaram indisponíveis; usei o diagnóstico interno.",
       routing: { requested: requestedNeed, need: routed.need, label: AI_NEED_LABELS[routed.need], automatic: routed.automatic, provider: providerResult?.provider || "internal", model: providerResult?.model || "diagnóstico interno" },
+      usage: providerResult?.usage || null,
       diagnostics: attempts,
       context: { scope: context.scope, generated_at: context.generated_at, alerts: context.alerts.length },
     });

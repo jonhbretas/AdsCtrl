@@ -1,6 +1,7 @@
 export const AI_NEEDS = ["auto", "fast", "analysis", "strategic", "creative"] as const;
 export type AiNeed = (typeof AI_NEEDS)[number];
 export type RoutedNeed = Exclude<AiNeed, "auto">;
+export const ROUTED_NEEDS: readonly RoutedNeed[] = ["fast", "analysis", "strategic", "creative"];
 
 export const AI_NEED_LABELS: Record<AiNeed, string> = {
   auto: "Automático",
@@ -9,6 +10,16 @@ export const AI_NEED_LABELS: Record<AiNeed, string> = {
   strategic: "Estratégia profunda",
   creative: "Criativos e copy",
 };
+
+// Especialidade de cada rota, para o seletor mostrar o que cada opção faz.
+export const AI_NEED_SPECIALTY: Record<RoutedNeed, string> = {
+  fast: "Respostas curtas e diretas — status, resumos, listas e contagens.",
+  analysis: "Métricas, tendências, funil e diagnóstico de performance.",
+  strategic: "Orçamento, cenários, escala, margem, lucro e visão de negócio.",
+  creative: "Criativos, hook, copy, roteiro e análise de fadiga.",
+};
+
+export const AI_NEED_AUTO_HINT = "Roteia pela sua pergunta: criativos, estratégia, respostas rápidas ou análise de performance.";
 
 // Fallback gratuito (Zen "-free"): só entra quando o Go pago falhar por
 // qualquer motivo (quota do bloco, erro de região, etc).
@@ -34,6 +45,52 @@ const ENV_SUFFIX: Record<RoutedNeed, string> = {
   strategic: "STRATEGIC",
   creative: "CREATIVE",
 };
+
+export type AiUsage = { input: number; output: number; total: number };
+export type ModelPlanStep = {
+  provider: AiProviderId;
+  label: string;
+  model: string;
+  tier: "pago" | "gratuito" | "variavel";
+  maxOutputTokens: number | null;
+};
+
+// Só os modelos com formato Anthropic (/messages) têm teto explícito de saída.
+function maxOutputFor(model: string): number | null {
+  return model.startsWith("qwen") || model.startsWith("minimax") ? 1200 : null;
+}
+
+// Modelo resolvido por provedor para uma necessidade, respeitando os overrides
+// de ambiente (OPENCODE_GO_MODEL_<NEED>, OPENCODE_MODEL_<NEED>, ...). O mesmo
+// cálculo usado em askAiProvider — o status da UI mostra exatamente o que
+// será chamado.
+export function modelPlan(need: RoutedNeed): ModelPlanStep[] {
+  const go = process.env[`OPENCODE_GO_MODEL_${ENV_SUFFIX[need]}`]?.trim() || process.env[`OPENCODE_MODEL_${ENV_SUFFIX[need]}`]?.trim() || GO_MODELS[need];
+  const zen = process.env[`OPENCODE_MODEL_${ENV_SUFFIX[need]}`]?.trim() || ZEN_MODELS[need];
+  const router = process.env[`OPENROUTER_MODEL_${ENV_SUFFIX[need]}`]?.trim() || "openrouter/auto";
+  const openai = process.env.OPENAI_MODEL?.trim() || ZEN_MODELS[need];
+  return [
+    { provider: "opencode-go", label: "OpenCode Go", model: go, tier: "pago", maxOutputTokens: maxOutputFor(go) },
+    { provider: "opencode-zen", label: "OpenCode Zen", model: zen, tier: "gratuito", maxOutputTokens: maxOutputFor(zen) },
+    { provider: "openrouter", label: "OpenRouter", model: router, tier: "variavel", maxOutputTokens: maxOutputFor(router) },
+    { provider: "openai", label: "OpenAI", model: openai, tier: "pago", maxOutputTokens: maxOutputFor(openai) },
+  ];
+}
+
+export function extractUsage(payload: any, shape: "responses" | "messages" | "chat"): AiUsage | null {
+  const usage = payload?.usage;
+  if (!usage || typeof usage !== "object") return null;
+  if (shape === "messages") {
+    const input = Number(usage.input_tokens) || 0;
+    const output = Number(usage.output_tokens) || 0;
+    if (!input && !output) return null;
+    return { input, output, total: input + output };
+  }
+  const input = Number(usage.input_tokens ?? usage.prompt_tokens) || 0;
+  const output = Number(usage.output_tokens ?? usage.completion_tokens) || 0;
+  if (!input && !output) return null;
+  return { input, output, total: Number(usage.total_tokens) || input + output };
+}
 
 export function routeNeed(requested: AiNeed, message: string, pathname: string): { need: RoutedNeed; automatic: boolean } {
   if (requested !== "auto") return { need: requested, automatic: false };
@@ -70,7 +127,7 @@ function openCodeEndpoint(base: string, model: string): { endpoint: string; shap
   return { endpoint: `${base}/chat/completions`, shape: "chat" };
 }
 
-async function askOpenCode(prompt: string, key: string, model: string, base: string): Promise<{ answer: string | null; status: number }> {
+async function askOpenCode(prompt: string, key: string, model: string, base: string): Promise<{ answer: string | null; status: number; usage: AiUsage | null }> {
   const { endpoint, shape } = openCodeEndpoint(base, model);
   const body =
     shape === "responses"
@@ -90,14 +147,15 @@ async function askOpenCode(prompt: string, key: string, model: string, base: str
     signal: AbortSignal.timeout(60_000),
   });
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok) return { answer: null, status: response.status };
-  if (shape === "responses") return { answer: responseText(payload), status: response.status };
-  if (shape === "messages") return { answer: messageText(payload), status: response.status };
-  return { answer: chatText(payload), status: response.status };
+  const usage = extractUsage(payload, shape);
+  if (!response.ok) return { answer: null, status: response.status, usage };
+  if (shape === "responses") return { answer: responseText(payload), status: response.status, usage };
+  if (shape === "messages") return { answer: messageText(payload), status: response.status, usage };
+  return { answer: chatText(payload), status: response.status, usage };
 }
 
 export type AiProviderId = "opencode-go" | "opencode-zen" | "openrouter" | "openai";
-export type AiProviderResult = { answer: string; provider: AiProviderId; model: string };
+export type AiProviderResult = { answer: string; provider: AiProviderId; model: string; usage: AiUsage | null };
 export type AiProviderAttempt = { provider: AiProviderId; configured: boolean; ok: boolean; reason?: string };
 
 function attemptError(error: any): string {
@@ -107,30 +165,31 @@ function attemptError(error: any): string {
 
 export async function askAiProvider(prompt: string, need: RoutedNeed): Promise<{ result: AiProviderResult | null; attempts: AiProviderAttempt[] }> {
   const attempts: AiProviderAttempt[] = [];
+  const plan = modelPlan(need);
 
   const goKey = process.env.OPENCODE_GO_API_KEY?.trim();
   if (goKey) {
-    const model = process.env[`OPENCODE_GO_MODEL_${ENV_SUFFIX[need]}`]?.trim() || process.env[`OPENCODE_MODEL_${ENV_SUFFIX[need]}`]?.trim() || GO_MODELS[need];
+    const model = plan.find((step) => step.provider === "opencode-go")?.model || GO_MODELS[need];
     try {
-      const { answer, status } = await askOpenCode(prompt, goKey, model, "https://opencode.ai/zen/go/v1");
-      if (answer) { attempts.push({ provider: "opencode-go", configured: true, ok: true }); return { result: { answer, provider: "opencode-go", model }, attempts }; }
+      const { answer, status, usage } = await askOpenCode(prompt, goKey, model, "https://opencode.ai/zen/go/v1");
+      if (answer) { attempts.push({ provider: "opencode-go", configured: true, ok: true }); return { result: { answer, provider: "opencode-go", model, usage }, attempts }; }
       attempts.push({ provider: "opencode-go", configured: true, ok: false, reason: status ? `HTTP ${status}` : "resposta vazia" });
     } catch (error) { attempts.push({ provider: "opencode-go", configured: true, ok: false, reason: attemptError(error) }); }
   } else attempts.push({ provider: "opencode-go", configured: false, ok: false });
 
   const zenKey = process.env.OPENCODE_ZEN_API_KEY?.trim();
   if (zenKey) {
-    const model = process.env[`OPENCODE_MODEL_${ENV_SUFFIX[need]}`]?.trim() || ZEN_MODELS[need];
+    const model = plan.find((step) => step.provider === "opencode-zen")?.model || ZEN_MODELS[need];
     try {
-      const { answer, status } = await askOpenCode(prompt, zenKey, model, "https://opencode.ai/zen/v1");
-      if (answer) { attempts.push({ provider: "opencode-zen", configured: true, ok: true }); return { result: { answer, provider: "opencode-zen", model }, attempts }; }
+      const { answer, status, usage } = await askOpenCode(prompt, zenKey, model, "https://opencode.ai/zen/v1");
+      if (answer) { attempts.push({ provider: "opencode-zen", configured: true, ok: true }); return { result: { answer, provider: "opencode-zen", model, usage }, attempts }; }
       attempts.push({ provider: "opencode-zen", configured: true, ok: false, reason: status ? `HTTP ${status}` : "resposta vazia" });
     } catch (error) { attempts.push({ provider: "opencode-zen", configured: true, ok: false, reason: attemptError(error) }); }
   } else attempts.push({ provider: "opencode-zen", configured: false, ok: false });
 
   const routerKey = process.env.OPENROUTER_API_KEY?.trim();
   if (routerKey) {
-    const model = process.env[`OPENROUTER_MODEL_${ENV_SUFFIX[need]}`]?.trim() || "openrouter/auto";
+    const model = plan.find((step) => step.provider === "openrouter")?.model || "openrouter/auto";
     try {
       const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
@@ -145,14 +204,15 @@ export async function askAiProvider(prompt: string, need: RoutedNeed): Promise<{
       });
       const payload = await response.json().catch(() => ({}));
       const answer = response.ok ? chatText(payload) : null;
-      if (answer) { attempts.push({ provider: "openrouter", configured: true, ok: true }); return { result: { answer, provider: "openrouter", model: payload?.model || model }, attempts }; }
+      const usage = extractUsage(payload, "chat");
+      if (answer) { attempts.push({ provider: "openrouter", configured: true, ok: true }); return { result: { answer, provider: "openrouter", model: payload?.model || model, usage }, attempts }; }
       attempts.push({ provider: "openrouter", configured: true, ok: false, reason: response.ok ? "resposta vazia" : `HTTP ${response.status}` });
     } catch (error) { attempts.push({ provider: "openrouter", configured: true, ok: false, reason: attemptError(error) }); }
   } else attempts.push({ provider: "openrouter", configured: false, ok: false });
 
   const openAiKey = process.env.OPENAI_API_KEY?.trim();
   if (openAiKey) {
-    const model = process.env.OPENAI_MODEL?.trim() || ZEN_MODELS[need];
+    const model = plan.find((step) => step.provider === "openai")?.model || ZEN_MODELS[need];
     try {
       const response = await fetch("https://api.openai.com/v1/responses", {
         method: "POST",
@@ -162,7 +222,8 @@ export async function askAiProvider(prompt: string, need: RoutedNeed): Promise<{
       });
       const payload = await response.json().catch(() => ({}));
       const answer = response.ok ? responseText(payload) : null;
-      if (answer) { attempts.push({ provider: "openai", configured: true, ok: true }); return { result: { answer, provider: "openai", model }, attempts }; }
+      const usage = extractUsage(payload, "responses");
+      if (answer) { attempts.push({ provider: "openai", configured: true, ok: true }); return { result: { answer, provider: "openai", model, usage }, attempts }; }
       attempts.push({ provider: "openai", configured: true, ok: false, reason: response.ok ? "resposta vazia" : `HTTP ${response.status}` });
     } catch (error) { attempts.push({ provider: "openai", configured: true, ok: false, reason: attemptError(error) }); }
   } else attempts.push({ provider: "openai", configured: false, ok: false });

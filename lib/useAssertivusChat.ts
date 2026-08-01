@@ -6,9 +6,12 @@ import { usePathname } from "next/navigation";
 export type Need = "auto" | "fast" | "analysis" | "strategic" | "creative";
 export type Routing = { label: string; automatic: boolean; provider: string; model: string };
 export type Diagnostic = { provider: string; configured: boolean; ok: boolean; reason?: string };
-export type ChatMessage = { role: "user" | "assistant"; content: string; mode?: "ai" | "internal"; routing?: Routing; diagnostics?: Diagnostic[] };
+export type ChatMessage = { role: "user" | "assistant"; content: string; mode?: "ai" | "internal"; routing?: Routing; diagnostics?: Diagnostic[]; usage?: { input: number; output: number; total: number } | null };
 export type Account = { account_id: string; name: string; platform: "meta" | "google"; hidden?: boolean; group_id?: string | null };
-export type AiStatus = { providers: { id: string; label: string; configured: boolean }[]; active: string | null; activeLabel: string | null };
+export type AiProviderInfo = { id: string; label: string; configured: boolean };
+export type AiPlanStep = { provider: string; label: string; model: string; tier: "pago" | "gratuito" | "variavel"; maxOutputTokens: number | null };
+export type AiPlanItem = { need: Exclude<Need, "auto">; label: string; specialty: string; steps: AiPlanStep[] };
+export type AiStatus = { providers: AiProviderInfo[]; active: string | null; activeLabel: string | null; plan?: AiPlanItem[]; auto?: string };
 
 export const NEEDS: { value: Need; label: string }[] = [
   { value: "auto", label: "Roteamento automático" },
@@ -88,7 +91,7 @@ export function useAssertivusChat() {
       const response = await fetch("/api/ai/assistant", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: question, pathname, account_id: accountId || null, need, history: messages.slice(-6) }), signal: controller.signal });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Falha ao consultar a Assertivus IA.");
-      setMessages((current) => [...current, { role: "assistant", content: data.answer, mode: data.mode, routing: data.routing, diagnostics: data.diagnostics }]);
+      setMessages((current) => [...current, { role: "assistant", content: data.answer, mode: data.mode, routing: data.routing, diagnostics: data.diagnostics, usage: data.usage }]);
     } catch (error: any) {
       if (error?.name === "AbortError") setMessages((current) => [...current, { role: "assistant", content: "Consulta interrompida." }]);
       else setMessages((current) => [...current, { role: "assistant", content: error?.message || "Não consegui concluir esta análise agora." }]);

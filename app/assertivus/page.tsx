@@ -4,7 +4,8 @@ import { FormEvent, useState } from "react";
 import { Bookmark, Bot, BrainCircuit, Check, ChevronDown, History, Send, Sparkles, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import { NEEDS, useAssertivusChat } from "@/lib/useAssertivusChat";
+import { useAssertivusChat } from "@/lib/useAssertivusChat";
+import { NeedSelector, RoutingInfoStrip } from "@/components/NeedSelector";
 import { SavedConversation, SavedConversationsPanel, useSavedConversations } from "@/components/SavedConversations";
 
 const QUICK_ACTIONS = [
@@ -96,8 +97,9 @@ export default function AssertivusPage() {
         <div className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border/50 bg-card">
           <div className="grid gap-2 border-b border-border/50 p-3 sm:grid-cols-[1fr_1fr]">
             <div className="relative"><select value={accountId} onChange={(event) => changeAccount(event.target.value)} className="h-9 w-full appearance-none rounded-lg border border-border bg-background px-3 pr-8 text-xs outline-none focus:ring-1 focus:ring-ring"><option value="">Toda a operação</option>{accounts.map((account) => <option key={account.account_id} value={account.account_id}>{account.platform === "google" ? "Google" : "Meta"} · {account.name}</option>)}</select><ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" /></div>
-            <div className="relative"><select value={need} onChange={(event) => setNeed(event.target.value as any)} className="h-9 w-full appearance-none rounded-lg border border-border bg-background px-3 pr-8 text-xs outline-none focus:ring-1 focus:ring-ring">{NEEDS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" /></div>
+            <NeedSelector value={need} onChange={setNeed} plan={aiStatus?.plan} autoHint={aiStatus?.auto} />
           </div>
+          <RoutingInfoStrip need={need} plan={aiStatus?.plan} autoHint={aiStatus?.auto} className="border-b border-border/50 bg-muted/10" />
 
           <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
             {messages.length === 1 && <div className="rounded-xl border border-primary/15 bg-primary/[0.035] p-3">
@@ -110,7 +112,7 @@ export default function AssertivusPage() {
               {message.role === "assistant" && <div className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-primary/20 bg-primary/10 text-primary"><Bot className="h-3.5 w-3.5" /></div>}
               <div className={cn("max-w-[75%] whitespace-pre-wrap rounded-2xl px-3.5 py-3 text-[13px] leading-6", message.role === "user" ? "rounded-br-md bg-primary text-primary-foreground" : "rounded-tl-md border border-border/60 bg-muted/20 text-foreground")}>
                 {message.content}
-                {message.role === "assistant" && message.mode && <div className="mt-2 border-t border-border/50 pt-1.5 text-[9px] uppercase tracking-wider text-muted-foreground">{message.mode === "ai" ? `${message.routing?.label || "IA conectada"} · ${message.routing?.provider || "provedor externo"} · ${message.routing?.model || "modelo roteado"}` : "Diagnóstico interno"}</div>}
+                {message.role === "assistant" && message.mode && <div className="mt-2 flex items-center gap-2 border-t border-border/50 pt-1.5 text-[9px] uppercase tracking-wider text-muted-foreground"><span className="truncate">{message.mode === "ai" ? `${message.routing?.label || "IA conectada"} · ${message.routing?.provider || "provedor externo"} · ${message.routing?.model || "modelo roteado"}` : "Diagnóstico interno"}</span>{message.usage?.total ? <span className="shrink-0 normal-case tracking-normal">{message.usage.total.toLocaleString("pt-BR")} tokens</span> : null}</div>}
                 {message.role === "assistant" && message.mode === "internal" && message.diagnostics?.some((item) => item.configured) && <div className="mt-1 text-[9px] normal-case tracking-normal text-destructive/80">{message.diagnostics.filter((item) => item.configured).map((item) => `${item.provider}: ${item.reason || "falhou"}`).join(" · ")}</div>}
               </div>
             </div>)}

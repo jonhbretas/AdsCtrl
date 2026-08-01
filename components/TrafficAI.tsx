@@ -5,7 +5,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Bot, BrainCircuit, ChevronDown, Expand, Send, Sparkles, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { NEEDS, useAssertivusChat } from "@/lib/useAssertivusChat";
+import { useAssertivusChat } from "@/lib/useAssertivusChat";
+import { NeedSelector, RoutingInfoStrip } from "@/components/NeedSelector";
 
 const QUICK_ACTIONS = [
   "Faça o diagnóstico deste contexto",
@@ -47,8 +48,9 @@ export default function TrafficAI() {
             </div>
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
               <div className="relative"><select value={accountId} onChange={(event) => changeAccount(event.target.value)} className="h-9 w-full appearance-none rounded-lg border border-border bg-background px-3 pr-8 text-xs outline-none focus:ring-1 focus:ring-ring"><option value="">Toda a operação</option>{accounts.map((account) => <option key={account.account_id} value={account.account_id}>{account.platform === "google" ? "Google" : "Meta"} · {account.name}</option>)}</select><ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" /></div>
-              <div className="relative"><select value={need} onChange={(event) => setNeed(event.target.value as any)} className="h-9 w-full appearance-none rounded-lg border border-border bg-background px-3 pr-8 text-xs outline-none focus:ring-1 focus:ring-ring">{NEEDS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" /></div>
+              <NeedSelector value={need} onChange={setNeed} plan={aiStatus?.plan} autoHint={aiStatus?.auto} />
             </div>
+            <RoutingInfoStrip need={need} plan={aiStatus?.plan} autoHint={aiStatus?.auto} className="mt-2 rounded-lg bg-muted/10" />
           </header>
 
           <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
@@ -62,7 +64,7 @@ export default function TrafficAI() {
               {message.role === "assistant" && <div className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-primary/20 bg-primary/10 text-primary"><Bot className="h-3.5 w-3.5" /></div>}
               <div className={cn("max-w-[88%] whitespace-pre-wrap rounded-2xl px-3.5 py-3 text-[12px] leading-5", message.role === "user" ? "rounded-br-md bg-primary text-primary-foreground" : "rounded-tl-md border border-border/60 bg-muted/20 text-foreground")}>
                 {message.content}
-                {message.role === "assistant" && message.mode && <div className="mt-2 border-t border-border/50 pt-1.5 text-[9px] uppercase tracking-wider text-muted-foreground">{message.mode === "ai" ? `${message.routing?.label || "IA conectada"} · ${message.routing?.provider || "provedor externo"} · ${message.routing?.model || "modelo roteado"}` : "Diagnóstico interno"}</div>}
+                {message.role === "assistant" && message.mode && <div className="mt-2 flex items-center gap-2 border-t border-border/50 pt-1.5 text-[9px] uppercase tracking-wider text-muted-foreground"><span className="truncate">{message.mode === "ai" ? `${message.routing?.label || "IA conectada"} · ${message.routing?.provider || "provedor externo"} · ${message.routing?.model || "modelo roteado"}` : "Diagnóstico interno"}</span>{message.usage?.total ? <span className="shrink-0 normal-case tracking-normal">{message.usage.total.toLocaleString("pt-BR")} tokens</span> : null}</div>}
                 {message.role === "assistant" && message.mode === "internal" && message.diagnostics?.some((item) => item.configured) && <div className="mt-1 text-[9px] normal-case tracking-normal text-destructive/80">{message.diagnostics.filter((item) => item.configured).map((item) => `${item.provider}: ${item.reason || "falhou"}`).join(" · ")}</div>}
               </div>
             </div>)}
