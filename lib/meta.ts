@@ -6,6 +6,7 @@
 import { RESULT_FAMILIES } from "./format";
 
 const GRAPH = "https://graph.facebook.com/v25.0";
+export { GRAPH };
 
 // Tokens: primário em META_ACCESS_TOKEN; extras em META_ACCESS_TOKENS
 // (separados por vírgula). Ex.: META_ACCESS_TOKENS="EAA...b,EAA...c".

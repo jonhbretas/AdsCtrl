@@ -19,6 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { CampaignTemplateList } from "@/components/CampaignTemplates";
 import { RoiPorCliente } from "@/components/RoiPorCliente";
+import ClientAlertsTab from "@/components/ClientAlertsTab";
 import { BrDateInput } from "@/components/BrDateInput";
 import { brDate } from "@/lib/format";
 import { RefreshCw, AlertTriangle, Plus, X, Mail, Phone, FolderOpen, ExternalLink, CalendarClock, FileText, Wallet, KeyRound, ClipboardList, Palette, Target, Rocket, BarChart3, Link2, Check, Clock } from "lucide-react";
@@ -35,7 +36,7 @@ const PALETTE = ["#3987e5", "#16a34a", "#db2777", "#f59e0b", "#7c3aed", "#0891b2
 const compactInput: React.CSSProperties = { width: "100%", height: 30, fontSize: 12, borderRadius: 8, border: "1px solid var(--color-border)", background: "transparent", padding: "0 8px" };
 const inputClass = "h-9 w-full rounded-lg border border-border bg-transparent px-3 text-sm outline-none focus:ring-1 focus:ring-ring";
 
-type TabKey = "metas" | "perfil" | "onboarding" | "contrato" | "roi" | "documentos" | "aprovacoes" | "organico";
+type TabKey = "metas" | "perfil" | "onboarding" | "contrato" | "roi" | "documentos" | "aprovacoes" | "organico" | "alertas";
 const TABS: { key: TabKey; label: string }[] = [
   { key: "metas", label: "Metas" },
   { key: "perfil", label: "Perfil" },
@@ -45,6 +46,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "documentos", label: "Documentos" },
   { key: "aprovacoes", label: "Aprovações" },
   { key: "organico", label: "Orgânico" },
+  { key: "alertas", label: "Alertas" },
 ];
 
 export default function ClientesPage() {
@@ -319,6 +321,8 @@ export default function ClientesPage() {
               </div>}
 
               {activeTab === "onboarding" && <ClientOnboarding clientId={selectedClient.id} />}
+
+              {activeTab === "alertas" && <ClientAlertsTab clientId={selectedClient.id} clientName={selectedClient.name} currency={selectedClient.currency} />}
 
               {activeTab === "aprovacoes" && <ClientApprovals clientId={selectedClient.id} dashboardLinkHref={`/api/clients/${selectedClient.id}/dashboard-link`} />}
 

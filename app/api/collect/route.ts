@@ -513,6 +513,14 @@ async function runCollect(triggerSource: "manual" | "cron", platform: CollectSco
   await persistAlerts(alerts, processedAccountIds);
   // O que exige ação minha vira tarefa no quadro, com o contexto pronto.
   await openTasksForAlerts(alerts);
+  // Regras de alerta por cliente (CPL, regiões obrigatórias, criativos).
+  // Falha aqui não derruba a coleta: os alertas de conta já foram salvos.
+  try {
+    const { evaluateAllClientRules } = await import("@/lib/client-alerts");
+    await evaluateAllClientRules(sb);
+  } catch {
+    // tabela ausente (migração não rodada) ou erro transitório
+  }
   // …e o que está atrasado ou vence hoje vai atrás de mim por e-mail. Aqui e
   // não num cron próprio: o plano Hobby limita os crons, e este é o instante
   // certo — as tarefas automáticas do dia acabaram de nascer, logo acima.
