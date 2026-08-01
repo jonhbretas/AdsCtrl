@@ -307,21 +307,27 @@ export default function CampaignsPage() {
   return (
     <div className="p-4 md:p-6 md:ml-56 pb-20 md:pb-6 space-y-4 animate-fade-in">
       {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <Link href="/" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground no-underline"><ArrowLeft className="h-3 w-3" /> Visão Geral</Link>
           </div>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight truncate">{account?.name || "Campanhas"}</h1>
+          {/* O nome da conta É o seletor: trocar de conta fica ao lado do
+              título, sem procurar no canto direito. */}
+          <div className="mt-1 flex min-w-0 items-center gap-1.5">
+            <select
+              value={accountId}
+              onChange={(e) => selectAccount(e.target.value)}
+              title="Trocar conta de anúncios"
+              className="block min-w-0 max-w-[min(70vw,520px)] cursor-pointer appearance-none truncate rounded-lg border-none bg-transparent p-0 text-2xl font-bold tracking-tight outline-none [&>option]:text-sm [&>option]:font-normal hover:text-primary/90"
+            >
+              {accounts.map((item) => <option key={item.account_id} value={item.account_id}>{item.platform === "google" ? "Google" : "Meta"} · {item.name}</option>)}
+            </select>
+            <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+          </div>
           <p className="text-sm text-muted-foreground mt-0.5">Estrutura e veiculação · últimos 14 dias · {account ? (account.platform === "google" ? "Google Ads" : "Meta Ads") : "—"}{counts ? ` · ${rowCount}` : ""}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative">
-            <select value={accountId} onChange={(e) => selectAccount(e.target.value)} className="h-9 w-full min-w-[180px] max-w-[320px] appearance-none rounded-lg border border-border bg-background px-3 pr-8 text-xs outline-none focus:ring-1 focus:ring-ring sm:w-auto">
-              {accounts.map((item) => <option key={item.account_id} value={item.account_id}>{item.platform === "google" ? "Google" : "Meta"} · {item.name}</option>)}
-            </select>
-            <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-          </div>
           <Button variant="ghost" size="sm" onClick={async () => { try { await reload(); flash("Dados atualizados."); } catch (e: any) { flash(e.message, true); } }}><RefreshCw className="h-3.5 w-3.5 mr-1" /> Atualizar</Button>
           <Button variant="ghost" size="sm" onClick={() => setReportOpen(true)} disabled={!accountId} title="Resumo curto para colar no WhatsApp (fechamento mensal)"><MessageCircle className="h-3.5 w-3.5 mr-1" /> Resumo</Button>
           <Button variant="ghost" size="sm" onClick={() => setStructureOpen(true)} disabled={!isMeta} title={isMeta ? "Gerar funil de campanhas a partir da estratégia (pausado)" : "Gerar estrutura só na Meta"}><Sparkles className="h-3.5 w-3.5 mr-1" /> Sugerir estrutura</Button>
