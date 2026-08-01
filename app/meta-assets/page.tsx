@@ -102,9 +102,9 @@ export default function MetaAssetsPage() {
 
           {/* Accounts table */}
           <Card><CardContent className="p-0">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-border/50">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Contas de anúncio ({data.accounts.length})</h3>
-              <div className="relative w-48"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" /><input value={accountFilter} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAccountFilter(e.target.value)} placeholder="Filtrar…" className="w-full h-8 pl-8 pr-3 text-xs rounded-lg border border-border/50 bg-muted/30 focus:outline-none" /></div>
+              <div className="relative w-full sm:w-48"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" /><input value={accountFilter} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAccountFilter(e.target.value)} placeholder="Filtrar…" className="w-full h-8 pl-8 pr-3 text-xs rounded-lg border border-border/50 bg-muted/30 focus:outline-none" /></div>
             </div>
             <div className="overflow-x-auto">
               <div className="min-w-[1000px]">

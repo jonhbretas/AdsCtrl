@@ -380,7 +380,7 @@ export function Menu({
         {label} <span className="text-[0.8em]">▾</span>
       </Button>
       {open && (
-        <div className="absolute top-full right-0 mt-1.5 z-40 min-w-[180px] p-1 rounded-xl border border-border/50 bg-popover shadow-lg">
+        <div className="absolute top-full right-0 mt-1.5 z-40 min-w-[180px] max-w-[calc(100vw-16px)] max-h-[70vh] overflow-y-auto p-1 rounded-xl border border-border/50 bg-popover shadow-lg">
           {items.map((item, i) => (
             <button
               key={i}

@@ -281,7 +281,7 @@ function ProjectsSection({ projects, tasks, clients, filter, loading, onFilter, 
 
   return (
     <Card className="overflow-hidden">
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-border/50">
+      <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-border/50">
         <span className="w-2 h-2 rounded-full bg-amber-500" />
         <span className="text-sm font-semibold">Projetos</span>
         <span className="text-xs text-muted-foreground">o compromisso com data que agrupa tarefas</span>

@@ -21,7 +21,7 @@ export default function ProximosPassosPage() {
     finally { setLoading(false); }
   }
   useEffect(() => { load(); }, []);
-  if (loading) return <div className="p-4 md:p-6 md:ml-56 space-y-4"><Skeleton className="h-8 w-64" /><Skeleton className="h-24 rounded-xl" /><Skeleton className="h-24 rounded-xl" /></div>;
+  if (loading) return <div className="p-4 md:p-6 md:ml-56 pb-20 md:pb-6 space-y-4"><Skeleton className="h-8 w-64" /><Skeleton className="h-24 rounded-xl" /><Skeleton className="h-24 rounded-xl" /></div>;
   return <div className="p-4 md:p-6 md:ml-56 pb-20 md:pb-6 space-y-4 animate-fade-in">
     <PageHeader title="Próximos passos" subtitle="Transforme sinais do monitoramento em uma ação clara para cada cliente." actions={<Button variant="secondary" size="sm" onClick={load} disabled={loading}><RefreshCw className={cn("mr-1.5 h-3.5 w-3.5", loading && "animate-spin")} />{loading ? "Atualizando…" : "Atualizar"}</Button>} />
     {error && <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-500"><AlertTriangle className="mr-1.5 inline h-4 w-4" />{error}</div>}

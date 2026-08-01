@@ -256,9 +256,9 @@ export default function ConfigPage() {
       </div>
 
       {/* Barra de salvar: fixa porque os campos ficam em seções que rolam. */}
-      <div className="sticky bottom-3 flex items-center gap-2 justify-end">
+      <div className="sticky bottom-[68px] md:bottom-3 flex flex-wrap items-center gap-2 justify-end">
         {saved && <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">Configurações salvas.</span>}
-        <Button onClick={save} disabled={!dirty || saving} size="sm" className="shadow-lg">
+        <Button onClick={save} disabled={!dirty || saving} className="shadow-lg">
           <Save className="h-3.5 w-3.5 mr-1" /> {saving ? "Salvando…" : dirty ? "Salvar alterações" : "Tudo salvo"}
         </Button>
       </div>

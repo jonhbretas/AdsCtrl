@@ -25,7 +25,7 @@ export default function NegocioPage() {
   const [loading, setLoading] = useState(true); const [error, setError] = useState<string | null>(null);
   async function load() { setLoading(true); setError(null); try { const response = await fetch(`/api/business?month=${month}`, { cache: "no-store" }); const payload = await response.json(); if (!response.ok) throw new Error(payload.error || "Falha ao carregar painel."); setData(payload); } catch (reason: any) { setError(reason?.message || "Falha ao carregar painel."); } finally { setLoading(false); } }
   useEffect(() => { load(); }, [month]);
-  if (loading && !data) return <div className="p-4 md:p-6 md:ml-56 space-y-4"><Skeleton className="h-8 w-64" /><Skeleton className="h-28 rounded-lg" /><Skeleton className="h-64 rounded-lg" /></div>;
+  if (loading && !data) return <div className="p-4 md:p-6 md:ml-56 pb-20 md:pb-6 space-y-4"><Skeleton className="h-8 w-64" /><Skeleton className="h-28 rounded-lg" /><Skeleton className="h-64 rounded-lg" /></div>;
   const current = data?.current;
   return <div className="p-4 md:p-6 md:ml-56 pb-20 md:pb-6 space-y-5 animate-fade-in">
     <PageHeader title="Visão do negócio" subtitle="Indicadores gerados automaticamente pelos lançamentos, clientes, contratos e cobranças." actions={<div className="flex items-center gap-2"><input type="month" value={month} onChange={(event) => setMonth(event.target.value)} className={inputClass} /><Button variant="secondary" size="sm" onClick={load} disabled={loading}><RefreshCw className={cn("mr-1.5 h-3.5 w-3.5", loading && "animate-spin")} /> {loading ? "Atualizando…" : "Atualizar dados"}</Button></div>} />

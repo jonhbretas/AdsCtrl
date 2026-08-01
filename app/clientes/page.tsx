@@ -213,7 +213,7 @@ export default function ClientesPage() {
       <PageHeader
         title="Clientes"
         subtitle={`${clients.length} cliente${clients.length === 1 ? "" : "s"} ativo${clients.length === 1 ? "" : "s"} · ${accounts.length} contas no catálogo.`}
-        actions={<div className="flex items-center gap-2">
+        actions={<div className="flex flex-wrap items-center gap-2">
           <Segmented value={view} onChange={selectView} options={[{ value: "clients", label: "Clientes" }, { value: "catalog", label: "Catálogo" }]} />
           <Link href="/relatorios"><Button variant="ghost" size="sm"><Mail className="h-3.5 w-3.5 mr-1" /> Relatórios e painéis</Button></Link>
         </div>}
@@ -615,7 +615,7 @@ function SocialPagesPanel({
         {clients.map((client) => {
           const linkedPage = (pages || []).find((p) => p.page_id === client.facebook_page_id);
           return (
-            <div key={client.id} className="grid gap-2 p-3 rounded-lg border border-border/50 bg-card items-end" style={{ gridTemplateColumns: "minmax(160px,1fr) 1fr 1fr" }}>
+            <div key={client.id} className="grid gap-2 p-3 rounded-lg border border-border/50 bg-card items-end sm:grid-cols-[minmax(160px,1fr)_1fr_1fr]">
               <div className="min-w-0">
                 <div className="text-sm font-semibold truncate">{client.name}</div>
                 {linkedPage?.instagram_username && (
@@ -904,7 +904,7 @@ function ClientApprovals({ clientId, dashboardLinkHref }: { clientId: string; da
         <select value={kind} onChange={(e) => setKind(e.target.value)} style={compactInput}>{APPROVAL_KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}</select>
         <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex.: Aprovar criativo da campanha" style={compactInput} />
         <input value={dueDate} onChange={(e) => setDueDate(e.target.value)} type="date" title="Prazo de resposta" style={compactInput} />
-        <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Instruções" style={{ ...compactInput, gridColumn: "span 2" }} />
+        <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Instruções" className="md:col-span-2" style={compactInput} />
         <input value={fileUrl} onChange={(e) => setFileUrl(e.target.value)} placeholder="Link do arquivo no Drive" style={compactInput} />
         <button onClick={add} disabled={!title.trim()} className="rounded-md bg-primary px-2 py-1 text-[11px] font-semibold text-primary-foreground disabled:opacity-50 md:col-span-3">Criar solicitação</button>
       </div>}

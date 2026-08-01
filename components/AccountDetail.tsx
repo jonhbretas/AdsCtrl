@@ -855,8 +855,8 @@ export default function AccountDetail({
 
       {/* Modal de ajuste de orçamento */}
       {budgetModal && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setBudgetModal(null)}>
-          <div style={{ background: "var(--color-card)", borderRadius: 16, padding: 24, width: 340, boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", padding: 12 }} onClick={() => setBudgetModal(null)}>
+          <div style={{ background: "var(--color-card)", borderRadius: 16, padding: 24, width: 340, maxWidth: "100%", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }} onClick={(e) => e.stopPropagation()}>
             <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>Ajustar orçamento</h3>
             <p style={{ fontSize: 13, color: "var(--color-muted-foreground)", marginBottom: 16 }}>{budgetModal.name}</p>
 

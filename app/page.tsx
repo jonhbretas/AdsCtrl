@@ -285,6 +285,58 @@ export default function Dashboard() {
     return { ...own, spend, conversions, value, results, result: results[focus] || 0 };
   }
   function comboMetrics(a: Account): M { return combine(accMetrics(a), a); }
+
+  // Conteúdo expandido da linha (acesso rápido, edições, detalhe). Vive FORA
+  // do container de scroll horizontal da tabela: com min-w-[900px] no pai, o
+  // mobile só alcançava o detalhe da conta com rolagem lateral.
+  function renderExpanded(a: Account) {
+    const open = !a.hidden && expanded === a.account_id;
+    if (!open) return null;
+    const linkedGoogle = a.platform === "meta" ? accounts.filter((google) => google.platform === "google" && google.linked_meta_account_id === a.account_id && !google.hidden) : [];
+    const m = comboMetrics(a);
+    const liveError = isLive ? live?.errors?.find((item) => item.account_id === a.account_id) : undefined;
+    return (
+      <div className="border-t border-border/30 px-4 py-4 space-y-4 bg-muted/10">
+        <OperationalLinks accountId={a.account_id} accountName={a.name} platform={a.platform} balance={a.balance} currency={a.currency} />
+        <AccountChanges accountId={a.account_id} platform={a.platform} since={range.since} until={range.until} />
+        <CollapsibleSection
+          icon={a.platform === "google" ? <GoogleIcon /> : <MetaIcon />}
+          title={a.platform === "google" ? `Google Ads (${a.name})` : `Meta Ads (${a.name})`}
+          subtitle="campanhas, criativos, segmentações"
+          meta={liveError ? "indisponível" : money(m.spend, a.currency)}
+        >
+          <AccountDetail accountId={a.account_id} platform={a.platform} since={range.since} until={range.until}
+            status={a.status} balance={a.balance} currency={a.currency} />
+        </CollapsibleSection>
+
+        {/* A conta Google vinculada segue exatamente a mesma
+            ordem da Meta acima — acesso rápido, últimas edições
+            e só então o bloco recolhível. Antes os dois primeiros
+            ficavam escondidos dentro do recolhível só do lado do
+            Google, e as duas plataformas não se liam igual.
+            Fragment em vez de <div> para o space-y-4 do pai valer
+            entre todos os blocos, sem um gap diferente aqui. */}
+        {a.platform === "meta" && linkedGoogle.map((google) => {
+          const gm = accMetrics(google);
+          return (
+            <Fragment key={google.account_id}>
+              <OperationalLinks accountId={google.account_id} accountName={google.name} platform="google" balance={null} currency={google.currency} />
+              <AccountChanges accountId={google.account_id} platform="google" since={range.since} until={range.until} />
+              <CollapsibleSection
+                icon={<GoogleIcon />}
+                title={`Google Ads (${google.name})`}
+                subtitle="campanhas, termos de busca, segmentações"
+                meta={money(gm.spend, google.currency)}
+              >
+                <AccountDetail accountId={google.account_id} platform="google" since={range.since} until={range.until}
+                  status={google.status} balance={null} currency={google.currency} />
+              </CollapsibleSection>
+            </Fragment>
+          );
+        })}
+      </div>
+    );
+  }
   function comboPrev(a: Account): M {
     if (platformFilter !== "all" || a.platform !== "meta") return accPrev(a);
     const linked = linkedGoogleByMeta.get(a.account_id) || [];
@@ -646,7 +698,7 @@ export default function Dashboard() {
           <h1 className="text-2xl font-bold tracking-tight">Visão Geral</h1>
           <p className="text-sm text-muted-foreground mt-0.5">Métricas de mídia paga (Meta + Google) por conta</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {lastUpdated && <Badge variant="secondary" className="text-xs">Coleta: {lastUpdated}</Badge>}
           {syncMsg && (
             <Badge variant="info" className="text-xs max-w-[240px] truncate" title={syncMsg}>
@@ -699,7 +751,7 @@ export default function Dashboard() {
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-1.5 p-1 rounded-lg bg-muted/50 border border-border/50">
+        <div className="flex flex-wrap items-center gap-2 p-1 rounded-lg bg-muted/50 border border-border/50">
           {PRESETS.map((p) => (
             <button
               key={p.key}
@@ -723,7 +775,7 @@ export default function Dashboard() {
           </button>
         </div>
 
-        <div className="flex items-center gap-1.5 p-1 rounded-lg bg-muted/50 border border-border/50">
+        <div className="flex flex-wrap items-center gap-2 p-1 rounded-lg bg-muted/50 border border-border/50">
           <button onClick={() => setPlatformFilter("meta")} className={cn("px-3 py-1.5 text-xs font-medium rounded-md transition-colors", platformFilter === "meta" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
             Meta
           </button>
@@ -773,7 +825,7 @@ export default function Dashboard() {
 
       {/* Custom period */}
       {showCustom && (
-        <div className="flex items-center gap-2 text-sm">
+        <div className="flex flex-wrap items-center gap-2 text-sm">
           <input type="date" value={customSince} max={customUntil}
             onChange={(e) => { setCustomSince(e.target.value); setPeriod("custom"); }}
             className="h-8 px-2.5 text-xs rounded-lg border border-border/50 bg-muted/30 focus:outline-none focus:ring-2 focus:ring-ring/30"
@@ -1005,54 +1057,14 @@ export default function Dashboard() {
                         {a.hidden ? "—" : open ? <ChevronUp className="h-3.5 w-3.5 inline" /> : <ChevronDown className="h-3.5 w-3.5 inline" />}
                       </div>
                     </div>
-
-                    {/* Expanded content */}
-                    {open && (
-                      <div className="border-t border-border/30 px-4 py-4 space-y-4 bg-muted/10">
-                        <OperationalLinks accountId={a.account_id} accountName={a.name} platform={a.platform} balance={a.balance} currency={a.currency} />
-                        <AccountChanges accountId={a.account_id} platform={a.platform} since={range.since} until={range.until} />
-                        <CollapsibleSection
-                          icon={a.platform === "google" ? <GoogleIcon /> : <MetaIcon />}
-                          title={a.platform === "google" ? `Google Ads (${a.name})` : `Meta Ads (${a.name})`}
-                          subtitle="campanhas, criativos, segmentações"
-                          meta={liveError ? "indisponível" : money(m.spend, a.currency)}
-                        >
-                          <AccountDetail accountId={a.account_id} platform={a.platform} since={range.since} until={range.until}
-                            status={a.status} balance={a.balance} currency={a.currency} />
-                        </CollapsibleSection>
-
-                        {/* A conta Google vinculada segue exatamente a mesma
-                            ordem da Meta acima — acesso rápido, últimas edições
-                            e só então o bloco recolhível. Antes os dois primeiros
-                            ficavam escondidos dentro do recolhível só do lado do
-                            Google, e as duas plataformas não se liam igual.
-                            Fragment em vez de <div> para o space-y-4 do pai valer
-                            entre todos os blocos, sem um gap diferente aqui. */}
-                        {a.platform === "meta" && linkedGoogle.map((google) => {
-                          const gm = accMetrics(google);
-                          return (
-                            <Fragment key={google.account_id}>
-                              <OperationalLinks accountId={google.account_id} accountName={google.name} platform="google" balance={null} currency={google.currency} />
-                              <AccountChanges accountId={google.account_id} platform="google" since={range.since} until={range.until} />
-                              <CollapsibleSection
-                                icon={<GoogleIcon />}
-                                title={`Google Ads (${google.name})`}
-                                subtitle="campanhas, termos de busca, segmentações"
-                                meta={money(gm.spend, google.currency)}
-                              >
-                                <AccountDetail accountId={google.account_id} platform="google" since={range.since} until={range.until}
-                                  status={google.status} balance={null} currency={google.currency} />
-                              </CollapsibleSection>
-                            </Fragment>
-                          );
-                        })}
-                      </div>
-                    )}
                   </div>
                 );
               })}
             </div>
           </div>
+
+          {/* Expanded content — fora do overflow-x-auto para caber no mobile */}
+          {liveReady && filtered.map((a) => renderExpanded(a))}
         </Card>
       </div>
     </div>

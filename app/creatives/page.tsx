@@ -149,11 +149,11 @@ export default function CreativesPage() {
         <div className="flex flex-wrap items-end gap-2">
           <Field label="Conta"><Select value={accountId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setAccountId(e.target.value)} className="min-w-[200px]"><option value="">Selecione uma conta Meta…</option>{accounts.filter((a) => a.platform === "meta" && a.status === "ACTIVE" && !a.hidden).map((a) => <option key={a.account_id} value={a.account_id}>{a.name}</option>)}</Select></Field>
           <Field label="Período"><Select value={period} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setPeriod(e.target.value as any)}><option value="7d">7 dias</option><option value="14d">14 dias</option><option value="30d">30 dias</option></Select></Field>
-          <Button onClick={analyze} disabled={loading || !accountId} className="h-9 mb-0.5">{loading ? <><RefreshCw className="h-3.5 w-3.5 mr-1 animate-spin" /> Analisando…</> : <><Play className="h-3.5 w-3.5 mr-1" /> Analisar</>}</Button>
+          <Button onClick={analyze} disabled={loading || !accountId} className="h-10 mb-0.5">{loading ? <><RefreshCw className="h-3.5 w-3.5 mr-1 animate-spin" /> Analisando…</> : <><Play className="h-3.5 w-3.5 mr-1" /> Analisar</>}</Button>
         </div>
       </CardContent></Card>
 
-      {loading && !lab && <div className="space-y-2"><Notice tone="brand">Consultando anúncios, vídeos e thumbnails na Meta — costuma levar alguns segundos.</Notice><div className="grid grid-cols-3 gap-3">{[1,2,3].map((i) => <Skeleton key={i} className="h-24 rounded-xl" />)}</div><Skeleton className="h-64 rounded-xl" /></div>}
+      {loading && !lab && <div className="space-y-2"><Notice tone="brand">Consultando anúncios, vídeos e thumbnails na Meta — costuma levar alguns segundos.</Notice>                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">{[1,2,3].map((i) => <Skeleton key={i} className="h-24 rounded-xl" />)}</div><Skeleton className="h-64 rounded-xl" /></div>}
       {!loading && !lab && !error && <EmptyState icon="◉" title="Escolha uma conta e clique em Analisar" hint="O laboratório busca os anúncios do período na Meta, calcula a mediana por objetivo e aponta qual criativo merece continuar no ar." />}
 
       {lab && (
@@ -205,7 +205,7 @@ export default function CreativesPage() {
               <Card className="overflow-hidden"><CardContent className="p-0">
                 <div className="flex flex-wrap items-end gap-2 px-4 py-3 border-b border-border/50 bg-muted/10">
                   <div className="mr-2"><PanelTitle title="Heatmap de criativos" subtitle={`${sorted.length} anúncios · cores vs. mediana do mesmo objetivo`} /></div>
-                  <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-muted/50 border border-border/50">
+                  <div className="flex flex-wrap items-center gap-0.5 p-0.5 rounded-lg bg-muted/50 border border-border/50">
                     {(["all", "video", "image", "carousel"] as const).map((key) => (
                       <Toggle key={key} active={format === key} onClick={() => setFormat(key)}>{key === "all" ? "Todos" : key === "video" ? "Vídeos" : key === "image" ? "Estáticos" : "Carrossel"}</Toggle>
                     ))}

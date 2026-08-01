@@ -83,7 +83,7 @@ function Precificacao() {
 
   return (
     <CalcCard title="Precificação de produto" icon={DollarSign}>
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 min-[460px]:grid-cols-2 gap-2">
         <Field label="Custo (R$)"><input type="number" value={custo} onChange={(e) => setCusto(Number(e.target.value))} className="w-full h-9 rounded-lg border border-input bg-transparent px-3 text-sm" /></Field>
         <Field label="Frete (R$)"><input type="number" value={frete} onChange={(e) => setFrete(Number(e.target.value))} className="w-full h-9 rounded-lg border border-input bg-transparent px-3 text-sm" /></Field>
         <Field label="Margem desejada (%)"><input type="number" value={margem} onChange={(e) => setMargem(Number(e.target.value))} className="w-full h-9 rounded-lg border border-input bg-transparent px-3 text-sm" /></Field>
@@ -111,7 +111,7 @@ function RoasNecessario() {
 
   return (
     <CalcCard title="ROAS necessário para lucro" icon={Target}>
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 min-[460px]:grid-cols-2 gap-2">
         <Field label="Margem líquida (%)"><input type="number" value={margemLiquida} onChange={(e) => setMargemLiquida(Number(e.target.value))} className="w-full h-9 rounded-lg border border-input bg-transparent px-3 text-sm" /></Field>
         <Field label="Custo fixo mensal (R$)"><input type="number" value={custoFixo} onChange={(e) => setCustoFixo(Number(e.target.value))} className="w-full h-9 rounded-lg border border-input bg-transparent px-3 text-sm" /></Field>
         <Field label="Ticket médio (R$)"><input type="number" value={ticket} onChange={(e) => setTicket(Number(e.target.value))} className="w-full h-9 rounded-lg border border-input bg-transparent px-3 text-sm" /></Field>
@@ -139,7 +139,7 @@ function CpaReal() {
 
   return (
     <CalcCard title="CPA real (inclui custo do produto)" icon={ShoppingCart}>
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 min-[460px]:grid-cols-2 gap-2">
         <Field label="CPA da campanha (R$)"><input type="number" value={cpaCampanha} onChange={(e) => setCpaCampanha(Number(e.target.value))} className="w-full h-9 rounded-lg border border-input bg-transparent px-3 text-sm" /></Field>
         <Field label="Ticket médio (R$)"><input type="number" value={ticket} onChange={(e) => setTicket(Number(e.target.value))} className="w-full h-9 rounded-lg border border-input bg-transparent px-3 text-sm" /></Field>
         <Field label="Custo do produto (R$)"><input type="number" value={custoProduto} onChange={(e) => setCustoProduto(Number(e.target.value))} className="w-full h-9 rounded-lg border border-input bg-transparent px-3 text-sm" /></Field>
@@ -274,11 +274,11 @@ function BenchmarkTable() {
             <option value="">Selecione uma conta Meta…</option>
             {accounts.map((a) => <option key={a.account_id} value={a.account_id}>{a.name}</option>)}
           </select>
-          <Button size="sm" onClick={carregarDados} disabled={loading || !selectedAccount} className="h-9">
+          <Button size="sm" onClick={carregarDados} disabled={loading || !selectedAccount} className="h-10">
             {loading ? "Carregando…" : "Carregar dados reais"}
           </Button>
           {Object.keys(vals).length > 0 && (
-            <Button variant="ghost" size="sm" onClick={() => setVals({})} className="h-9 text-xs">Limpar</Button>
+            <Button variant="ghost" size="sm" onClick={() => setVals({})} className="h-10 text-xs">Limpar</Button>
           )}
         </div>
 

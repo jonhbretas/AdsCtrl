@@ -172,7 +172,7 @@ export default function TodayPage() {
             {critical ? `${critical} situação(ões) crítica(s) exigem atenção.` : "Nenhuma situação crítica detectada."}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Badge variant={data.last_collection?.status === "success" ? "success" : "warning"} className="text-[11px]">
             Coleta {data.last_collection?.status === "success" ? "saudável" : data.last_collection?.status || "desconhecida"}
           </Badge>
