@@ -10,7 +10,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowLeft, Check, ChevronDown, ChevronRight, Copy, MessageCircle, Plus, RefreshCw } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, ChevronDown, ChevronRight, Copy, MessageCircle, Plus, RefreshCw, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -23,6 +23,7 @@ import { compareSortValues, SortButton, SortState, usePersistentSort } from "@/c
 import DuplicateCampaign from "@/components/DuplicateCampaign";
 import AccountChanges from "@/components/AccountChanges";
 import StrategicSummaryCard from "@/components/StrategicSummaryCard";
+import StructureWizard from "@/components/StructureWizard";
 import { buildWhatsAppReport, monthPeriodLabel } from "@/lib/whatsapp-report";
 
 interface Row {
@@ -87,6 +88,7 @@ export default function CampaignsPage() {
   const [duplicateCP, setDuplicateCP] = useState<{ id: string; name: string } | null>(null);
   const [newCampaign, setNewCampaign] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
+  const [structureOpen, setStructureOpen] = useState(false);
   const [tableSort, setTableSort] = usePersistentSort<ResultKey>("adsctrl:sort:campanhas", { key: "spend", direction: "desc" }, SORT_KEYS);
 
   const range = useMemo(() => ({ since: isoDaysAgo(14), until: isoDaysAgo(1) }), []);
@@ -316,6 +318,7 @@ export default function CampaignsPage() {
           </div>
           <Button variant="ghost" size="sm" onClick={async () => { try { await reload(); flash("Dados atualizados."); } catch (e: any) { flash(e.message, true); } }}><RefreshCw className="h-3.5 w-3.5 mr-1" /> Atualizar</Button>
           <Button variant="ghost" size="sm" onClick={() => setReportOpen(true)} disabled={!accountId} title="Resumo curto para colar no WhatsApp (fechamento mensal)"><MessageCircle className="h-3.5 w-3.5 mr-1" /> Resumo</Button>
+          <Button variant="ghost" size="sm" onClick={() => setStructureOpen(true)} disabled={!isMeta} title={isMeta ? "Gerar funil de campanhas a partir da estratégia (pausado)" : "Gerar estrutura só na Meta"}><Sparkles className="h-3.5 w-3.5 mr-1" /> Sugerir estrutura</Button>
           <Button size="sm" onClick={() => setNewCampaign(true)} disabled={!isMeta} title={isMeta ? "Criar campanha" : "Criar campanha só na Meta"}>
             <Plus className="h-3.5 w-3.5 mr-1" /> Nova campanha
           </Button>
@@ -489,6 +492,7 @@ export default function CampaignsPage() {
       {duplicateCP && <DuplicateCampaign sourceAccountId={accountId} campaignId={duplicateCP.id} campaignName={duplicateCP.name} onClose={() => setDuplicateCP(null)} />}
       {newCampaign && <NewCampaignModal onClose={() => setNewCampaign(false)} onSubmit={async (name, objective, status) => { const ok = await handleNewCampaign(name, objective, status); if (ok) setNewCampaign(false); return ok; }} />}
       {reportOpen && <WhatsAppReportModal accountId={accountId} accountName={account?.name || "Conta"} currency={account?.currency} onClose={() => setReportOpen(false)} />}
+      {structureOpen && <StructureWizard accountId={accountId} accountName={account?.name || "Conta"} onClose={() => setStructureOpen(false)} onCreated={() => { flash("Estrutura criada. Revise os orçamentos e publique."); reload().catch(() => {}); }} />}
     </div>
   );
 }

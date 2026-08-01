@@ -1308,6 +1308,102 @@ export async function createMetaCampaign(input: CreateCampaignInput, token: stri
   return { id: res?.id, name: input.name };
 }
 
+/* --------------------- estrutura sugerida (funil limpo) --------------------
+   Cria campanhas "limpas" a partir da estratégia: sem Audience Network, sem
+   Messenger, sem expansão de público (is_advantage_audience: false), só
+   Facebook/Instagram/Threads nos posicionamentos clássicos, segmentação por
+   cidade (resolvida pelo search de geolocalização da Meta) e faixa etária.
+   Tudo nasce PAUSADO — quem cria é o painel, quem publica é o operador. */
+
+export interface CreateAdsetInput {
+  accountId: string; // act_xxx
+  campaignId: string;
+  name: string;
+  dailyBudget?: number; // em centavos (minor units)
+  lifetimeBudget?: number;
+  optimizationGoal: string;
+  billingEvent: string;
+  destinationType?: string;
+  targeting: Record<string, any>;
+  promotedObject?: Record<string, any>;
+  bidStrategy?: string;
+}
+
+export async function createAdsetInAccount(input: CreateAdsetInput, token: string = TOKEN): Promise<{ id?: string; name: string }> {
+  const params: Record<string, string> = {
+    name: input.name,
+    campaign_id: input.campaignId,
+    status: "PAUSED",
+    optimization_goal: input.optimizationGoal,
+    billing_event: input.billingEvent,
+    targeting: JSON.stringify(input.targeting),
+    bid_strategy: input.bidStrategy || "LOWEST_COST_WITHOUT_CAP",
+  };
+  if (input.dailyBudget) params.daily_budget = String(Math.round(input.dailyBudget));
+  if (input.lifetimeBudget) params.lifetime_budget = String(Math.round(input.lifetimeBudget));
+  if (input.destinationType) params.destination_type = input.destinationType;
+  if (input.promotedObject && Object.keys(input.promotedObject).length) params.promoted_object = JSON.stringify(input.promotedObject);
+  const res = await fbPost(`${input.accountId}/adsets`, params, token, false);
+  return { id: res?.id, name: input.name };
+}
+
+/** Segmentação "limpa": sem rede de audiência, sem Messenger, sem expansão
+    de público, posicionamentos clássicos de feed/reels/stories/perfil. */
+export function buildCleanTargeting(input: { cities?: { key: string; name: string }[]; ageMin: number; ageMax: number }): Record<string, any> {
+  const targeting: Record<string, any> = {
+    age_min: input.ageMin,
+    age_max: input.ageMax,
+    publisher_platforms: ["facebook", "instagram", "threads"],
+    facebook_positions: ["feed", "reels", "stories"],
+    instagram_positions: ["feed", "reels", "stories", "profile_feed", "explore"],
+    messenger_positions: [],
+    device_platforms: ["mobile", "desktop"],
+    is_advantage_audience: false,
+  };
+  if (input.cities?.length) {
+    targeting.geo_locations = { cities: input.cities };
+  }
+  return targeting;
+}
+
+export interface GeoCity {
+  key: string;
+  name: string;
+  region: string;
+  country: string;
+}
+
+/** Resolve o nome de uma cidade para o key de geolocalização da Meta. */
+export async function searchGeoCity(name: string, token: string = TOKEN): Promise<GeoCity | null> {
+  const q = encodeURIComponent(name.trim());
+  const url = `${GRAPH}/search?type=adgeolocation&q=${q}&location_types=${encodeURIComponent(JSON.stringify(["city", "region"]))}&limit=10&access_token=${token}`;
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) return null;
+  const json = await res.json().catch(() => ({}));
+  const candidates: any[] = json.data || [];
+  if (!candidates.length) return null;
+
+  const normalized = (value: string) => value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+  const wanted = normalized(name);
+  // Prefere exato; depois contém; sempre dentro do Brasil quando houver.
+  const rank = (candidate: any) => {
+    const candidateName = normalized(String(candidate.name || ""));
+    const isBrazil = String(candidate.country_code || candidate.country || "").toUpperCase() === "BR" || String(candidate.country_name || "").toUpperCase() === "BRAZIL" || candidate.country_code === undefined;
+    let score = isBrazil ? 0 : 100;
+    if (candidateName === wanted) score -= 1000;
+    else if (candidateName.includes(wanted) || wanted.includes(candidateName)) score -= 500;
+    return score;
+  };
+  const best = [...candidates].sort((a, b) => rank(a) - rank(b))[0];
+  if (!best?.key) return null;
+  return {
+    key: String(best.key),
+    name: String(best.name || name),
+    region: String(best.region || ""),
+    country: String(best.country_code || best.country_name || ""),
+  };
+}
+
 // Diagnóstico: devolve o payload cru de UMA conta (todos os campos financeiros
 // que a Meta expõe). Usado para investigar o saldo pré-pago.
 export async function getAccountRaw(actId: string, token: string = TOKEN): Promise<any> {
