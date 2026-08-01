@@ -1,7 +1,8 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   RefreshCw,
   Download,
@@ -13,25 +14,17 @@ import {
   Minus,
   Eye,
   EyeOff,
-  ChevronDown,
-  ChevronUp,
   Search,
   DollarSign,
   Target,
   BarChart3,
   Wallet,
   Activity,
-  Menu,
-  X,
-  ExternalLink,
-  Copy,
-  Check,
   Settings,
   ArrowUpRight,
   ArrowDownRight,
+  ArrowRight,
 } from "lucide-react";
-import AccountDetail from "@/components/AccountDetail";
-import AccountChanges from "@/components/AccountChanges";
 import {
   compareSortValues,
   SortButton,
@@ -188,7 +181,6 @@ export default function Dashboard() {
   const [showCustom, setShowCustom] = useState(false);
   const [showHidden, setShowHidden] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [expanded, setExpanded] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -209,20 +201,30 @@ export default function Dashboard() {
     ACCOUNT_SORT_KEYS
   );
 
-  function selectAccount(accountId: string, open: boolean) {
-    const next = open ? null : accountId;
-    setExpanded(next);
-    if (next) window.localStorage.setItem("adsctrl:selected-account", next); else window.localStorage.removeItem("adsctrl:selected-account");
-    window.dispatchEvent(new CustomEvent("adsctrl:account-selected", { detail: next || "" }));
-    const url = new URL(window.location.href);
-    if (next) url.searchParams.set("account", next); else url.searchParams.delete("account");
-    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
-    if (next) requestAnimationFrame(() => document.getElementById(`account-${next}`)?.scrollIntoView({ behavior: "smooth", block: "center" }));
+  const router = useRouter();
+
+  // Clicar no cliente/conta leva à tela de campanhas dela — o painel fica
+  // leve, e a ação (pausar, orçamento, duplicar) vive num lugar próprio.
+  function openCampaigns(accountId: string) {
+    window.localStorage.setItem("adsctrl:selected-account", accountId);
+    window.dispatchEvent(new CustomEvent("adsctrl:account-selected", { detail: accountId }));
+    router.push(`/campanhas?account=${encodeURIComponent(accountId)}`);
   }
 
   useEffect(() => {
     if (window.location.hash === "#alerts") window.location.replace("/alerts");
   }, []);
+
+  // Chegou com ?account= na URL (ex.: voltando de um link direto): redireciona
+  // para a tela de campanhas daquela conta e limpa o parâmetro daqui.
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get("account");
+    if (!requested) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("account");
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    router.replace(`/campanhas?account=${encodeURIComponent(requested)}`);
+  }, [router]);
 
   const range = useMemo(() => rangeForPeriod(period, customSince, customUntil), [period, customSince, customUntil]);
   const isLive = true;
@@ -286,57 +288,6 @@ export default function Dashboard() {
   }
   function comboMetrics(a: Account): M { return combine(accMetrics(a), a); }
 
-  // Conteúdo expandido da linha (acesso rápido, edições, detalhe). Vive FORA
-  // do container de scroll horizontal da tabela: com min-w-[900px] no pai, o
-  // mobile só alcançava o detalhe da conta com rolagem lateral.
-  function renderExpanded(a: Account) {
-    const open = !a.hidden && expanded === a.account_id;
-    if (!open) return null;
-    const linkedGoogle = a.platform === "meta" ? accounts.filter((google) => google.platform === "google" && google.linked_meta_account_id === a.account_id && !google.hidden) : [];
-    const m = comboMetrics(a);
-    const liveError = isLive ? live?.errors?.find((item) => item.account_id === a.account_id) : undefined;
-    return (
-      <div className="border-t border-border/30 px-4 py-4 space-y-4 bg-muted/10">
-        <OperationalLinks accountId={a.account_id} accountName={a.name} platform={a.platform} balance={a.balance} currency={a.currency} />
-        <AccountChanges accountId={a.account_id} platform={a.platform} since={range.since} until={range.until} />
-        <CollapsibleSection
-          icon={a.platform === "google" ? <GoogleIcon /> : <MetaIcon />}
-          title={a.platform === "google" ? `Google Ads (${a.name})` : `Meta Ads (${a.name})`}
-          subtitle="campanhas, criativos, segmentações"
-          meta={liveError ? "indisponível" : money(m.spend, a.currency)}
-        >
-          <AccountDetail accountId={a.account_id} platform={a.platform} since={range.since} until={range.until}
-            status={a.status} balance={a.balance} currency={a.currency} />
-        </CollapsibleSection>
-
-        {/* A conta Google vinculada segue exatamente a mesma
-            ordem da Meta acima — acesso rápido, últimas edições
-            e só então o bloco recolhível. Antes os dois primeiros
-            ficavam escondidos dentro do recolhível só do lado do
-            Google, e as duas plataformas não se liam igual.
-            Fragment em vez de <div> para o space-y-4 do pai valer
-            entre todos os blocos, sem um gap diferente aqui. */}
-        {a.platform === "meta" && linkedGoogle.map((google) => {
-          const gm = accMetrics(google);
-          return (
-            <Fragment key={google.account_id}>
-              <OperationalLinks accountId={google.account_id} accountName={google.name} platform="google" balance={null} currency={google.currency} />
-              <AccountChanges accountId={google.account_id} platform="google" since={range.since} until={range.until} />
-              <CollapsibleSection
-                icon={<GoogleIcon />}
-                title={`Google Ads (${google.name})`}
-                subtitle="campanhas, termos de busca, segmentações"
-                meta={money(gm.spend, google.currency)}
-              >
-                <AccountDetail accountId={google.account_id} platform="google" since={range.since} until={range.until}
-                  status={google.status} balance={null} currency={google.currency} />
-              </CollapsibleSection>
-            </Fragment>
-          );
-        })}
-      </div>
-    );
-  }
   function comboPrev(a: Account): M {
     if (platformFilter !== "all" || a.platform !== "meta") return accPrev(a);
     const linked = linkedGoogleByMeta.get(a.account_id) || [];
@@ -390,33 +341,6 @@ export default function Dashboard() {
     }
   }
 
-  useEffect(() => {
-    if (!accounts.length) return;
-    const requestedAccount = new URLSearchParams(window.location.search).get("account");
-    if (!requestedAccount) return;
-    const requested = accounts.find((account) => account.account_id === requestedAccount);
-    const requestedPlatform = requestedAccount.startsWith("google:") ? "google" : "meta";
-    setPlatformFilter(requestedPlatform);
-    if (requestedPlatform === "google") setFocus("conversoes");
-    if (requested?.status !== "ACTIVE") setOnlyActive(false);
-    if (requested?.hidden) setShowHidden(true);
-    setExpanded(requestedAccount);
-    window.localStorage.setItem("adsctrl:selected-account", requestedAccount);
-    window.dispatchEvent(new CustomEvent("adsctrl:account-selected", { detail: requestedAccount }));
-    // Âncora: espera o DOM renderizar e leva até a linha expandida.
-    const anchorId = `account-${requestedAccount}`;
-    const scroll = () => {
-      const el = document.getElementById(anchorId);
-      if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
-      } else {
-        // DOM ainda não montou — tenta de novo no próximo frame.
-        requestAnimationFrame(scroll);
-      }
-    };
-    requestAnimationFrame(scroll);
-  }, [accounts]);
-
   useEffect(() => { load(); }, []);
 
   useEffect(() => {
@@ -437,24 +361,6 @@ export default function Dashboard() {
       .finally(() => { if (alive) setLiveLoading(false); });
     return () => { alive = false; };
   }, [period, range.since, range.until, platformFilter]);
-
-  useEffect(() => {
-    if (!expanded) return;
-    const aberta = accounts.find((a) => a.account_id === expanded);
-    if (!aberta || aberta.platform !== "meta") return;
-    const ids = accounts
-      .filter((g) => g.platform === "google" && g.linked_meta_account_id === expanded && !g.hidden)
-      .map((g) => g.account_id)
-      .filter((id) => !live?.metrics?.[id] && !linkedLive[id]);
-    if (!ids.length) return;
-    let alive = true;
-    const params = new URLSearchParams({ since: range.since, until: range.until, accounts: ids.join(",") });
-    fetch(`/api/accounts/overview?${params}`)
-      .then((r) => r.json())
-      .then((d) => { if (alive && d?.metrics) setLinkedLive((prev) => ({ ...prev, ...d.metrics })); })
-      .catch(() => {});
-    return () => { alive = false; };
-  }, [expanded, accounts, range.since, range.until]);
 
   useEffect(() => { setLinkedLive({}); }, [range.since, range.until]);
 
@@ -936,8 +842,6 @@ export default function Dashboard() {
 
               {liveReady && filtered.map((a) => {
                 const g = groupById(a.group_id);
-                const open = !a.hidden && expanded === a.account_id;
-                const dimmed = expanded !== null && !open && !a.hidden;
                 const m = comboMetrics(a);
                 const previous = comboPrev(a);
                 const liveError = isLive ? live?.errors?.find((item) => item.account_id === a.account_id) : undefined;
@@ -946,13 +850,12 @@ export default function Dashboard() {
                 const linkedGoogle = a.platform === "meta" ? accounts.filter((google) => google.platform === "google" && google.linked_meta_account_id === a.account_id && !google.hidden) : [];
 
                 return (
-                  <div id={`account-${a.account_id}`} key={a.account_id} className={cn("border-b border-border/30 last:border-b-0 transition-all duration-300", a.hidden && "opacity-55", dimmed && "opacity-5 pointer-events-none")}>
+                  <div id={`account-${a.account_id}`} key={a.account_id} className={cn("border-b border-border/30 last:border-b-0 transition-all duration-300", a.hidden && "opacity-55")}>
                     <div
-                      onClick={() => { if (!a.hidden) selectAccount(a.account_id, open); }}
+                      onClick={() => { if (!a.hidden) openCampaigns(a.account_id); }}
                       className={cn(
                         "grid grid-cols-[1.7fr_0.5fr_0.8fr_1fr_0.9fr_0.7fr_0.9fr_28px_28px] gap-2 px-4 py-3 items-center transition-colors",
-                        a.hidden ? "cursor-default" : "cursor-pointer hover:bg-accent/30",
-                        open && "bg-accent/20"
+                        a.hidden ? "cursor-default" : "cursor-pointer hover:bg-accent/30"
                       )}
                     >
                       {/* Client */}
@@ -1052,9 +955,9 @@ export default function Dashboard() {
                         {a.hidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                       </button>
 
-                      {/* Expand */}
+                      {/* Ir para campanhas */}
                       <div className="text-center text-muted-foreground">
-                        {a.hidden ? "—" : open ? <ChevronUp className="h-3.5 w-3.5 inline" /> : <ChevronDown className="h-3.5 w-3.5 inline" />}
+                        {a.hidden ? "—" : <ArrowRight className="h-3.5 w-3.5 inline" />}
                       </div>
                     </div>
                   </div>
@@ -1062,9 +965,6 @@ export default function Dashboard() {
               })}
             </div>
           </div>
-
-          {/* Expanded content — fora do overflow-x-auto para caber no mobile */}
-          {liveReady && filtered.map((a) => renderExpanded(a))}
         </Card>
       </div>
     </div>
@@ -1218,165 +1118,4 @@ function GridSortHeader({ children, sortKey, sort, onSort, align = "right", init
     </SortButton>
   );
 }
-
-function OperationalLinks({ accountId, accountName, platform, balance, currency, compact = false }: {
-  accountId: string;
-  accountName: string;
-  platform: "meta" | "google";
-  balance: number | null;
-  currency: string;
-  compact?: boolean;
-}) {
-  const [copied, setCopied] = useState<string | null>(null);
-  const [business, setBusiness] = useState<{ id: string; name: string | null } | null>(null);
-  const [finance, setFinance] = useState<{ is_prepaid: boolean; balance: number | null; spend_7d: number; average_daily_spend: number; runway_days: number | null; estimated_depletion_date: string | null } | null>(null);
-  const bareId = accountId.replace(/^act_/, "").replace(/^google:/, "");
-  const isMeta = platform === "meta";
-
-  useEffect(() => {
-    if (!isMeta) return;
-    let alive = true;
-    fetch(`/api/account/links?account_id=${encodeURIComponent(accountId)}`, { cache: "no-store" })
-      .then((r) => r.json())
-      .then((p) => {
-        if (alive && p?.business_id) setBusiness({ id: p.business_id, name: p.business_name || null });
-        if (alive && p?.finance) setFinance(p.finance);
-      })
-      .catch(() => {});
-    return () => { alive = false; };
-  }, [accountId, isMeta]);
-
-  const businessParam = business?.id ? `&business_id=${encodeURIComponent(business.id)}` : "";
-  const billingUrl = isMeta
-    ? `https://business.facebook.com/billing_hub/payment_settings?asset_id=${encodeURIComponent(bareId)}${businessParam}&placement=standalone`
-    : `https://ads.google.com/aw/billing/summary?ocid=${encodeURIComponent(bareId)}`;
-  const links = isMeta
-    ? [
-        { label: "Ads Manager", url: `https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=${encodeURIComponent(bareId)}`, accent: false },
-        { label: "Saldo / pagamento", url: billingUrl, accent: true },
-        { label: "Faturas", url: `https://business.facebook.com/billing_hub/accounts/details?asset_id=${encodeURIComponent(bareId)}${businessParam}&placement=standalone`, accent: false },
-        { label: "Conta e acessos", url: `https://business.facebook.com/settings/ad-accounts/${encodeURIComponent(bareId)}${business?.id ? `?business_id=${encodeURIComponent(business.id)}` : ""}`, accent: false },
-        { label: "Business Manager", url: business?.id ? `https://business.facebook.com/settings?business_id=${encodeURIComponent(business.id)}` : "https://business.facebook.com/settings", accent: false },
-      ]
-    : [
-        { label: "Google Ads", url: `https://ads.google.com/aw/overview?ocid=${encodeURIComponent(bareId)}`, accent: false },
-        { label: "Campanhas", url: `https://ads.google.com/aw/campaigns?ocid=${encodeURIComponent(bareId)}`, accent: false },
-        { label: "Faturamento", url: billingUrl, accent: true },
-        { label: "Acessos", url: `https://ads.google.com/aw/accountaccess/users?ocid=${encodeURIComponent(bareId)}`, accent: false },
-      ];
-  const effectiveBalance = finance ? finance.balance : balance;
-  const runwayDays = finance?.runway_days ?? null;
-  const formatCurrency = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: currency || "BRL" }).format(v);
-  const runwayText = runwayDays == null ? null : runwayDays < 1 ? `${Math.max(1, Math.round(runwayDays * 24))}h` : runwayDays < 10 ? `${runwayDays.toFixed(1)} dias` : `${Math.round(runwayDays)} dias`;
-  const depletionText = finance?.estimated_depletion_date ? brDate(finance.estimated_depletion_date) : null;
-
-  async function copy(value: string, key: string) {
-    try { await navigator.clipboard.writeText(value); setCopied(key); setTimeout(() => setCopied(null), 1800); }
-    catch { window.prompt("Copie:", value); }
-  }
-
-  const balTone = runwayDays != null && runwayDays <= 1 ? "danger" : runwayDays != null && runwayDays <= 5 ? "warn" : "ok";
-
-  return (
-    <div className={cn("flex flex-wrap items-center gap-1.5", compact ? "py-2" : "py-1")}>
-      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mr-1">
-        Acesso rápido{business?.name ? ` · ${business.name}` : ""}
-      </span>
-      {isMeta && finance?.is_prepaid && effectiveBalance != null && (
-        <span className={cn(
-          "px-2 py-1 text-[10px] font-bold rounded-md border",
-          balTone === "danger" ? "bg-red-500/10 border-red-500/30 text-red-500" :
-          balTone === "warn" ? "bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400" :
-          "bg-emerald-500/10 border-emerald-500/30 text-emerald-500"
-        )}>
-          Saldo {formatCurrency(effectiveBalance)} · {runwayText ? `dura ${runwayText}` : "sem gasto 7d"}
-          {depletionText ? ` · até ${depletionText}` : ""}
-        </span>
-      )}
-      {links.map((link) => (
-        <a key={link.label} href={link.url} target="_blank" rel="noreferrer"
-          className={cn(
-            "px-2 py-1 text-[10px] font-semibold rounded-md border transition-colors inline-flex items-center gap-1 no-underline",
-            link.accent
-              ? "bg-primary/10 border-primary/20 text-primary hover:bg-primary/20"
-              : "bg-muted/30 border-border/50 text-muted-foreground hover:text-foreground hover:bg-accent/50"
-          )}>
-          {link.label} <ExternalLink className="h-2.5 w-2.5" />
-        </a>
-      ))}
-      <button onClick={() => copy(billingUrl, "billing")}
-        className="px-2 py-1 text-[10px] font-semibold rounded-md border border-dashed border-primary/30 text-primary hover:bg-primary/10 transition-colors cursor-pointer bg-transparent">
-        {copied === "billing" ? <><Check className="h-2.5 w-2.5 inline" /> Copiado</> : <><Copy className="h-2.5 w-2.5 inline" /> Copiar link</>}
-      </button>
-      <button onClick={() => copy(bareId, "id")}
-        className="px-2 py-1 text-[10px] rounded-md text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none">
-        {copied === "id" ? "✓ ID" : `ID ${bareId}`}
-      </button>
-    </div>
-  );
-}
-
-function CollapsibleSection({ icon, title, subtitle, meta, children }: {
-  icon: React.ReactNode;
-  title: string;
-  subtitle: string;
-  meta: string;
-  children: React.ReactNode;
-}) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="rounded-lg border border-border/50 overflow-hidden">
-      <button onClick={() => setOpen(!open)}
-        className="flex items-center gap-3 w-full px-4 py-3 text-left bg-muted/10 hover:bg-accent/20 transition-colors cursor-pointer border-none">
-        <span className="w-6 h-6 rounded grid place-items-center shrink-0">
-          {icon}
-        </span>
-        <span className="flex-1 min-w-0">
-          <span className="text-sm font-semibold text-foreground">{title}</span>
-          <span className="text-xs text-muted-foreground ml-2">{meta}</span>
-        </span>
-        <span className="text-[11px] text-muted-foreground hidden sm:inline">{subtitle}</span>
-        {open ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
-      </button>
-      {open && <div className="px-4 py-3 border-t border-border/30 space-y-3">{children}</div>}
-    </div>
-  );
-}
-
-function MetaIcon() {
-  return (
-    <svg viewBox="0 0 32 32" className="w-5 h-5" fill="#0532b8">
-      <path d="M5,19.5c0-4.6,2.3-9.4,5-9.4c1.5,0,2.7,0.9,4.6,3.6c-1.8,2.8-2.9,4.5-2.9,4.5c-2.4,3.8-3.2,4.6-4.5,4.6 C5.9,22.9,5,21.7,5,19.5 M20.7,17.8L19,15c-0.4-0.7-0.9-1.4-1.3-2c1.5-2.3,2.7-3.5,4.2-3.5c3,0,5.4,4.5,5.4,10.1 c0,2.1-0.7,3.3-2.1,3.3S23.3,22,20.7,17.8 M16.4,11c-2.2-2.9-4.1-4-6.3-4C5.5,7,2,13.1,2,19.5c0,4,1.9,6.5,5.1,6.5 c2.3,0,3.9-1.1,6.9-6.3c0,0,1.2-2.2,2.1-3.7c0.3,0.5,0.6,1,0.9,1.6l1.4,2.4c2.7,4.6,4.2,6.1,6.9,6.1c3.1,0,4.8-2.6,4.8-6.7 C30,12.6,26.4,7,22.1,7C19.8,7,18,8.8,16.4,11" />
-    </svg>
-  );
-}
-
-function GoogleIcon() {
-  return (
-    <svg viewBox="0 -1.5 24 24" className="w-5 h-5">
-      <g transform="scale(0.09)">
-        <path d="M5.888,166.405103 L90.88,20.9 C101.676138,27.2558621 156.115862,57.3844138 164.908138,63.1135172 L79.9161379,208.627448 C70.6206897,220.906621 -5.888,185.040138 5.888,166.396276 L5.888,166.405103 Z" fill="#FBBC04" />
-        <path d="M250.084224,166.401789 L165.092224,20.9055131 C153.210293,1.13172 127.619121,-6.05393517 106.600638,5.62496138 C85.582155,17.3038579 79.182155,42.4624786 91.0640861,63.1190303 L176.056086,208.632961 C187.938017,228.397927 213.52919,235.583582 234.547672,223.904686 C254.648086,212.225789 261.966155,186.175582 250.084224,166.419444 L250.084224,166.401789 Z" fill="#4285F4" />
-        <ellipse fill="#34A853" cx="42.6637241" cy="187.924414" rx="42.6637241" ry="41.6044138" />
-      </g>
-    </svg>
-  );
-}
-
-function InstagramIcon() {
-  return (
-    <svg viewBox="0 0 32 32" className="w-5 h-5">
-      <rect x="2" y="2" width="28" height="28" rx="6" fill="url(#insta1)" />
-      <rect x="2" y="2" width="28" height="28" rx="6" fill="url(#insta2)" />
-      <rect x="2" y="2" width="28" height="28" rx="6" fill="url(#insta3)" />
-      <defs>
-        <radialGradient id="insta1" cx="0" cy="0" r="1" gradientTransform="translate(12 23) rotate(-55.38) scale(25.52)"><stop stopColor="#B13589" /><stop offset="0.79" stopColor="#C62F94" /><stop offset="1" stopColor="#8A3AC8" /></radialGradient>
-        <radialGradient id="insta2" cx="0" cy="0" r="1" gradientTransform="translate(11 31) rotate(-65.14) scale(22.59)"><stop stopColor="#E0E8B7" /><stop offset="0.44" stopColor="#FB8A2E" /><stop offset="0.71" stopColor="#E2425C" /><stop offset="1" stopColor="#E2425C" stopOpacity="0" /></radialGradient>
-        <radialGradient id="insta3" cx="0" cy="0" r="1" gradientTransform="translate(0.5 3) rotate(-8.13) scale(38.89 8.32)"><stop offset="0.16" stopColor="#406ADC" /><stop offset="0.47" stopColor="#6A45BE" /><stop offset="1" stopColor="#6A45BE" stopOpacity="0" /></radialGradient>
-      </defs>
-      <path d="M23 10.5C23 11.3284 22.3284 12 21.5 12C20.6716 12 20 11.3284 20 10.5C20 9.67157 20.6716 9 21.5 9C22.3284 9 23 9.67157 23 10.5Z" fill="white" />
-      <path fill-rule="evenodd" clip-rule="evenodd" d="M16 21C18.7614 21 21 18.7614 21 16C21 13.2386 18.7614 11 16 11C13.2386 11 11 13.2386 11 16C11 18.7614 13.2386 21 16 21ZM16 19C17.6569 19 19 17.6569 19 16C19 14.3431 17.6569 13 16 13C14.3431 13 13 14.3431 13 16C13 17.6569 14.3431 19 16 19Z" fill="white" />
-      <path fill-rule="evenodd" clip-rule="evenodd" d="M6 15.6C6 12.2397 6 10.5595 6.65396 9.27606C7.2292 8.14708 8.14708 7.2292 9.27606 6.65396C10.5595 6 12.2397 6 15.6 6H16.4C19.7603 6 21.4405 6 22.7239 6.65396C23.8529 7.2292 24.7708 8.14708 25.346 9.27606C26 10.5595 26 12.2397 26 15.6V16.4C26 19.7603 26 21.4405 25.346 22.7239C24.7708 23.8529 23.8529 24.7708 22.7239 25.346C21.4405 26 19.7603 26 16.4 26H15.6C12.2397 26 10.5595 26 9.27606 25.346C8.14708 24.7708 7.2292 23.8529 6.65396 22.7239C6 21.4405 6 19.7603 6 16.4V15.6ZM15.6 8H16.4C18.1132 8 19.2777 8.00156 20.1779 8.0751C21.0548 8.14674 21.5032 8.27659 21.816 8.43597C22.5686 8.81947 23.1805 9.43139 23.564 10.184C23.7234 10.4968 23.8533 10.9452 23.9249 11.8221C23.9984 12.7223 24 13.8868 24 15.6V16.4C24 18.1132 23.9984 19.2777 23.9249 20.1779C23.8533 21.0548 23.7234 21.5032 23.564 21.816C23.1805 22.5686 22.5686 23.1805 21.816 23.564C21.5032 23.7234 21.0548 23.8533 20.1779 23.9249C19.2777 23.9984 18.1132 24 16.4 24H15.6C13.8868 24 12.7223 23.9984 11.8221 23.9249C10.9452 23.8533 10.4968 23.7234 10.184 23.564C9.43139 23.1805 8.81947 22.5686 8.43597 21.816C8.27659 21.5032 8.14674 21.0548 8.0751 20.1779C8.00156 19.2777 8 18.1132 8 16.4V15.6C8 13.8868 8.00156 12.7223 8.0751 11.8221C8.14674 10.9452 8.27659 10.4968 8.43597 10.184C8.81947 9.43139 9.43139 8.81947 10.184 8.43597C10.4968 8.27659 10.9452 8.14674 11.8221 8.0751C12.7223 8.00156 13.8868 8 15.6 8Z" fill="white" />
-    </svg>
-  );
-}
+

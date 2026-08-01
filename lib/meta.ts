@@ -1171,6 +1171,125 @@ export async function duplicateCampaignStructure(
   };
 }
 
+/* ------------------------- duplicar na MESMA conta -------------------------
+   A tela de campanhas duplica conjunto e anúncio DENTRO da própria conta
+   (criar variação, testar formato), então não há remapeamento de Página,
+   pixel ou público — tudo já existe lá. Tudo nasce PAUSADO, como na cópia
+   entre contas. */
+
+export interface DuplicateAdsetInput {
+  accountId: string; // act_xxx
+  adsetId: string;
+  nameSuffix?: string;
+}
+
+export async function duplicateAdsetInAccount(input: DuplicateAdsetInput, token: string = TOKEN): Promise<{ id?: string; name: string; campaignId?: string }> {
+  const fields = [
+    "id", "name", "account_id", "campaign_id", "optimization_goal", "billing_event", "bid_amount", "bid_strategy",
+    "daily_budget", "lifetime_budget", "destination_type", "start_time", "end_time",
+    "targeting", "promoted_object", "attribution_spec",
+  ].join(",");
+  const adset = await fbGetOne<any>(`${GRAPH}/${input.adsetId}?fields=${fields}&access_token=${token}`);
+  const dona = String(adset.account_id || "").replace(/^act_/, "");
+  const informada = String(input.accountId).replace(/^act_/, "");
+  if (dona && dona !== informada) {
+    throw new Error("O conjunto não pertence à conta informada.");
+  }
+  if (!adset.campaign_id) throw new Error("Não foi possível ler a campanha deste conjunto.");
+
+  const sufixo = (input.nameSuffix || "").trim();
+  const nome = sufixo ? `${adset.name} ${sufixo}` : adset.name;
+  const targeting = adset.targeting || {};
+
+  const params: Record<string, string> = {
+    name: nome,
+    campaign_id: String(adset.campaign_id),
+    status: "PAUSED",
+    targeting: JSON.stringify(targeting),
+  };
+  if (adset.optimization_goal) params.optimization_goal = adset.optimization_goal;
+  if (adset.billing_event) params.billing_event = adset.billing_event;
+  if (adset.destination_type) params.destination_type = adset.destination_type;
+  if (adset.bid_strategy) params.bid_strategy = adset.bid_strategy;
+  // Mesma regra da cópia entre contas: bid_amount só nas estratégias que usam
+  // limite de lance; "menor custo sem limite" recusa se ele for enviado.
+  const estrategia = adset.bid_strategy || "LOWEST_COST_WITHOUT_CAP";
+  const usaLimite = estrategia === "LOWEST_COST_WITH_BID_CAP" || estrategia === "COST_CAP" || estrategia === "TARGET_COST";
+  if (adset.bid_amount != null && usaLimite) params.bid_amount = String(adset.bid_amount);
+  if (adset.daily_budget) params.daily_budget = String(adset.daily_budget);
+  if (adset.lifetime_budget) params.lifetime_budget = String(adset.lifetime_budget);
+  if (adset.promoted_object && typeof adset.promoted_object === "object") params.promoted_object = JSON.stringify(adset.promoted_object);
+  if (adset.attribution_spec) params.attribution_spec = JSON.stringify(adset.attribution_spec);
+  // start_time no passado é recusado; a cópia nasce pausada. end_time só se
+  // ainda estiver por vir.
+  if (adset.end_time && new Date(adset.end_time).getTime() > Date.now()) params.end_time = adset.end_time;
+
+  const res = await fbPost(`${input.accountId}/adsets`, params, token, false);
+  return { id: res?.id, name: nome, campaignId: String(adset.campaign_id) };
+}
+
+export interface DuplicateAdInput {
+  accountId: string; // act_xxx
+  adId: string;
+  nameSuffix?: string;
+}
+
+export async function duplicateAdInAccount(input: DuplicateAdInput, token: string = TOKEN): Promise<{ id?: string; name: string }> {
+  const ad = await fbGetOne<any>(
+    `${GRAPH}/${input.adId}?fields=id,name,adset_id,account_id,creative{id,name,object_story_spec}&access_token=${token}`
+  );
+  const dona = String(ad.account_id || "").replace(/^act_/, "");
+  const informada = String(input.accountId).replace(/^act_/, "");
+  if (dona && dona !== informada) {
+    throw new Error("O anúncio não pertence à conta informada.");
+  }
+  if (!ad.adset_id) throw new Error("Não foi possível ler o conjunto deste anúncio.");
+  const creative = ad.creative || {};
+  // O object_story_spec carrega tudo que define a peça (página, mensagem,
+  // link, mídia) e volta como veio da API; o resto (id, status) é de leitura.
+  const creativePayload = creative.object_story_spec ? { object_story_spec: creative.object_story_spec } : null;
+  if (!creativePayload) throw new Error("Não foi possível ler o criativo deste anúncio para duplicar.");
+
+  const sufixo = (input.nameSuffix || "").trim();
+  const nome = sufixo ? `${ad.name} ${sufixo}` : ad.name;
+  const params: Record<string, string> = {
+    name: nome,
+    adset_id: String(ad.adset_id),
+    status: "PAUSED",
+    creative: JSON.stringify(creativePayload),
+  };
+  const res = await fbPost(`${input.accountId}/ads`, params, token, false);
+  return { id: res?.id, name: nome };
+}
+
+export const META_CAMPAIGN_OBJECTIVES: string[] = [
+  "OUTCOME_AWARENESS",
+  "OUTCOME_TRAFFIC",
+  "OUTCOME_ENGAGEMENT",
+  "OUTCOME_LEADS",
+  "OUTCOME_SALES",
+  "OUTCOME_APP_PROMOTION",
+];
+
+export interface CreateCampaignInput {
+  accountId: string; // act_xxx
+  name: string;
+  objective: string;
+  status: "ACTIVE" | "PAUSED";
+}
+
+export async function createMetaCampaign(input: CreateCampaignInput, token: string = TOKEN): Promise<{ id?: string; name: string }> {
+  const params: Record<string, string> = {
+    name: input.name,
+    objective: input.objective,
+    buying_type: "AUCTION",
+    special_ad_categories: "[]",
+    status: input.status,
+  };
+  const res = await fbPost(`${input.accountId}/campaigns`, params, token, false);
+  return { id: res?.id, name: input.name };
+}
+
 // Diagnóstico: devolve o payload cru de UMA conta (todos os campos financeiros
 // que a Meta expõe). Usado para investigar o saldo pré-pago.
 export async function getAccountRaw(actId: string, token: string = TOKEN): Promise<any> {
