@@ -16,7 +16,7 @@ import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import {
-  money, num, pct, pickVal, resultLabel, pickPrimaryResult, orderedResults,
+  money, num, pct, pickVal, resultLabel, pickPrimaryResult, orderedResults, brDate,
   RESULT_FAMILIES, RESULT_FAMILY_BY_SLUG, PURCHASE_KEYS,
 } from "@/lib/format";
 import { compareSortValues, SortButton, SortState, usePersistentSort } from "@/components/SortableHeader";
@@ -24,6 +24,7 @@ import DuplicateCampaign from "@/components/DuplicateCampaign";
 import AccountChanges from "@/components/AccountChanges";
 import StrategicSummaryCard from "@/components/StrategicSummaryCard";
 import StructureWizard from "@/components/StructureWizard";
+import { BrDateInput } from "@/components/BrDateInput";
 import { buildWhatsAppReport, monthPeriodLabel } from "@/lib/whatsapp-report";
 
 interface Row {
@@ -58,6 +59,32 @@ function isoDaysAgo(days: number) {
   return d.toISOString().slice(0, 10);
 }
 
+type Period = "today" | "7d" | "14d" | "30d" | "mtd" | "custom";
+const PRESETS: { key: Period; label: string }[] = [
+  { key: "today", label: "Hoje" },
+  { key: "7d", label: "7D" },
+  { key: "14d", label: "14D" },
+  { key: "30d", label: "30D" },
+  { key: "mtd", label: "Mês atual" },
+];
+
+function firstOfMonthIso() {
+  const d = new Date();
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-01`;
+}
+
+function rangeForPeriod(period: Period, customSince: string, customUntil: string) {
+  const today = isoDaysAgo(0);
+  switch (period) {
+    case "today": return { since: today, until: today };
+    case "7d": return { since: isoDaysAgo(7), until: isoDaysAgo(1) };
+    case "14d": return { since: isoDaysAgo(14), until: isoDaysAgo(1) };
+    case "30d": return { since: isoDaysAgo(30), until: isoDaysAgo(1) };
+    case "mtd": return { since: firstOfMonthIso(), until: today };
+    case "custom": return { since: customSince, until: customUntil };
+  }
+}
+
 function resultValue(results: Record<string, number> | undefined, selection: string | null): number {
   if (!selection || !results) return 0;
   if (selection === ALL_CONVERSIONS) {
@@ -90,8 +117,14 @@ export default function CampaignsPage() {
   const [reportOpen, setReportOpen] = useState(false);
   const [structureOpen, setStructureOpen] = useState(false);
   const [tableSort, setTableSort] = usePersistentSort<ResultKey>("adsctrl:sort:campanhas", { key: "spend", direction: "desc" }, SORT_KEYS);
+  const [period, setPeriod] = useState<Period>("14d");
+  const [customSince, setCustomSince] = useState(isoDaysAgo(14));
+  const [customUntil, setCustomUntil] = useState(isoDaysAgo(1));
+  const [showCustom, setShowCustom] = useState(false);
 
-  const range = useMemo(() => ({ since: isoDaysAgo(14), until: isoDaysAgo(1) }), []);
+  const range = useMemo(() => rangeForPeriod(period, customSince, customUntil), [period, customSince, customUntil]);
+  const periodLabel = period === "custom" ? "período personalizado" : PRESETS.find((p) => p.key === period)?.label || period;
+  const periodRangeText = period === "custom" ? `${brDate(range.since)} → ${brDate(range.until)}` : periodLabel;
   const account = accounts.find((item) => item.account_id === accountId);
   const isMeta = account?.platform === "meta";
 
@@ -325,7 +358,7 @@ export default function CampaignsPage() {
             </select>
             <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
           </div>
-          <p className="text-sm text-muted-foreground mt-0.5">Estrutura e veiculação · últimos 14 dias · {account ? (account.platform === "google" ? "Google Ads" : "Meta Ads") : "—"}{counts ? ` · ${rowCount}` : ""}</p>
+          <p className="text-sm text-muted-foreground mt-0.5">Estrutura e veiculação · {periodRangeText} · {account ? (account.platform === "google" ? "Google Ads" : "Meta Ads") : "—"}{counts ? ` · ${rowCount}` : ""}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="ghost" size="sm" onClick={async () => { try { await reload(); flash("Dados atualizados."); } catch (e: any) { flash(e.message, true); } }}><RefreshCw className="h-3.5 w-3.5 mr-1" /> Atualizar</Button>
@@ -356,6 +389,25 @@ export default function CampaignsPage() {
           <span>{error}</span>
         </div>
       )}
+
+      {/* Período */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-1.5 p-1 rounded-lg bg-muted/50 border border-border/50">
+          {PRESETS.map((p) => (
+            <button key={p.key} type="button" onClick={() => { setPeriod(p.key); setShowCustom(false); }} className={cn("px-3 py-1.5 text-xs font-medium rounded-md transition-colors", period === p.key ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>{p.label}</button>
+          ))}
+          <button type="button" onClick={() => { setShowCustom(true); setPeriod("custom"); }} className={cn("px-3 py-1.5 text-xs font-medium rounded-md transition-colors", period === "custom" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>Personalizado</button>
+        </div>
+
+        {showCustom && (
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <BrDateInput value={customSince} onChange={(value) => { setCustomSince(value); setPeriod("custom"); }} max={customUntil} className="h-8 px-2.5 text-xs rounded-lg border border-border/50 bg-muted/30 focus:outline-none focus:ring-2 focus:ring-ring/30" />
+            <span className="text-muted-foreground">→</span>
+            <BrDateInput value={customUntil} onChange={(value) => { setCustomUntil(value); setPeriod("custom"); }} min={customSince} max={isoDaysAgo(0)} className="h-8 px-2.5 text-xs rounded-lg border border-border/50 bg-muted/30 focus:outline-none focus:ring-2 focus:ring-ring/30" />
+            <span className="text-xs text-muted-foreground">{brDate(range.since)} → {brDate(range.until)}</span>
+          </div>
+        )}
+      </div>
 
       {/* Resultado */}
       <div className="flex items-center gap-2">
