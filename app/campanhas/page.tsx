@@ -59,13 +59,14 @@ function isoDaysAgo(days: number) {
   return d.toISOString().slice(0, 10);
 }
 
-type Period = "today" | "7d" | "14d" | "30d" | "mtd" | "custom";
+type Period = "today" | "7d" | "14d" | "30d" | "mtd" | "lastMonth" | "custom";
 const PRESETS: { key: Period; label: string }[] = [
   { key: "today", label: "Hoje" },
   { key: "7d", label: "7D" },
   { key: "14d", label: "14D" },
   { key: "30d", label: "30D" },
   { key: "mtd", label: "Mês atual" },
+  { key: "lastMonth", label: "Mês Antigo" },
 ];
 
 function firstOfMonthIso() {
@@ -81,6 +82,7 @@ function rangeForPeriod(period: Period, customSince: string, customUntil: string
     case "14d": return { since: isoDaysAgo(14), until: isoDaysAgo(1) };
     case "30d": return { since: isoDaysAgo(30), until: isoDaysAgo(1) };
     case "mtd": return { since: firstOfMonthIso(), until: today };
+    case "lastMonth": return monthRangeIso(prevMonthIso());
     case "custom": return { since: customSince, until: customUntil };
   }
 }
