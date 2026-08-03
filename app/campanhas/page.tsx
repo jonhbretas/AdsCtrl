@@ -125,6 +125,18 @@ export default function CampaignsPage() {
   const [customUntil, setCustomUntil] = useState(isoDaysAgo(1));
   const [showCustom, setShowCustom] = useState(false);
   const [selectedCampaigns, setSelectedCampaigns] = useState<Set<string>>(new Set());
+  // Rótulo do resultado escolhido na página ("Cliques no Link", "Conversas
+  // iniciadas"...) — o resumo segue a MESMA métrica da árvore.
+  const resultLabelText = useMemo(() => {
+    if (!result) return null;
+    if (result === ALL_CONVERSIONS) return "Conversões";
+    if (result.startsWith(FAMILY_PREFIX)) {
+      const slug = result.slice(FAMILY_PREFIX.length);
+      return RESULT_FAMILY_BY_SLUG[slug]?.label || null;
+    }
+    if (result.startsWith(ACTION_PREFIX)) return resultLabel(result.slice(ACTION_PREFIX.length));
+    return null;
+  }, [result]);
 
   const range = useMemo(() => rangeForPeriod(period, customSince, customUntil), [period, customSince, customUntil]);
   const periodLabel = period === "custom" ? "período personalizado" : PRESETS.find((p) => p.key === period)?.label || period;
@@ -583,7 +595,7 @@ export default function CampaignsPage() {
       {duplicateAd && <DuplicateSameModal noun="anúncio" name={duplicateAd.name} onClose={() => setDuplicateAd(null)} onSubmit={async (suffix) => { const ok = await handleDuplicateSame("ad", duplicateAd.id, suffix); if (ok) setDuplicateAd(null); return ok; }} />}
       {duplicateCP && <DuplicateCampaign sourceAccountId={accountId} campaignId={duplicateCP.id} campaignName={duplicateCP.name} onClose={() => setDuplicateCP(null)} />}
       {newCampaign && <NewCampaignModal onClose={() => setNewCampaign(false)} onSubmit={async (name, objective, status) => { const ok = await handleNewCampaign(name, objective, status); if (ok) setNewCampaign(false); return ok; }} />}
-      {reportOpen && <WhatsAppReportModal accountId={accountId} accountName={account?.name || "Conta"} currency={account?.currency} since={range.since} until={range.until} periodLabel={periodRangeText} selectedCampaignIds={[...selectedCampaigns]} detail={detail} onClose={() => setReportOpen(false)} />}
+      {reportOpen && <WhatsAppReportModal accountId={accountId} accountName={account?.name || "Conta"} currency={account?.currency} since={range.since} until={range.until} periodLabel={periodRangeText} selectedCampaignIds={[...selectedCampaigns]} detail={detail} resultSelection={result} resultSelectionLabel={resultLabelText} onClose={() => setReportOpen(false)} />}
       {structureOpen && <StructureWizard accountId={accountId} accountName={account?.name || "Conta"} onClose={() => setStructureOpen(false)} onCreated={() => { flash("Estrutura criada. Revise os orçamentos e publique."); reload().catch(() => {}); }} />}
     </div>
   );
@@ -838,13 +850,17 @@ function prevMonthIso(): string {
 // Resumo pronto para colar no WhatsApp: o que foi feito na conta, de forma
 // curta — quanto, onde (objetivo/região/plataforma) e o resultado. Usa o
 // período escolhido na página e, com campanhas selecionadas, só elas entram.
-function WhatsAppReportModal({ accountId, accountName, currency, since, until, periodLabel, selectedCampaignIds, detail, onClose }: {
+function WhatsAppReportModal({ accountId, accountName, currency, since, until, periodLabel, selectedCampaignIds, detail, resultSelection, resultSelectionLabel, onClose }: {
   accountId: string; accountName: string; currency?: string;
   since: string; until: string; periodLabel: string; selectedCampaignIds: string[];
   /** O detalhe já carregado pela página — mesmo período, então nada de
    *  refazer as ~18 chamadas à Meta ao abrir o resumo (era metade do rate
    *  limit). Só o faturado (2 chamadas leves) ainda é buscado aqui. */
   detail: Detail | null;
+  /** Resultado escolhido na página (família ou ação): o resumo usa a MESMA
+   *  métrica da árvore, não a família dominante da conta. */
+  resultSelection: string | null;
+  resultSelectionLabel: string | null;
   onClose: () => void;
 }) {
   const [revenue, setRevenue] = useState<number | null>(null);
@@ -912,12 +928,23 @@ function WhatsAppReportModal({ accountId, accountName, currency, since, until, p
   const report = useMemo(() => {
     if (!detail || !scoped) return "";
 
-    // Resultado de uma campanha/anúncio segundo o objetivo dela, devolvendo
-    // TAMBÉM a família que gerou o número (conversas, vendas, leads...) —
-    // o resumo rotula o resultado pelo que a conta de fato entrega.
     const fam = (slug: string) => RESULT_FAMILY_BY_SLUG[slug];
+
+    // Substantivos do rótulo selecionado na página: linha usa minúsculas
+    // ("cliques no link"); total usa singular ("Clique no Link").
+    const selectionShort = resultSelectionLabel ? resultSelectionLabel.toLowerCase() : null;
+    const selectionNoun = resultSelectionLabel ? (resultSelectionLabel.endsWith("s") ? resultSelectionLabel.slice(0, -1) : resultSelectionLabel) : null;
+
+    // Resultado de uma campanha/anúncio. Com resultado selecionado na página,
+    // usa EXATAMENTE ele — o resumo segue a mesma métrica da árvore (foi o
+    // caso do CA-CAMPINAS: selecionou "Cliques no Link" e o resumo deve dizer
+    // cliques, não mensagens). Sem seleção, cai na heurística por objetivo,
+    // devolvendo também a família para rotular o que a conta entrega.
     const rowResult = (row: Row, objective?: string): { value: number; family: string } => {
       const map = row.results;
+      if (resultSelection) {
+        return { value: resultValue(map, resultSelection), family: "selected" };
+      }
       const tryFam = (slug: string): number => pickVal(map, fam(slug).keys);
       switch (objective) {
         case "OUTCOME_SALES": {
@@ -967,6 +994,10 @@ function WhatsAppReportModal({ accountId, accountName, currency, since, until, p
       vendas: "venda", mensagens: "conversa", leads: "lead", cadastros: "cadastro",
       cliques: "clique", engajamento: "engajamento", lpv: "view de LP",
     };
+    const nounFor = (family: string, short: boolean): string => {
+      if (family === "selected") return short ? selectionShort || "resultados" : selectionNoun || "resultado";
+      return short ? FAMILY_SHORT[family] || "resultados" : FAMILY_NOUN[family] || "resultado";
+    };
 
     const TYPE_LABELS: Record<string, string> = {
       OUTCOME_SALES: "Vendas",
@@ -991,14 +1022,14 @@ function WhatsAppReportModal({ accountId, accountName, currency, since, until, p
       byType.set(key, entry);
     }
     const campaignTypes = [...byType.values()]
-      .map((entry) => ({ label: entry.label, results: entry.results, familyLabel: fam(entry.family).label }))
+      .map((entry) => ({ label: entry.label, results: entry.results, familyLabel: resultSelectionLabel || fam(entry.family).label }))
       .sort((a, b) => b.results - a.results);
 
     // A família dominante da conta define o rótulo do total ("Conversas
-    // iniciadas: 35 · custo por conversa R$ 25").
+    // iniciadas: 35 · custo por conversa R$ 25") — quando não há seleção.
     const dominant = [...familyTotals.entries()].sort((a, b) => b[1] - a[1])[0];
-    const resultsLabel = dominant && dominant[0] !== "conversoes" ? fam(dominant[0]).label : "Resultados";
-    const resultsNoun = dominant ? FAMILY_NOUN[dominant[0]] || "resultado" : "resultado";
+    const resultsLabel = resultSelectionLabel || (dominant && dominant[0] !== "conversoes" ? fam(dominant[0]).label : "Resultados");
+    const resultsNoun = selectionNoun || (dominant ? FAMILY_NOUN[dominant[0]] || "resultado" : "resultado");
 
     // Criativos: o anúncio herda o objetivo da campanha mãe (o insight de
     // anúncio não traz o objetivo) e entra com nome, gasto, resultado e link.
@@ -1029,10 +1060,10 @@ function WhatsAppReportModal({ accountId, accountName, currency, since, until, p
       const parent = campaignId ? campaignResult.get(campaignId) : undefined;
       const rawSum = campaignId ? rawByCampaign.get(campaignId) || 0 : 0;
       let results = r.value;
-      let resultNoun = FAMILY_SHORT[r.family] || "resultados";
+      let resultNoun = nounFor(r.family, true);
       if (parent && parent.value > 0 && rawSum > 0 && r.value > 0) {
         results = Math.max(1, Math.round(parent.value * (r.value / rawSum)));
-        resultNoun = FAMILY_SHORT[parent.family] || "resultados";
+        resultNoun = nounFor(parent.family, true);
       }
       const name = aliases[row.name] || row.name;
       const existing = creativeAgg.get(name);
@@ -1062,7 +1093,7 @@ function WhatsAppReportModal({ accountId, accountName, currency, since, until, p
       days,
       campaigns: scoped.campaigns.map((row) => {
         const r = rowResult(row, row.objective);
-        return { name: aliases[row.name] || row.name, objective: row.objective, spend: row.spend, results: r.value, resultNoun: FAMILY_SHORT[r.family] || "resultados" };
+        return { name: aliases[row.name] || row.name, objective: row.objective, spend: row.spend, results: r.value, resultNoun: nounFor(r.family, true) };
       }),
       campaignTypes,
       creatives,
@@ -1077,7 +1108,7 @@ function WhatsAppReportModal({ accountId, accountName, currency, since, until, p
       cpr,
       revenue,
     });
-  }, [detail, scoped, accountName, currency, periodLabel, since, until, days, aliases, revenue]);
+  }, [detail, scoped, accountName, currency, periodLabel, since, until, days, aliases, resultSelection, resultSelectionLabel, revenue]);
 
   async function copy() {
     if (!report) return;
