@@ -26,7 +26,7 @@ import StrategicSummaryCard from "@/components/StrategicSummaryCard";
 import StructureWizard from "@/components/StructureWizard";
 import { BrDateInput } from "@/components/BrDateInput";
 import QuickAccess from "@/components/QuickAccess";
-import { buildWhatsAppReport, monthPeriodLabel } from "@/lib/whatsapp-report";
+import { buildWhatsAppReport } from "@/lib/whatsapp-report";
 
 interface Row {
   id: string; name: string; spend: number; impressions: number; clicks: number;
@@ -124,6 +124,7 @@ export default function CampaignsPage() {
   const [customSince, setCustomSince] = useState(isoDaysAgo(14));
   const [customUntil, setCustomUntil] = useState(isoDaysAgo(1));
   const [showCustom, setShowCustom] = useState(false);
+  const [selectedCampaigns, setSelectedCampaigns] = useState<Set<string>>(new Set());
 
   const range = useMemo(() => rangeForPeriod(period, customSince, customUntil), [period, customSince, customUntil]);
   const periodLabel = period === "custom" ? "período personalizado" : PRESETS.find((p) => p.key === period)?.label || period;
@@ -136,6 +137,10 @@ export default function CampaignsPage() {
     const stored = window.localStorage.getItem("adsctrl:selected-account") || "";
     setAccountId(requested || stored);
   }, []);
+
+  useEffect(() => {
+    setSelectedCampaigns(new Set());
+  }, [accountId]);
 
   useEffect(() => {
     fetch("/api/accounts", { cache: "no-store" })
@@ -225,6 +230,12 @@ export default function CampaignsPage() {
   }, [tableSort, result]);
 
   const sortedCampaigns = useMemo(() => sortRows(detail?.campaigns || []), [sortRows, detail]);
+  const allSelected = sortedCampaigns.length > 0 && sortedCampaigns.every((row) => selectedCampaigns.has(row.id));
+  const someSelected = selectedCampaigns.size > 0;
+
+  function toggleSelectAll() {
+    setSelectedCampaigns(allSelected ? new Set() : new Set(sortedCampaigns.map((row) => row.id)));
+  }
 
   function flash(text: string, bad = false) {
     setNote({ text, bad });
@@ -366,7 +377,7 @@ export default function CampaignsPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="ghost" size="sm" onClick={async () => { try { await reload(); flash("Dados atualizados."); } catch (e: any) { flash(e.message, true); } }}><RefreshCw className="h-3.5 w-3.5 mr-1" /> Atualizar</Button>
-          <Button variant="ghost" size="sm" onClick={() => setReportOpen(true)} disabled={!accountId} title="Resumo curto para colar no WhatsApp (fechamento mensal)"><MessageCircle className="h-3.5 w-3.5 mr-1" /> Resumo</Button>
+          <Button variant="ghost" size="sm" onClick={() => setReportOpen(true)} disabled={!accountId} title={someSelected ? `Resumo com as ${selectedCampaigns.size} campanha(s) selecionada(s), no período da página` : "Resumo curto para colar no WhatsApp (fechamento mensal)"}><MessageCircle className="h-3.5 w-3.5 mr-1" /> Resumo{someSelected ? ` (${selectedCampaigns.size})` : ""}</Button>
           <Button variant="ghost" size="sm" onClick={() => setStructureOpen(true)} disabled={!isMeta} title={isMeta ? "Gerar funil de campanhas a partir da estratégia (pausado)" : "Gerar estrutura só na Meta"}><Sparkles className="h-3.5 w-3.5 mr-1" /> Sugerir estrutura</Button>
           <Button size="sm" onClick={() => setNewCampaign(true)} disabled={!isMeta} title={isMeta ? "Criar campanha" : "Criar campanha só na Meta"}>
             <Plus className="h-3.5 w-3.5 mr-1" /> Nova campanha
@@ -440,7 +451,14 @@ export default function CampaignsPage() {
       <Card className="min-w-0 overflow-hidden">
         <div className="overflow-x-auto">
           <div className="min-w-[900px]">
-            <div className="grid grid-cols-[26px_44px_1.8fr_1fr_0.9fr_0.9fr_0.8fr_0.7fr_0.9fr_0.8fr_0.8fr_180px] gap-2 px-4 py-2.5 border-b border-border/50 bg-muted/30 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider items-center">
+            <div className="grid grid-cols-[30px_26px_44px_1.8fr_1fr_0.9fr_0.9fr_0.8fr_0.7fr_0.9fr_0.8fr_0.8fr_180px] gap-2 px-4 py-2.5 border-b border-border/50 bg-muted/30 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider items-center">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                onChange={toggleSelectAll}
+                title={allSelected ? "Desmarcar todas" : "Selecionar todas (para o resumo)"}
+                className="h-3.5 w-3.5 accent-primary"
+              />
               <span />
               <span>No ar</span>
               <SortHeader sortKey="name" sort={tableSort} onSort={setTableSort} align="left">Nome</SortHeader>
@@ -471,6 +489,8 @@ export default function CampaignsPage() {
                     expanded={campaignOpen}
                     childCount={children.length}
                     childNoun="conjunto"
+                    selected={selectedCampaigns.has(campaign.id)}
+                    onToggleSelect={() => toggleSet(selectedCampaigns, setSelectedCampaigns, campaign.id)}
                     onToggleExpand={() => toggleSet(openCampaigns, setOpenCampaigns, campaign.id)}
                     onToggleDelivery={() => toggleDelivery("campaign", campaign)}
                     busy={changing === campaign.id}
@@ -563,7 +583,7 @@ export default function CampaignsPage() {
       {duplicateAd && <DuplicateSameModal noun="anúncio" name={duplicateAd.name} onClose={() => setDuplicateAd(null)} onSubmit={async (suffix) => { const ok = await handleDuplicateSame("ad", duplicateAd.id, suffix); if (ok) setDuplicateAd(null); return ok; }} />}
       {duplicateCP && <DuplicateCampaign sourceAccountId={accountId} campaignId={duplicateCP.id} campaignName={duplicateCP.name} onClose={() => setDuplicateCP(null)} />}
       {newCampaign && <NewCampaignModal onClose={() => setNewCampaign(false)} onSubmit={async (name, objective, status) => { const ok = await handleNewCampaign(name, objective, status); if (ok) setNewCampaign(false); return ok; }} />}
-      {reportOpen && <WhatsAppReportModal accountId={accountId} accountName={account?.name || "Conta"} currency={account?.currency} onClose={() => setReportOpen(false)} />}
+      {reportOpen && <WhatsAppReportModal accountId={accountId} accountName={account?.name || "Conta"} currency={account?.currency} since={range.since} until={range.until} periodLabel={periodRangeText} selectedCampaignIds={[...selectedCampaigns]} onClose={() => setReportOpen(false)} />}
       {structureOpen && <StructureWizard accountId={accountId} accountName={account?.name || "Conta"} onClose={() => setStructureOpen(false)} onCreated={() => { flash("Estrutura criada. Revise os orçamentos e publique."); reload().catch(() => {}); }} />}
     </div>
   );
@@ -578,11 +598,12 @@ const LEVEL_PILL: Record<RowLevel, { label: string; className: string }> = {
 };
 
 function CampaignRow({
-  row, level, expanded, childCount, childNoun, onToggleExpand, onToggleDelivery, busy, metaOnly, result, currency, onBudget, onDuplicate, depth = 0,
+  row, level, expanded, childCount, childNoun, onToggleExpand, onToggleDelivery, busy, metaOnly, result, currency, onBudget, onDuplicate, depth = 0, selected = false, onToggleSelect,
 }: {
   row: Row; level: RowLevel; expanded: boolean; childCount?: number; childNoun?: string;
   onToggleExpand: () => void; onToggleDelivery: () => void; busy: boolean; metaOnly: boolean;
   result: string | null; currency?: string; onBudget?: () => void; onDuplicate: () => void; depth?: number;
+  selected?: boolean; onToggleSelect?: () => void;
 }) {
   const res = resultValue(row.results, result);
   const rv = pickVal(row.values, PURCHASE_KEYS);
@@ -593,12 +614,25 @@ function CampaignRow({
     <div
       onClick={level === "ad" ? undefined : onToggleExpand}
       className={cn(
-        "group grid grid-cols-[26px_44px_1.8fr_1fr_0.9fr_0.9fr_0.8fr_0.7fr_0.9fr_0.8fr_0.8fr_180px] gap-2 px-4 py-2.5 items-center transition-colors",
+        "group grid grid-cols-[30px_26px_44px_1.8fr_1fr_0.9fr_0.9fr_0.8fr_0.7fr_0.9fr_0.8fr_0.8fr_180px] gap-2 px-4 py-2.5 items-center transition-colors",
         level === "ad" ? "cursor-default" : "cursor-pointer hover:bg-accent/20",
-        expanded && "bg-accent/10"
+        expanded && "bg-accent/10",
+        selected && "bg-primary/5"
       )}
       style={{ paddingLeft: `calc(1rem + ${depth * 1.75}rem)` }}
     >
+      <span onClick={(e) => e.stopPropagation()} className="flex items-center justify-center">
+        {level === "campaign" && onToggleSelect ? (
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onToggleSelect}
+            title={`Incluir "${row.name}" no resumo`}
+            className="h-3.5 w-3.5 accent-primary cursor-pointer"
+          />
+        ) : null}
+      </span>
+
       <span className="text-muted-foreground">
         {level !== "ad" && (expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />)}
       </span>
@@ -779,25 +813,11 @@ function Overlay({ children, onClose }: { children: React.ReactNode; onClose: ()
   );
 }
 
-function firstOfMonth() {
-  const d = new Date();
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-01`;
-}
-
-function todayIso() {
-  return new Date().toISOString().slice(0, 10);
-}
-
 function monthRangeIso(monthIso: string): { since: string; until: string } {
   const [year, month] = monthIso.split("-").map(Number);
   const since = `${year}-${String(month).padStart(2, "0")}-01`;
   const until = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
   return { since, until };
-}
-
-function currentMonthIso(): string {
-  const d = new Date();
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
 function prevMonthIso(): string {
@@ -806,65 +826,25 @@ function prevMonthIso(): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
-function monthLabel(iso: string): string {
-  const [year, month] = iso.split("-").map(Number);
-  return new Date(year, month - 1, 1).toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
-}
-
 // Resumo pronto para colar no WhatsApp: o que foi feito na conta, de forma
-// curta — quanto, onde (objetivo/região/plataforma) e o resultado.
-type ReportPeriod = "month" | "prevMonth" | "monthPick" | "7d" | "14d" | "21d" | "custom";
-const REPORT_PERIODS: { key: ReportPeriod; label: string }[] = [
-  { key: "month", label: "Mês atual" },
-  { key: "prevMonth", label: "Mês anterior" },
-  { key: "monthPick", label: "Mês específico" },
-  { key: "7d", label: "7 dias" },
-  { key: "14d", label: "14 dias" },
-  { key: "21d", label: "21 dias" },
-  { key: "custom", label: "Personalizado" },
-];
-
-function WhatsAppReportModal({ accountId, accountName, currency, onClose }: { accountId: string; accountName: string; currency?: string; onClose: () => void }) {
-  const [period, setPeriod] = useState<ReportPeriod>("month");
-  const [monthPick, setMonthPick] = useState(currentMonthIso());
-  const [customSince, setCustomSince] = useState(isoDaysAgo(21));
-  const [customUntil, setCustomUntil] = useState(isoDaysAgo(1));
+// curta — quanto, onde (objetivo/região/plataforma) e o resultado. Usa o
+// período escolhido na página e, com campanhas selecionadas, só elas entram.
+function WhatsAppReportModal({ accountId, accountName, currency, since, until, periodLabel, selectedCampaignIds, onClose }: {
+  accountId: string; accountName: string; currency?: string;
+  since: string; until: string; periodLabel: string; selectedCampaignIds: string[];
+  onClose: () => void;
+}) {
   const [data, setData] = useState<Detail | null>(null);
   const [revenue, setRevenue] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const periodRange = useMemo(() => {
-    switch (period) {
-      case "month": return { since: firstOfMonth(), until: todayIso() };
-      case "prevMonth": return monthRangeIso(prevMonthIso());
-      case "monthPick": return monthRangeIso(monthPick);
-      case "7d": return { since: isoDaysAgo(7), until: isoDaysAgo(1) };
-      case "14d": return { since: isoDaysAgo(14), until: isoDaysAgo(1) };
-      case "21d": return { since: isoDaysAgo(21), until: isoDaysAgo(1) };
-      case "custom": return { since: customSince, until: customUntil };
-    }
-  }, [period, monthPick, customSince, customUntil]);
-
-  const periodLabel = useMemo(() => {
-    const fmt = (iso: string) => new Date(iso + "T00:00:00Z").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
-    switch (period) {
-      case "month": return monthPeriodLabel();
-      case "prevMonth": return `Mês anterior (${monthLabel(prevMonthIso())})`;
-      case "monthPick": return `Mês de ${monthLabel(monthPick)}`;
-      case "7d": return "Últimos 7 dias";
-      case "14d": return "Últimos 14 dias";
-      case "21d": return "Últimos 21 dias";
-      case "custom": return `Período ${fmt(periodRange.since)} a ${fmt(periodRange.until)}`;
-    }
-  }, [period, monthPick, periodRange]);
-
   useEffect(() => {
     let alive = true;
     setLoading(true); setError(null); setRevenue(null);
     const platform = accountId.startsWith("google:") ? "google" : "meta";
-    fetch(`/api/account/detail?account_id=${encodeURIComponent(accountId)}&platform=${platform}&since=${periodRange.since}&until=${periodRange.until}`, { cache: "no-store" })
+    fetch(`/api/account/detail?account_id=${encodeURIComponent(accountId)}&platform=${platform}&since=${since}&until=${until}`, { cache: "no-store" })
       .then(async (r) => {
         const text = await r.text();
         const d = text ? JSON.parse(text) : {};
@@ -887,7 +867,7 @@ function WhatsAppReportModal({ accountId, accountName, currency, onClose }: { ac
         if (!alive) return;
         const client = (clientsData.clients || []).find((item: any) => (item.accounts || []).some((acc: any) => acc.account_id === accountId));
         const row = (salesData.rows || []).find((item: any) => String(item.name || "").toLowerCase().trim() === String(client?.name || "").toLowerCase().trim());
-        const targetMonth = periodRange.until.slice(0, 7);
+        const targetMonth = until.slice(0, 7);
         const month = (row?.months || []).find((item: any) => String(item.month || "").startsWith(targetMonth));
         if (month && month.revenue != null) setRevenue(Number(month.revenue) || 0);
       } catch {
@@ -896,30 +876,53 @@ function WhatsAppReportModal({ accountId, accountName, currency, onClose }: { ac
     })();
 
     return () => { alive = false; };
-  }, [accountId, periodRange.since, periodRange.until]);
+  }, [accountId, since, until]);
+
+  // Escopo: só as campanhas marcadas (e conjuntos/anúncios delas), ou a
+  // conta toda quando nada foi selecionado.
+  const scoped = useMemo(() => {
+    if (!data) return null;
+    const selected = new Set(selectedCampaignIds);
+    if (selected.size === 0) {
+      return { campaigns: data.campaigns, adsets: data.adsets, ads: data.ads, filtered: false };
+    }
+    const campaigns = data.campaigns.filter((row) => selected.has(row.id));
+    const campaignIds = new Set(campaigns.map((row) => row.id));
+    const adsets = data.adsets.filter((row) => row.campaign_id && campaignIds.has(row.campaign_id));
+    const adsetIds = new Set(adsets.map((row) => row.id));
+    const ads = data.ads.filter((row) => row.adset_id && adsetIds.has(row.adset_id));
+    return { campaigns, adsets, ads, filtered: true };
+  }, [data, selectedCampaignIds]);
 
   const report = useMemo(() => {
-    if (!data) return "";
-    const k = data.kpis?.results || {};
-    const spend = data.kpis?.spend || 0;
+    if (!data || !scoped) return "";
+    const k: Record<string, number> = {};
+    for (const row of scoped.campaigns) {
+      for (const [key, value] of Object.entries(row.results)) {
+        k[key] = (k[key] || 0) + (value || 0);
+      }
+    }
+    const spend = scoped.campaigns.reduce((acc, row) => acc + row.spend, 0);
     const vendas = pickVal(k, PURCHASE_KEYS);
     const totalConversions = Object.values(k).reduce((acc, v) => acc + v, 0);
     const results = vendas > 0 ? vendas : totalConversions > 0 ? totalConversions : null;
     const cpr = results ? spend / results : null;
-    const activeCreatives = data.ads.filter((row) => row.status === "ACTIVE" || row.effective_status === "ACTIVE").length;
+    const activeCreatives = scoped.ads.filter((row) => row.status === "ACTIVE" || row.effective_status === "ACTIVE").length;
     return buildWhatsAppReport({
       accountName,
       currency: currency || "BRL",
       periodLabel,
-      campaigns: data.campaigns.map((row) => ({ name: row.name, objective: row.objective, spend: row.spend })),
-      regions: data.breakdowns?.region || [],
-      creatives: { total: data.ads.length, active: activeCreatives },
+      campaigns: scoped.campaigns.map((row) => ({ name: row.name, objective: row.objective, spend: row.spend })),
+      // A quebra por região vem da API para a conta toda; com seleção de
+      // campanhas não há região por campanha, então ela sai fora do resumo.
+      regions: scoped.filtered ? [] : data.breakdowns?.region || [],
+      creatives: { total: scoped.ads.length, active: activeCreatives },
       totalSpend: spend,
       results,
       cpr,
       revenue,
     });
-  }, [data, accountName, currency, periodLabel, revenue]);
+  }, [data, scoped, accountName, currency, periodLabel, revenue]);
 
   async function copy() {
     if (!report) return;
@@ -942,28 +945,12 @@ function WhatsAppReportModal({ accountId, accountName, currency, onClose }: { ac
         <button type="button" onClick={onClose} className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Fechar">✕</button>
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-1 p-1 rounded-lg bg-muted/50 border border-border/50">
-        {REPORT_PERIODS.map((option) => (
-          <button key={option.key} type="button" onClick={() => setPeriod(option.key)} className={cn("rounded-md px-3 py-1.5 text-xs font-medium transition-colors", period === option.key ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>{option.label}</button>
-        ))}
+      <div className="mt-3 flex flex-wrap items-center gap-1.5">
+        <span className="rounded-md border border-border/50 bg-muted/30 px-2 py-1 text-[10.5px] font-semibold text-muted-foreground">📅 {periodLabel}</span>
+        <span className={cn("rounded-md border px-2 py-1 text-[10.5px] font-semibold", scoped?.filtered ? "border-primary/30 bg-primary/10 text-primary" : "border-border/50 bg-muted/30 text-muted-foreground")}>
+          {scoped?.filtered ? `🎯 Só as ${scoped.campaigns.length} campanha(s) selecionada(s)` : "🎯 Todas as campanhas da conta"}
+        </span>
       </div>
-
-      {period === "monthPick" && (
-        <div className="mt-2 flex items-center gap-2">
-          <label className="text-[10.5px] text-muted-foreground">Mês:</label>
-          <input type="month" value={monthPick} onChange={(e) => { if (e.target.value) setMonthPick(e.target.value); }} max={currentMonthIso()} className="h-8 rounded-lg border border-border/50 bg-muted/30 px-2 text-xs outline-none focus:ring-2 focus:ring-ring/30" />
-          <span className="text-xs text-muted-foreground">{monthLabel(monthPick)}</span>
-        </div>
-      )}
-
-      {period === "custom" && (
-        <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
-          <BrDateInput value={customSince} onChange={(value) => setCustomSince(value)} max={customUntil} className="h-8 px-2.5 text-xs rounded-lg border border-border/50 bg-muted/30 focus:outline-none focus:ring-2 focus:ring-ring/30" />
-          <span className="text-muted-foreground">→</span>
-          <BrDateInput value={customUntil} onChange={(value) => setCustomUntil(value)} min={customSince} max={isoDaysAgo(0)} className="h-8 px-2.5 text-xs rounded-lg border border-border/50 bg-muted/30 focus:outline-none focus:ring-2 focus:ring-ring/30" />
-          <span className="text-xs text-muted-foreground">{brDate(periodRange.since)} → {brDate(periodRange.until)}</span>
-        </div>
-      )}
 
       <div className="mt-3">
         {loading && <div className="grid place-items-center rounded-lg border border-border/50 bg-muted/20 py-10 text-xs text-muted-foreground">Gerando resumo…</div>}
