@@ -454,6 +454,9 @@ export interface RowInsight {
   values: Record<string, number>;
   objective?: string;
   thumbnail?: string;
+  // Link direto da peça no Facebook/Instagram (a URL que a Meta devolve no
+  // creative). Abre o post publicado para conferir o desempenho do conteúdo.
+  permalink?: string;
   // Estado de veiculação. Insights não trazem isso — vem de uma consulta
   // separada, porque sem ela o painel não sabe se deve oferecer pausar ou
   // reativar. status = o que está configurado no objeto; effective_status =
@@ -602,19 +605,27 @@ async function fetchBreakdown(
   }));
 }
 
-// Busca thumbnails dos anúncios (creative) e mapeia ad_id -> url.
-async function fetchAdThumbnails(actId: string, token: string): Promise<Record<string, string>> {
+// Busca thumbnails e o link da peça (permalink) dos anúncios. O permalink é
+// a URL pública do post no Facebook ou Instagram (a Meta devolve as duas;
+// prefere-se a do Instagram por ser onde o cliente confere o conteúdo).
+async function fetchAdThumbnails(
+  actId: string,
+  token: string
+): Promise<{ thumbs: Record<string, string>; permalinks: Record<string, string> }> {
   try {
-    const url = `${GRAPH}/${actId}/ads?fields=id,creative{thumbnail_url,image_url}&limit=200&access_token=${token}`;
+    const url = `${GRAPH}/${actId}/ads?fields=id,creative{thumbnail_url,image_url,permalink_url,instagram_permalink_url}&limit=200&access_token=${token}`;
     const ads = await fbGetAll<any>(url);
-    const map: Record<string, string> = {};
+    const thumbs: Record<string, string> = {};
+    const permalinks: Record<string, string> = {};
     for (const ad of ads) {
       const t = ad.creative?.thumbnail_url || ad.creative?.image_url;
-      if (t) map[ad.id] = t;
+      if (t) thumbs[ad.id] = t;
+      const p = ad.creative?.instagram_permalink_url || ad.creative?.permalink_url;
+      if (p) permalinks[ad.id] = p;
     }
-    return map;
+    return { thumbs, permalinks };
   } catch {
-    return {};
+    return { thumbs: {}, permalinks: {} };
   }
 }
 
@@ -1450,7 +1461,7 @@ export async function getAccountDetail(
     position,
     device,
     hour,
-    thumbs,
+    { thumbs, permalinks },
     campaignStatus,
     adsetStatus,
     adStatus,
@@ -1487,7 +1498,7 @@ export async function getAccountDetail(
       token,
       false
     ).catch(() => []),
-    fetchAdThumbnails(actId, token).catch(() => ({} as Record<string, string>)),
+    fetchAdThumbnails(actId, token).catch(() => ({ thumbs: {} as Record<string, string>, permalinks: {} as Record<string, string> })),
     // Estado de veiculação dos três níveis, no MESMO paralelo das demais: num
     // Promise.all separado somaria ~0,7s ao detalhe em vez de acompanhar.
     // Falha aqui não derruba nada — sem status o painel só não oferece o botão.
@@ -1501,8 +1512,11 @@ export async function getAccountDetail(
     fetchParentMap(actId, "ad", token).catch(() => ({}) as Record<string, string>),
   ]);
 
-  // Anexa thumbnails aos anúncios.
-  for (const ad of ads) ad.thumbnail = thumbs[ad.id];
+  // Anexa thumbnails e o link da peça aos anúncios.
+  for (const ad of ads) {
+    ad.thumbnail = thumbs[ad.id];
+    ad.permalink = permalinks[ad.id];
+  }
 
   const applyStatus = (rows: RowInsight[], map: Record<string, { status: string; effective_status: string }>) => {
     for (const row of rows) {

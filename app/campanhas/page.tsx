@@ -30,7 +30,7 @@ import { buildWhatsAppReport } from "@/lib/whatsapp-report";
 
 interface Row {
   id: string; name: string; spend: number; impressions: number; clicks: number;
-  ctr: number; cpm: number; objective?: string; thumbnail?: string;
+  ctr: number; cpm: number; objective?: string; thumbnail?: string; permalink?: string;
   status?: string; effective_status?: string;
   results: Record<string, number>; values: Record<string, number>;
   campaign_id?: string; adset_id?: string;
@@ -642,9 +642,18 @@ function CampaignRow({
       </span>
 
       <div className="flex items-center gap-2 min-w-0">
-        {level === "ad" && row.thumbnail && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={row.thumbnail} alt="" width={28} height={28} className="rounded-md object-cover shrink-0" />
+        {level === "ad" && (row.thumbnail || row.permalink) && (
+          <span onClick={(e) => e.stopPropagation()} className="shrink-0">
+            {row.permalink ? (
+              <a href={row.permalink} target="_blank" rel="noreferrer" title={`Abrir o conteúdo no ${row.permalink.includes("instagram") ? "Instagram" : "Facebook"} e conferir o desempenho`} className="block no-underline">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={row.thumbnail} alt="" width={28} height={28} className="rounded-md object-cover transition-opacity hover:opacity-70" />
+              </a>
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={row.thumbnail} alt="" width={28} height={28} className="rounded-md object-cover" />
+            )}
+          </span>
         )}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5 min-w-0">
