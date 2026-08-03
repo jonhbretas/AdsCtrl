@@ -925,47 +925,60 @@ function WhatsAppReportModal({ accountId, accountName, currency, since, until, p
   const report = useMemo(() => {
     if (!data || !scoped) return "";
 
-    // Resultado de uma campanha/anúncio segundo o objetivo dela (com
-    // fallback: a família que tiver resultado, depois o total de conversões).
+    // Resultado de uma campanha/anúncio segundo o objetivo dela, devolvendo
+    // TAMBÉM a família que gerou o número (conversas, vendas, leads...) —
+    // o resumo rotula o resultado pelo que a conta de fato entrega.
     const fam = (slug: string) => RESULT_FAMILY_BY_SLUG[slug];
-    const rowResult = (row: Row, objective?: string): number => {
+    const rowResult = (row: Row, objective?: string): { value: number; family: string } => {
       const map = row.results;
+      const tryFam = (slug: string): number => pickVal(map, fam(slug).keys);
       switch (objective) {
         case "OUTCOME_SALES": {
-          const v = pickVal(map, fam("vendas").keys);
-          if (v > 0) return v;
+          const v = tryFam("vendas");
+          if (v > 0) return { value: v, family: "vendas" };
           break;
         }
         case "OUTCOME_LEADS": {
-          const v = pickVal(map, fam("leads").keys) + pickVal(map, fam("cadastros").keys);
-          if (v > 0) return v;
+          const v = tryFam("leads") + tryFam("cadastros");
+          if (v > 0) return { value: v, family: "leads" };
           break;
         }
         case "OUTCOME_TRAFFIC": {
-          const v = pickVal(map, fam("cliques").keys);
-          if (v > 0) return v;
+          const v = tryFam("cliques");
+          if (v > 0) return { value: v, family: "cliques" };
           break;
         }
         case "OUTCOME_ENGAGEMENT": {
-          const msg = pickVal(map, fam("mensagens").keys);
-          if (msg > 0) return msg;
-          const eng = pickVal(map, fam("engajamento").keys);
-          if (eng > 0) return eng;
+          const msg = tryFam("mensagens");
+          if (msg > 0) return { value: msg, family: "mensagens" };
+          const eng = tryFam("engajamento");
+          if (eng > 0) return { value: eng, family: "engajamento" };
           break;
         }
         case "OUTCOME_AWARENESS": {
-          const v = pickVal(map, fam("lpv").keys);
-          if (v > 0) return v;
+          const v = tryFam("lpv");
+          if (v > 0) return { value: v, family: "lpv" };
           break;
         }
       }
-      const vendas = pickVal(map, PURCHASE_KEYS);
-      if (vendas > 0) return vendas;
-      const msg = pickVal(map, fam("mensagens").keys);
-      if (msg > 0) return msg;
-      const leads = pickVal(map, fam("leads").keys) + pickVal(map, fam("cadastros").keys);
-      if (leads > 0) return leads;
-      return Object.values(map).reduce((acc, v) => acc + v, 0);
+      const vendas = tryFam("vendas");
+      if (vendas > 0) return { value: vendas, family: "vendas" };
+      const msg = tryFam("mensagens");
+      if (msg > 0) return { value: msg, family: "mensagens" };
+      const leads = tryFam("leads") + tryFam("cadastros");
+      if (leads > 0) return { value: leads, family: "leads" };
+      return { value: Object.values(map).reduce((acc, v) => acc + v, 0), family: "conversoes" };
+    };
+
+    // Substantivos por família: plural curto (nas linhas) e singular (no
+    // "custo por conversa/venda/lead").
+    const FAMILY_SHORT: Record<string, string> = {
+      vendas: "vendas", mensagens: "conversas", leads: "leads", cadastros: "cadastros",
+      cliques: "cliques", engajamento: "engajamentos", lpv: "views de LP",
+    };
+    const FAMILY_NOUN: Record<string, string> = {
+      vendas: "venda", mensagens: "conversa", leads: "lead", cadastros: "cadastro",
+      cliques: "clique", engajamento: "engajamento", lpv: "view de LP",
     };
 
     const TYPE_LABELS: Record<string, string> = {
@@ -977,17 +990,28 @@ function WhatsAppReportModal({ accountId, accountName, currency, since, until, p
       OUTCOME_APP_PROMOTION: "Promoção de app",
     };
 
-    // Resultado somado por tipo de campanha.
-    const byType = new Map<string, number>();
+    // Resultado somado por tipo de campanha, com o rótulo do resultado real.
+    const byType = new Map<string, { label: string; family: string; results: number }>();
+    const familyTotals = new Map<string, number>();
     for (const row of scoped.campaigns) {
       const r = rowResult(row, row.objective);
-      if (r <= 0) continue;
+      if (r.value <= 0) continue;
+      familyTotals.set(r.family, (familyTotals.get(r.family) || 0) + r.value);
       const label = TYPE_LABELS[row.objective || ""] || objectiveLabel(row.objective) || "Outros";
-      byType.set(label, (byType.get(label) || 0) + r);
+      const key = `${label}||${r.family}`;
+      const entry = byType.get(key) || { label, family: r.family, results: 0 };
+      entry.results += r.value;
+      byType.set(key, entry);
     }
-    const campaignTypes = [...byType.entries()]
-      .map(([label, results]) => ({ label, results }))
+    const campaignTypes = [...byType.values()]
+      .map((entry) => ({ label: entry.label, results: entry.results, familyLabel: fam(entry.family).label }))
       .sort((a, b) => b.results - a.results);
+
+    // A família dominante da conta define o rótulo do total ("Conversas
+    // iniciadas: 35 · custo por conversa R$ 25").
+    const dominant = [...familyTotals.entries()].sort((a, b) => b[1] - a[1])[0];
+    const resultsLabel = dominant && dominant[0] !== "conversoes" ? fam(dominant[0]).label : "Resultados";
+    const resultsNoun = dominant ? FAMILY_NOUN[dominant[0]] || "resultado" : "resultado";
 
     // Criativos: o anúncio herda o objetivo da campanha mãe (o insight de
     // anúncio não traz o objetivo) e entra com nome, gasto, resultado e link.
@@ -995,29 +1019,29 @@ function WhatsAppReportModal({ accountId, accountName, currency, since, until, p
     // resultado numa linha só.
     const adsetToCampaign = new Map(scoped.adsets.map((s) => [s.id, s.campaign_id]));
     const campaignObjective = new Map(scoped.campaigns.map((c) => [c.id, c.objective]));
-    const creativeAgg = new Map<string, { name: string; spend: number; results: number; permalink?: string }>();
+    const creativeAgg = new Map<string, { name: string; spend: number; results: number; resultNoun: string; permalink?: string }>();
     for (const row of scoped.ads) {
       if (row.spend <= 0) continue;
       const campaignId = row.adset_id ? adsetToCampaign.get(row.adset_id) : undefined;
       const objective = campaignId ? campaignObjective.get(campaignId) : undefined;
       const name = aliases[row.name] || row.name;
-      const results = rowResult(row, objective);
+      const r = rowResult(row, objective);
       const existing = creativeAgg.get(name);
       if (existing) {
         existing.spend += row.spend;
-        existing.results += results;
+        existing.results += r.value;
         if (!existing.permalink) existing.permalink = row.permalink;
       } else {
-        creativeAgg.set(name, { name, spend: row.spend, results, permalink: row.permalink });
+        creativeAgg.set(name, { name, spend: row.spend, results: r.value, resultNoun: FAMILY_SHORT[r.family] || "resultados", permalink: row.permalink });
       }
     }
     const creatives = [...creativeAgg.values()].sort((a, b) => b.spend - a.spend);
 
     const spend = scoped.campaigns.reduce((acc, row) => acc + row.spend, 0);
     // Total honesto: a soma dos resultados de cada campanha pelo próprio
-    // objetivo (19 vendas, por exemplo) — nunca a soma bruta de todas as
-    // ações da Meta, que infla o número e zera o CPR.
-    const totalResults = scoped.campaigns.reduce((acc, row) => acc + rowResult(row, row.objective), 0);
+    // objetivo — nunca a soma bruta de todas as ações da Meta, que infla o
+    // número e zera o CPR.
+    const totalResults = [...familyTotals.values()].reduce((acc, v) => acc + v, 0);
     const results = totalResults > 0 ? totalResults : null;
     const cpr = results ? spend / results : null;
     const activeCreatives = scoped.ads.filter((row) => row.status === "ACTIVE" || row.effective_status === "ACTIVE").length;
@@ -1027,7 +1051,10 @@ function WhatsAppReportModal({ accountId, accountName, currency, since, until, p
       periodLabel,
       periodRange: { since, until },
       days,
-      campaigns: scoped.campaigns.map((row) => ({ name: aliases[row.name] || row.name, objective: row.objective, spend: row.spend, results: rowResult(row, row.objective) })),
+      campaigns: scoped.campaigns.map((row) => {
+        const r = rowResult(row, row.objective);
+        return { name: aliases[row.name] || row.name, objective: row.objective, spend: row.spend, results: r.value, resultNoun: FAMILY_SHORT[r.family] || "resultados" };
+      }),
       campaignTypes,
       creatives,
       // A quebra por região vem da API para a conta toda; com seleção de
@@ -1036,6 +1063,8 @@ function WhatsAppReportModal({ accountId, accountName, currency, since, until, p
       creativeCount: { total: scoped.ads.length, active: activeCreatives },
       totalSpend: spend,
       results,
+      resultsLabel,
+      resultsNoun,
       cpr,
       revenue,
     });

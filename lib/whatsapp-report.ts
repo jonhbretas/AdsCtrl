@@ -48,20 +48,24 @@ export function buildWhatsAppReport(input: {
   periodRange: { since: string; until: string };
   /** Número de dias do período (para a média diária). */
   days: number;
-  campaigns: { name: string; objective?: string; spend: number; results?: number }[];
+  campaigns: { name: string; objective?: string; spend: number; results?: number; resultNoun?: string }[];
   /** Resultado somado por tipo de campanha (rótulo do objetivo -> contagem). */
-  campaignTypes: { label: string; results: number }[];
+  campaignTypes: { label: string; results: number; familyLabel?: string }[];
   /** Criativos que rodaram: nome, gasto, resultado do objetivo e link do conteúdo. */
-  creatives: { name: string; spend: number; results?: number; permalink?: string }[];
+  creatives: { name: string; spend: number; results?: number; resultNoun?: string; permalink?: string }[];
   regions: ReportRow[];
   creativeCount: { total: number; active: number };
   totalSpend: number;
+  /** Total de resultados e o rótulo real do que eles são (detectado por
+   *  conta: conversas, vendas, leads...) — nunca "resultado" genérico. */
   results: number | null;
+  resultsLabel: string;
+  resultsNoun: string;
   cpr: number | null;
   /** Valor faturado no período (vendas informadas), quando houver. */
   revenue: number | null;
 }): string {
-  const { accountName, currency, periodLabel, periodRange, days, campaigns, campaignTypes, creatives, regions, creativeCount, totalSpend, results, cpr, revenue } = input;
+  const { accountName, currency, periodLabel, periodRange, days, campaigns, campaignTypes, creatives, regions, creativeCount, totalSpend, results, resultsLabel, resultsNoun, cpr, revenue } = input;
   const lines: string[] = [];
   const fmtDate = (iso: string) => new Date(iso + "T00:00:00Z").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
 
@@ -80,18 +84,19 @@ export function buildWhatsAppReport(input: {
     lines.push("📌 *Campanhas (top 5):*");
     for (const item of visibleCampaigns) {
       const campaign = campaigns.find((entry) => entry.name === item.key);
-      const resultPart = campaign?.results ? ` · ${num(campaign.results)} resultado${campaign.results === 1 ? "" : "s"}` : "";
+      const resultPart = campaign?.results ? ` · ${num(campaign.results)} ${campaign.resultNoun || "resultados"}` : "";
       lines.push(`• 🎯 ${item.key}${campaign?.objective ? ` (${objectiveLabel(campaign.objective)})` : ""} — ${money(item.spend, currency)} (${pct(item.spend, totalSpend)})${resultPart}`);
     }
   }
 
-  // Resultado específico de cada tipo de campanha (pedido recorrente: o
-  // fechamento quer saber o que cada objetivo entregou).
+  // Resultado específico de cada tipo de campanha: além da contagem, diz o
+  // que é o resultado (conversas iniciadas, vendas, leads...) — muda por
+  // conta, então vem detectado nos dados e rotulado aqui.
   if (campaignTypes.length > 0) {
     lines.push("");
     lines.push("🧩 *Resultado por tipo de campanha:*");
     for (const type of campaignTypes) {
-      lines.push(`• ${type.label}: ${num(type.results)}`);
+      lines.push(`• ${type.label}: ${num(type.results)}${type.familyLabel ? ` ${type.familyLabel.toLowerCase()}` : " resultados"}`);
     }
   }
 
@@ -103,7 +108,7 @@ export function buildWhatsAppReport(input: {
     lines.push("🎬 *Criativos que rodaram (top 5):*");
     for (const item of visibleCreatives) {
       const creative = creatives.find((entry) => entry.name === item.key);
-      const resultPart = creative?.results ? ` · ${num(creative.results)} resultado${creative.results === 1 ? "" : "s"}` : "";
+      const resultPart = creative?.results ? ` · ${num(creative.results)} ${creative.resultNoun || "resultados"}` : "";
       lines.push(`• ${item.key} — ${money(item.spend, currency)} (${pct(item.spend, totalSpend)})${resultPart}`);
       if (creative?.permalink) lines.push(`🔗 ${creative.permalink}`);
     }
@@ -132,7 +137,7 @@ export function buildWhatsAppReport(input: {
 
   if (results != null) {
     lines.push("");
-    lines.push(`🎯 *Resultados:* ${num(results)}${cpr ? ` · custo por resultado ${money(cpr, currency)}` : ""}`);
+    lines.push(`🎯 *${resultsLabel}:* ${num(results)}${cpr ? ` · custo por ${resultsNoun} ${money(cpr, currency)}` : ""}`);
   }
 
   // Leitura rápida em uma linha, sem jargão. Mantém o nome como o cliente
