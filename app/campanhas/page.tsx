@@ -54,10 +54,14 @@ const ACTION_PREFIX = "action:";
 const CONVERSION_FAMILIES = ["vendas", "mensagens", "leads", "cadastros"];
 const ALL_CONVERSIONS = `${FAMILY_PREFIX}conversoes`;
 
+// Datas no fuso LOCAL (Brasil): o UTC pula um dia depois das 21h e faria o
+// "Mês atual" terminar amanhã e o "Mês anterior" deslocar o mês à noite.
+const toIsoLocal = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
 function isoDaysAgo(days: number) {
   const d = new Date();
-  d.setUTCDate(d.getUTCDate() - days);
-  return d.toISOString().slice(0, 10);
+  d.setDate(d.getDate() - days);
+  return toIsoLocal(d);
 }
 
 type Period = "today" | "7d" | "14d" | "30d" | "mtd" | "lastMonth" | "custom";
@@ -72,7 +76,7 @@ const PRESETS: { key: Period; label: string }[] = [
 
 function firstOfMonthIso() {
   const d = new Date();
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-01`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
 }
 
 function rangeForPeriod(period: Period, customSince: string, customUntil: string) {
@@ -843,8 +847,8 @@ function monthRangeIso(monthIso: string): { since: string; until: string } {
 
 function prevMonthIso(): string {
   const d = new Date();
-  d.setUTCMonth(d.getUTCMonth() - 1);
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+  d.setMonth(d.getMonth() - 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
 // Resumo pronto para colar no WhatsApp: o que foi feito na conta, de forma

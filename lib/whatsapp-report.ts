@@ -67,7 +67,7 @@ export function buildWhatsAppReport(input: {
 }): string {
   const { accountName, currency, periodLabel, periodRange, days, campaigns, campaignTypes, creatives, regions, creativeCount, totalSpend, results, resultsLabel, resultsNoun, cpr, revenue } = input;
   const lines: string[] = [];
-  const fmtDate = (iso: string) => new Date(iso + "T00:00:00Z").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+  const fmtDate = (iso: string) => new Date(iso + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
 
   lines.push(`📊 *Resumo de Mídia — ${accountName}*`);
   lines.push(`📅 ${periodLabel} · ${fmtDate(periodRange.since)} a ${fmtDate(periodRange.until)}`);
