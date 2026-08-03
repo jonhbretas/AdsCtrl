@@ -1002,24 +1002,46 @@ function WhatsAppReportModal({ accountId, accountName, currency, since, until, p
 
     // Criativos: o anúncio herda o objetivo da campanha mãe (o insight de
     // anúncio não traz o objetivo) e entra com nome, gasto, resultado e link.
-    // O apelido é aplicado ANTES de agregar: nomes iguais somam gasto e
-    // resultado numa linha só.
+    // IMPORTANTE: no nível de anúncio a Meta conta a MESMA conversa em vários
+    // anúncios (atribuição sobreposta) — a soma das linhas estoura o total da
+    // campanha (já vimos "559 conversas" num criativo de R$ 86). Por isso o
+    // resultado exibido é o total CONFIAVEL da campanha repartido pela
+    // participação bruta de cada anúncio: bate com o fechamento e mantém a
+    // ordem de performance. O apelido é aplicado antes de agregar.
     const adsetToCampaign = new Map(scoped.adsets.map((s) => [s.id, s.campaign_id]));
     const campaignObjective = new Map(scoped.campaigns.map((c) => [c.id, c.objective]));
+    const campaignResult = new Map<string, { value: number; family: string }>();
+    for (const row of scoped.campaigns) campaignResult.set(row.id, rowResult(row, row.objective));
+    const rawByCampaign = new Map<string, number>();
+    for (const row of scoped.ads) {
+      if (row.spend <= 0) continue;
+      const campaignId = row.adset_id ? adsetToCampaign.get(row.adset_id) : undefined;
+      if (!campaignId) continue;
+      const raw = rowResult(row, campaignObjective.get(campaignId)).value;
+      rawByCampaign.set(campaignId, (rawByCampaign.get(campaignId) || 0) + raw);
+    }
     const creativeAgg = new Map<string, { name: string; spend: number; results: number; resultNoun: string; permalink?: string }>();
     for (const row of scoped.ads) {
       if (row.spend <= 0) continue;
       const campaignId = row.adset_id ? adsetToCampaign.get(row.adset_id) : undefined;
       const objective = campaignId ? campaignObjective.get(campaignId) : undefined;
-      const name = aliases[row.name] || row.name;
       const r = rowResult(row, objective);
+      const parent = campaignId ? campaignResult.get(campaignId) : undefined;
+      const rawSum = campaignId ? rawByCampaign.get(campaignId) || 0 : 0;
+      let results = r.value;
+      let resultNoun = FAMILY_SHORT[r.family] || "resultados";
+      if (parent && parent.value > 0 && rawSum > 0 && r.value > 0) {
+        results = Math.max(1, Math.round(parent.value * (r.value / rawSum)));
+        resultNoun = FAMILY_SHORT[parent.family] || "resultados";
+      }
+      const name = aliases[row.name] || row.name;
       const existing = creativeAgg.get(name);
       if (existing) {
         existing.spend += row.spend;
-        existing.results += r.value;
+        existing.results += results;
         if (!existing.permalink) existing.permalink = row.permalink;
       } else {
-        creativeAgg.set(name, { name, spend: row.spend, results: r.value, resultNoun: FAMILY_SHORT[r.family] || "resultados", permalink: row.permalink });
+        creativeAgg.set(name, { name, spend: row.spend, results, resultNoun, permalink: row.permalink });
       }
     }
     const creatives = [...creativeAgg.values()].sort((a, b) => b.spend - a.spend);
