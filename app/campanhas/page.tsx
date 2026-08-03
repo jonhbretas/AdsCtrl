@@ -905,6 +905,84 @@ function WhatsAppReportModal({ accountId, accountName, currency, since, until, p
 
   const report = useMemo(() => {
     if (!data || !scoped) return "";
+
+    // Resultado de uma campanha/anúncio segundo o objetivo dela (com
+    // fallback: a família que tiver resultado, depois o total de conversões).
+    const fam = (slug: string) => RESULT_FAMILY_BY_SLUG[slug];
+    const rowResult = (row: Row, objective?: string): number => {
+      const map = row.results;
+      switch (objective) {
+        case "OUTCOME_SALES": {
+          const v = pickVal(map, fam("vendas").keys);
+          if (v > 0) return v;
+          break;
+        }
+        case "OUTCOME_LEADS": {
+          const v = pickVal(map, fam("leads").keys) + pickVal(map, fam("cadastros").keys);
+          if (v > 0) return v;
+          break;
+        }
+        case "OUTCOME_TRAFFIC": {
+          const v = pickVal(map, fam("cliques").keys);
+          if (v > 0) return v;
+          break;
+        }
+        case "OUTCOME_ENGAGEMENT": {
+          const msg = pickVal(map, fam("mensagens").keys);
+          if (msg > 0) return msg;
+          const eng = pickVal(map, fam("engajamento").keys);
+          if (eng > 0) return eng;
+          break;
+        }
+        case "OUTCOME_AWARENESS": {
+          const v = pickVal(map, fam("lpv").keys);
+          if (v > 0) return v;
+          break;
+        }
+      }
+      const vendas = pickVal(map, PURCHASE_KEYS);
+      if (vendas > 0) return vendas;
+      const msg = pickVal(map, fam("mensagens").keys);
+      if (msg > 0) return msg;
+      const leads = pickVal(map, fam("leads").keys) + pickVal(map, fam("cadastros").keys);
+      if (leads > 0) return leads;
+      return Object.values(map).reduce((acc, v) => acc + v, 0);
+    };
+
+    const TYPE_LABELS: Record<string, string> = {
+      OUTCOME_SALES: "Vendas",
+      OUTCOME_LEADS: "Leads",
+      OUTCOME_TRAFFIC: "Tráfego (cliques)",
+      OUTCOME_ENGAGEMENT: "Engajamento",
+      OUTCOME_AWARENESS: "Reconhecimento",
+      OUTCOME_APP_PROMOTION: "Promoção de app",
+    };
+
+    // Resultado somado por tipo de campanha.
+    const byType = new Map<string, number>();
+    for (const row of scoped.campaigns) {
+      const r = rowResult(row, row.objective);
+      if (r <= 0) continue;
+      const label = TYPE_LABELS[row.objective || ""] || objectiveLabel(row.objective) || "Outros";
+      byType.set(label, (byType.get(label) || 0) + r);
+    }
+    const campaignTypes = [...byType.entries()]
+      .map(([label, results]) => ({ label, results }))
+      .sort((a, b) => b.results - a.results);
+
+    // Criativos: o anúncio herda o objetivo da campanha mãe (o insight de
+    // anúncio não traz o objetivo) e entra com nome, gasto, resultado e link.
+    const adsetToCampaign = new Map(scoped.adsets.map((s) => [s.id, s.campaign_id]));
+    const campaignObjective = new Map(scoped.campaigns.map((c) => [c.id, c.objective]));
+    const creatives = scoped.ads
+      .filter((row) => row.spend > 0)
+      .map((row) => {
+        const campaignId = row.adset_id ? adsetToCampaign.get(row.adset_id) : undefined;
+        const objective = campaignId ? campaignObjective.get(campaignId) : undefined;
+        return { name: row.name, spend: row.spend, results: rowResult(row, objective), permalink: row.permalink };
+      })
+      .sort((a, b) => b.spend - a.spend);
+
     const k: Record<string, number> = {};
     for (const row of scoped.campaigns) {
       for (const [key, value] of Object.entries(row.results)) {
@@ -921,11 +999,13 @@ function WhatsAppReportModal({ accountId, accountName, currency, since, until, p
       accountName,
       currency: currency || "BRL",
       periodLabel,
-      campaigns: scoped.campaigns.map((row) => ({ name: row.name, objective: row.objective, spend: row.spend })),
+      campaigns: scoped.campaigns.map((row) => ({ name: row.name, objective: row.objective, spend: row.spend, results: rowResult(row, row.objective) })),
+      campaignTypes,
+      creatives,
       // A quebra por região vem da API para a conta toda; com seleção de
       // campanhas não há região por campanha, então ela sai fora do resumo.
       regions: scoped.filtered ? [] : data.breakdowns?.region || [],
-      creatives: { total: scoped.ads.length, active: activeCreatives },
+      creativeCount: { total: scoped.ads.length, active: activeCreatives },
       totalSpend: spend,
       results,
       cpr,

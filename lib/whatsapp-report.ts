@@ -43,16 +43,20 @@ export function buildWhatsAppReport(input: {
   accountName: string;
   currency: string;
   periodLabel: string;
-  campaigns: { name: string; objective?: string; spend: number }[];
+  campaigns: { name: string; objective?: string; spend: number; results?: number }[];
+  /** Resultado somado por tipo de campanha (rótulo do objetivo -> contagem). */
+  campaignTypes: { label: string; results: number }[];
+  /** Criativos que rodaram: nome, gasto, resultado do objetivo e link do conteúdo. */
+  creatives: { name: string; spend: number; results?: number; permalink?: string }[];
   regions: ReportRow[];
-  creatives: { total: number; active: number };
+  creativeCount: { total: number; active: number };
   totalSpend: number;
   results: number | null;
   cpr: number | null;
   /** Valor faturado no período (vendas informadas), quando houver. */
   revenue: number | null;
 }): string {
-  const { accountName, currency, periodLabel, campaigns, regions, creatives, totalSpend, results, cpr, revenue } = input;
+  const { accountName, currency, periodLabel, campaigns, campaignTypes, creatives, regions, creativeCount, totalSpend, results, cpr, revenue } = input;
   const lines: string[] = [];
 
   lines.push(`📊 *Resumo de Mídia — ${accountName}*`);
@@ -67,7 +71,32 @@ export function buildWhatsAppReport(input: {
     lines.push("📌 *Campanhas (top 5):*");
     for (const item of visibleCampaigns) {
       const campaign = campaigns.find((entry) => entry.name === item.key);
-      lines.push(`• 🎯 ${item.key}${campaign?.objective ? ` (${objectiveLabel(campaign.objective)})` : ""} — ${money(item.spend, currency)} (${pct(item.spend, totalSpend)})`);
+      const resultPart = campaign?.results ? ` · ${num(campaign.results)} resultado${campaign.results === 1 ? "" : "s"}` : "";
+      lines.push(`• 🎯 ${item.key}${campaign?.objective ? ` (${objectiveLabel(campaign.objective)})` : ""} — ${money(item.spend, currency)} (${pct(item.spend, totalSpend)})${resultPart}`);
+    }
+  }
+
+  // Resultado específico de cada tipo de campanha (pedido recorrente: o
+  // fechamento quer saber o que cada objetivo entregou).
+  if (campaignTypes.length > 0) {
+    lines.push("");
+    lines.push("🧩 *Resultado por tipo de campanha:*");
+    for (const type of campaignTypes) {
+      lines.push(`• ${type.label}: ${num(type.results)}`);
+    }
+  }
+
+  // Criativos que rodaram no período, com gasto, resultado e o link do
+  // conteúdo (Facebook/Instagram) para conferir a peça.
+  const visibleCreatives = topRows(creatives.map((c) => ({ key: c.name, spend: c.spend })), 5);
+  if (visibleCreatives.length > 0) {
+    lines.push("");
+    lines.push("🎬 *Criativos que rodaram (top 5):*");
+    for (const item of visibleCreatives) {
+      const creative = creatives.find((entry) => entry.name === item.key);
+      const resultPart = creative?.results ? ` · ${num(creative.results)} resultado${creative.results === 1 ? "" : "s"}` : "";
+      lines.push(`• ${item.key} — ${money(item.spend, currency)} (${pct(item.spend, totalSpend)})${resultPart}`);
+      if (creative?.permalink) lines.push(`🔗 ${creative.permalink}`);
     }
   }
 
@@ -83,7 +112,7 @@ export function buildWhatsAppReport(input: {
 
   // Criativos em veiculação.
   lines.push("");
-  lines.push(`🎬 *Criativos:* ${num(creatives.active)} ativo(s) · ${num(creatives.total)} no total`);
+  lines.push(`🎬 *Criativos:* ${num(creativeCount.active)} ativo(s) · ${num(creativeCount.total)} no total`);
 
   // Faturado e ROI (vendas informadas ÷ investimento).
   if (revenue != null && revenue > 0) {
