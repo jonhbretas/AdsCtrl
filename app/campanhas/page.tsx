@@ -434,6 +434,10 @@ export default function CampaignsPage() {
           <button type="button" onClick={() => { setShowCustom(true); setPeriod("custom"); }} className={cn("px-3 py-1.5 text-xs font-medium rounded-md transition-colors", period === "custom" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>Personalizado</button>
         </div>
 
+        {!showCustom && (
+          <span className="rounded-md border border-border/50 bg-muted/30 px-2 py-1 text-[10.5px] font-semibold text-muted-foreground">📅 {brDate(range.since)} → {brDate(range.until)}</span>
+        )}
+
         {showCustom && (
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <BrDateInput value={customSince} onChange={(value) => { setCustomSince(value); setPeriod("custom"); }} max={customUntil} className="h-8 px-2.5 text-xs rounded-lg border border-border/50 bg-muted/30 focus:outline-none focus:ring-2 focus:ring-ring/30" />
