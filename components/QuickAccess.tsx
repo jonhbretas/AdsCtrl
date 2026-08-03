@@ -8,7 +8,7 @@
 
 import { useEffect, useState } from "react";
 import { Check, Copy, ExternalLink } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, readJson } from "@/lib/utils";
 import { brDate } from "@/lib/format";
 
 export default function QuickAccess({ accountId, accountName, platform, balance, currency, compact = false }: {
@@ -29,7 +29,7 @@ export default function QuickAccess({ accountId, accountName, platform, balance,
     if (!isMeta) return;
     let alive = true;
     fetch(`/api/account/links?account_id=${encodeURIComponent(accountId)}`, { cache: "no-store" })
-      .then((r) => r.json())
+      .then(readJson)
       .then((p) => {
         if (alive && p?.business_id) setBusiness({ id: p.business_id, name: p.business_name || null });
         if (alive && p?.finance) setFinance(p.finance);

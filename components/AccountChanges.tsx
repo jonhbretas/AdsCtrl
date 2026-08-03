@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 // components/AccountChanges.tsx
 // "Últimas edições" de uma conta: painel separado e fechado por padrão.
@@ -8,6 +8,7 @@
 
 import { useEffect, useState } from "react";
 import type { AdChangeEvent, ChangeCategory } from "@/lib/changes";
+import { readJson } from "@/lib/utils";
 import DecisionImpact from "@/components/DecisionImpact";
 
 const CATEGORY_LABELS: Record<ChangeCategory, string> = {
@@ -161,8 +162,7 @@ export default function AccountChanges({
       `&since=${activeSince}&until=${activeUntil}`;
     fetch(url, { cache: "no-store" })
       .then(async (r) => {
-        const text = await r.text();
-        const payload: Payload = text ? JSON.parse(text) : { events: [] };
+        const payload = (await readJson(r)) as Payload;
         if (!r.ok || payload.error) throw new Error(payload.error || `Falha (HTTP ${r.status}).`);
         return payload;
       })

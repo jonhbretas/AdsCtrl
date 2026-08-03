@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 // components/StrategicSummaryCard.tsx
 // Resumo estratégico da conta: o "caderno" mensal do que precisa estar
@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { CalendarClock, Check, ChevronDown, ChevronRight, NotebookPen, Pencil, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { cn, readJson } from "@/lib/utils";
 
 interface StrategyContent {
   objective: string;
@@ -63,7 +63,7 @@ export default function StrategicSummaryCard({ accountId }: { accountId: string 
         fetch(`/api/account-strategies?account_id=${encodeURIComponent(accountId)}`, { cache: "no-store" }),
         fetch(`/api/account-alert-rules?account_id=${encodeURIComponent(accountId)}`, { cache: "no-store" }),
       ]);
-      const [strategy, rules] = await Promise.all([strategyRes.json(), rulesRes.json()]);
+      const [strategy, rules] = await Promise.all([readJson(strategyRes), readJson(rulesRes)]);
       if (!strategyRes.ok || strategy.error) throw new Error(strategy.error || "Falha ao carregar.");
       setContent({ ...EMPTY, ...(strategy.content || {}) });
       setUpdatedAt(strategy.updated_at || null);
@@ -86,7 +86,7 @@ export default function StrategicSummaryCard({ accountId }: { accountId: string 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ account_id: accountId, content }),
       });
-      const d = await r.json();
+      const d = await readJson(r);
       if (!r.ok || d.error) throw new Error(d.error || "Falha ao salvar.");
       setUpdatedAt(d.updated_at || new Date().toISOString());
       setEditing(false);
@@ -104,7 +104,7 @@ export default function StrategicSummaryCard({ accountId }: { accountId: string 
     try {
       if (reminder?.id) {
         const r = await fetch(`/api/account-alert-rules?id=${encodeURIComponent(reminder.id)}`, { method: "DELETE" });
-        const d = await r.json();
+        const d = await readJson(r);
         if (!r.ok || d.error) throw new Error(d.error || "Falha.");
         setReminder(null);
       } else {
@@ -113,7 +113,7 @@ export default function StrategicSummaryCard({ accountId }: { accountId: string 
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ account_id: accountId, kind: "strategy_review", name: "Revisão mensal da estratégia", config: { max_age_days: 30 }, enabled: true }),
         });
-        const d = await r.json();
+        const d = await readJson(r);
         if (!r.ok || d.error) throw new Error(d.error || "Falha.");
         setReminder({ id: d.rule.id, enabled: true });
       }

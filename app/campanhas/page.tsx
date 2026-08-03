@@ -14,7 +14,7 @@ import { AlertTriangle, ArrowLeft, Check, ChevronDown, ChevronRight, Copy, Messa
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
+import { cn, readJson } from "@/lib/utils";
 import {
   money, num, pct, pickVal, resultLabel, pickPrimaryResult, orderedResults, brDate, objectiveLabel,
   RESULT_FAMILIES, RESULT_FAMILY_BY_SLUG, PURCHASE_KEYS,
@@ -160,7 +160,7 @@ export default function CampaignsPage() {
 
   useEffect(() => {
     fetch("/api/accounts", { cache: "no-store" })
-      .then((r) => r.json())
+      .then(readJson)
       .then((d) => {
         const list = (d.accounts || []).filter((item: AccountInfo) => !item.hidden);
         setAccounts(list);
