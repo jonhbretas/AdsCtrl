@@ -848,6 +848,25 @@ function WhatsAppReportModal({ accountId, accountName, currency, since, until, p
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [editingNames, setEditingNames] = useState(false);
+  // Apelidos: o resumo troca o nome original pelo apelido editado (resolve
+  // nomes duplicados/longos sem mexer na conta). Fica no navegador.
+  const [aliases, setAliases] = useState<Record<string, string>>(() => {
+    try { return JSON.parse(window.localStorage.getItem("adsctrl:report-aliases") || "{}"); } catch { return {}; }
+  });
+
+  function setAlias(original: string, aliasValue: string) {
+    setAliases((prev) => {
+      const next = { ...prev };
+      const clean = aliasValue.trim();
+      if (clean && clean !== original) next[original] = clean;
+      else delete next[original];
+      try { window.localStorage.setItem("adsctrl:report-aliases", JSON.stringify(next)); } catch { /* sem storage não quebra o resumo */ }
+      return next;
+    });
+  }
+
+  const days = Math.max(1, Math.round((Date.parse(until) - Date.parse(since)) / 86400000) + 1);
 
   useEffect(() => {
     let alive = true;
@@ -972,34 +991,43 @@ function WhatsAppReportModal({ accountId, accountName, currency, since, until, p
 
     // Criativos: o anúncio herda o objetivo da campanha mãe (o insight de
     // anúncio não traz o objetivo) e entra com nome, gasto, resultado e link.
+    // O apelido é aplicado ANTES de agregar: nomes iguais somam gasto e
+    // resultado numa linha só.
     const adsetToCampaign = new Map(scoped.adsets.map((s) => [s.id, s.campaign_id]));
     const campaignObjective = new Map(scoped.campaigns.map((c) => [c.id, c.objective]));
-    const creatives = scoped.ads
-      .filter((row) => row.spend > 0)
-      .map((row) => {
-        const campaignId = row.adset_id ? adsetToCampaign.get(row.adset_id) : undefined;
-        const objective = campaignId ? campaignObjective.get(campaignId) : undefined;
-        return { name: row.name, spend: row.spend, results: rowResult(row, objective), permalink: row.permalink };
-      })
-      .sort((a, b) => b.spend - a.spend);
-
-    const k: Record<string, number> = {};
-    for (const row of scoped.campaigns) {
-      for (const [key, value] of Object.entries(row.results)) {
-        k[key] = (k[key] || 0) + (value || 0);
+    const creativeAgg = new Map<string, { name: string; spend: number; results: number; permalink?: string }>();
+    for (const row of scoped.ads) {
+      if (row.spend <= 0) continue;
+      const campaignId = row.adset_id ? adsetToCampaign.get(row.adset_id) : undefined;
+      const objective = campaignId ? campaignObjective.get(campaignId) : undefined;
+      const name = aliases[row.name] || row.name;
+      const results = rowResult(row, objective);
+      const existing = creativeAgg.get(name);
+      if (existing) {
+        existing.spend += row.spend;
+        existing.results += results;
+        if (!existing.permalink) existing.permalink = row.permalink;
+      } else {
+        creativeAgg.set(name, { name, spend: row.spend, results, permalink: row.permalink });
       }
     }
+    const creatives = [...creativeAgg.values()].sort((a, b) => b.spend - a.spend);
+
     const spend = scoped.campaigns.reduce((acc, row) => acc + row.spend, 0);
-    const vendas = pickVal(k, PURCHASE_KEYS);
-    const totalConversions = Object.values(k).reduce((acc, v) => acc + v, 0);
-    const results = vendas > 0 ? vendas : totalConversions > 0 ? totalConversions : null;
+    // Total honesto: a soma dos resultados de cada campanha pelo próprio
+    // objetivo (19 vendas, por exemplo) — nunca a soma bruta de todas as
+    // ações da Meta, que infla o número e zera o CPR.
+    const totalResults = scoped.campaigns.reduce((acc, row) => acc + rowResult(row, row.objective), 0);
+    const results = totalResults > 0 ? totalResults : null;
     const cpr = results ? spend / results : null;
     const activeCreatives = scoped.ads.filter((row) => row.status === "ACTIVE" || row.effective_status === "ACTIVE").length;
     return buildWhatsAppReport({
       accountName,
       currency: currency || "BRL",
       periodLabel,
-      campaigns: scoped.campaigns.map((row) => ({ name: row.name, objective: row.objective, spend: row.spend, results: rowResult(row, row.objective) })),
+      periodRange: { since, until },
+      days,
+      campaigns: scoped.campaigns.map((row) => ({ name: aliases[row.name] || row.name, objective: row.objective, spend: row.spend, results: rowResult(row, row.objective) })),
       campaignTypes,
       creatives,
       // A quebra por região vem da API para a conta toda; com seleção de
@@ -1011,7 +1039,7 @@ function WhatsAppReportModal({ accountId, accountName, currency, since, until, p
       cpr,
       revenue,
     });
-  }, [data, scoped, accountName, currency, periodLabel, revenue]);
+  }, [data, scoped, accountName, currency, periodLabel, since, until, days, aliases, revenue]);
 
   async function copy() {
     if (!report) return;
@@ -1039,7 +1067,29 @@ function WhatsAppReportModal({ accountId, accountName, currency, since, until, p
         <span className={cn("rounded-md border px-2 py-1 text-[10.5px] font-semibold", scoped?.filtered ? "border-primary/30 bg-primary/10 text-primary" : "border-border/50 bg-muted/30 text-muted-foreground")}>
           {scoped?.filtered ? `🎯 Só as ${scoped.campaigns.length} campanha(s) selecionada(s)` : "🎯 Todas as campanhas da conta"}
         </span>
+        <button type="button" onClick={() => setEditingNames((v) => !v)} className={cn("rounded-md border px-2 py-1 text-[10.5px] font-semibold transition-colors", editingNames ? "border-primary/30 bg-primary/10 text-primary" : "border-border/50 bg-muted/30 text-muted-foreground hover:text-foreground")}>
+          ✏️ {editingNames ? "Fechar nomes" : "Ajustar nomes"}
+        </button>
       </div>
+
+      {editingNames && scoped && (
+        <div className="mt-2 space-y-1.5 rounded-lg border border-border/50 bg-muted/20 p-3 max-h-64 overflow-y-auto">
+          <div className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Apelidos — o resumo usa o nome editado; vazio volta ao original (salvo no navegador)</div>
+          {[...new Map<string, string>([
+            ...scoped.campaigns.map((row) => [row.name, aliases[row.name] || row.name] as [string, string]),
+            ...scoped.ads.filter((row) => row.spend > 0).map((row) => [row.name, aliases[row.name] || row.name] as [string, string]),
+          ]).entries()].map(([original, current]) => (
+            <input
+              key={original}
+              defaultValue={current}
+              onBlur={(e) => setAlias(original, e.target.value)}
+              placeholder={original}
+              title={original}
+              className="h-7 w-full rounded-md border border-border/50 bg-background px-2 text-xs outline-none focus:ring-1 focus:ring-ring"
+            />
+          ))}
+        </div>
+      )}
 
       <div className="mt-3">
         {loading && <div className="grid place-items-center rounded-lg border border-border/50 bg-muted/20 py-10 text-xs text-muted-foreground">Gerando resumo…</div>}

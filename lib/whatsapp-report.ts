@@ -19,7 +19,8 @@ const PLATFORM_LABELS: Record<string, string> = {
 };
 
 function money(value: number, currency: string): string {
-  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: currency || "BRL", maximumFractionDigits: 0 }).format(value || 0);
+  // Valores pequenos (ex.: CPR de R$ 0,06) não podem virar R$ 0 no texto.
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: currency || "BRL", maximumFractionDigits: value < 10 ? 2 : 0 }).format(value || 0);
 }
 
 function num(value: number): string {
@@ -43,6 +44,10 @@ export function buildWhatsAppReport(input: {
   accountName: string;
   currency: string;
   periodLabel: string;
+  /** Datas exatas do período — entram no cabeçalho para ninguém se perder. */
+  periodRange: { since: string; until: string };
+  /** Número de dias do período (para a média diária). */
+  days: number;
   campaigns: { name: string; objective?: string; spend: number; results?: number }[];
   /** Resultado somado por tipo de campanha (rótulo do objetivo -> contagem). */
   campaignTypes: { label: string; results: number }[];
@@ -56,13 +61,17 @@ export function buildWhatsAppReport(input: {
   /** Valor faturado no período (vendas informadas), quando houver. */
   revenue: number | null;
 }): string {
-  const { accountName, currency, periodLabel, campaigns, campaignTypes, creatives, regions, creativeCount, totalSpend, results, cpr, revenue } = input;
+  const { accountName, currency, periodLabel, periodRange, days, campaigns, campaignTypes, creatives, regions, creativeCount, totalSpend, results, cpr, revenue } = input;
   const lines: string[] = [];
+  const fmtDate = (iso: string) => new Date(iso + "T00:00:00Z").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
 
   lines.push(`📊 *Resumo de Mídia — ${accountName}*`);
-  lines.push(`📅 ${periodLabel}`);
+  lines.push(`📅 ${periodLabel} · ${fmtDate(periodRange.since)} a ${fmtDate(periodRange.until)}`);
   lines.push("");
   lines.push(`💰 *Investimento total:* ${money(totalSpend, currency)}`);
+  if (days > 0) {
+    lines.push(`💳 *Média de investimento/dia:* ${money(totalSpend / days, currency)} (${num(days)} dia${days === 1 ? "" : "s"})`);
+  }
 
   // Por campanha (o nome já diz o tipo; o rótulo do objetivo reforça).
   const visibleCampaigns = topRows(campaigns.map((campaign) => ({ key: campaign.name, spend: campaign.spend })), 5);
@@ -126,13 +135,14 @@ export function buildWhatsAppReport(input: {
     lines.push(`🎯 *Resultados:* ${num(results)}${cpr ? ` · custo por resultado ${money(cpr, currency)}` : ""}`);
   }
 
-  // Leitura rápida em uma linha, sem jargão.
+  // Leitura rápida em uma linha, sem jargão. Mantém o nome como o cliente
+  // conhece (sem forçar minúsculas).
   const topCampaign = visibleCampaigns[0];
   const topRegion = visibleRegions[0];
   if (topCampaign) {
     const parte = topRegion
-      ? `A maior parte da verba (${pct(topCampaign.spend, totalSpend)}) foi para *${topCampaign.key.toLowerCase()}*, concentrada em *${topRegion.key}*.`
-      : `A maior parte da verba (${pct(topCampaign.spend, totalSpend)}) foi para *${topCampaign.key.toLowerCase()}*.`;
+      ? `A maior parte da verba (${pct(topCampaign.spend, totalSpend)}) foi para *${topCampaign.key}*, concentrada em *${topRegion.key}*.`
+      : `A maior parte da verba (${pct(topCampaign.spend, totalSpend)}) foi para *${topCampaign.key}*.`;
     lines.push("");
     lines.push(`✍️ *Leitura rápida:* ${parte}`);
   }
