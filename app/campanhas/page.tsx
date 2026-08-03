@@ -309,7 +309,8 @@ export default function CampaignsPage() {
 
   async function reload() {
     const platform = accountId.startsWith("google:") ? "google" : "meta";
-    const r = await fetch(`/api/account/detail?account_id=${encodeURIComponent(accountId)}&platform=${platform}&since=${range.since}&until=${range.until}`, { cache: "no-store" });
+    // fresh=1: ação explícita do usuário ignora o cache do detalhe.
+    const r = await fetch(`/api/account/detail?account_id=${encodeURIComponent(accountId)}&platform=${platform}&since=${range.since}&until=${range.until}&fresh=1`, { cache: "no-store" });
     const d = await r.json();
     if (!r.ok || d.error) throw new Error(d.error || "Falha ao atualizar.");
     setDetail(d);
