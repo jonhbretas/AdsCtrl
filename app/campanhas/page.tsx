@@ -377,7 +377,7 @@ export default function CampaignsPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="ghost" size="sm" onClick={async () => { try { await reload(); flash("Dados atualizados."); } catch (e: any) { flash(e.message, true); } }}><RefreshCw className="h-3.5 w-3.5 mr-1" /> Atualizar</Button>
-          <Button variant="ghost" size="sm" onClick={() => setReportOpen(true)} disabled={!accountId} title={someSelected ? `Resumo com as ${selectedCampaigns.size} campanha(s) selecionada(s), no período da página` : "Resumo curto para colar no WhatsApp (fechamento mensal)"}><MessageCircle className="h-3.5 w-3.5 mr-1" /> Resumo{someSelected ? ` (${selectedCampaigns.size})` : ""}</Button>
+          <Button variant="ghost" size="sm" onClick={() => setReportOpen(true)} disabled={!accountId || !detail} title={someSelected ? `Resumo com as ${selectedCampaigns.size} campanha(s) selecionada(s), no período da página` : "Resumo curto para colar no WhatsApp (fechamento mensal)"}><MessageCircle className="h-3.5 w-3.5 mr-1" /> Resumo{someSelected ? ` (${selectedCampaigns.size})` : ""}</Button>
           <Button variant="ghost" size="sm" onClick={() => setStructureOpen(true)} disabled={!isMeta} title={isMeta ? "Gerar funil de campanhas a partir da estratégia (pausado)" : "Gerar estrutura só na Meta"}><Sparkles className="h-3.5 w-3.5 mr-1" /> Sugerir estrutura</Button>
           <Button size="sm" onClick={() => setNewCampaign(true)} disabled={!isMeta} title={isMeta ? "Criar campanha" : "Criar campanha só na Meta"}>
             <Plus className="h-3.5 w-3.5 mr-1" /> Nova campanha
@@ -583,7 +583,7 @@ export default function CampaignsPage() {
       {duplicateAd && <DuplicateSameModal noun="anúncio" name={duplicateAd.name} onClose={() => setDuplicateAd(null)} onSubmit={async (suffix) => { const ok = await handleDuplicateSame("ad", duplicateAd.id, suffix); if (ok) setDuplicateAd(null); return ok; }} />}
       {duplicateCP && <DuplicateCampaign sourceAccountId={accountId} campaignId={duplicateCP.id} campaignName={duplicateCP.name} onClose={() => setDuplicateCP(null)} />}
       {newCampaign && <NewCampaignModal onClose={() => setNewCampaign(false)} onSubmit={async (name, objective, status) => { const ok = await handleNewCampaign(name, objective, status); if (ok) setNewCampaign(false); return ok; }} />}
-      {reportOpen && <WhatsAppReportModal accountId={accountId} accountName={account?.name || "Conta"} currency={account?.currency} since={range.since} until={range.until} periodLabel={periodRangeText} selectedCampaignIds={[...selectedCampaigns]} onClose={() => setReportOpen(false)} />}
+      {reportOpen && <WhatsAppReportModal accountId={accountId} accountName={account?.name || "Conta"} currency={account?.currency} since={range.since} until={range.until} periodLabel={periodRangeText} selectedCampaignIds={[...selectedCampaigns]} detail={detail} onClose={() => setReportOpen(false)} />}
       {structureOpen && <StructureWizard accountId={accountId} accountName={account?.name || "Conta"} onClose={() => setStructureOpen(false)} onCreated={() => { flash("Estrutura criada. Revise os orçamentos e publique."); reload().catch(() => {}); }} />}
     </div>
   );
@@ -838,15 +838,16 @@ function prevMonthIso(): string {
 // Resumo pronto para colar no WhatsApp: o que foi feito na conta, de forma
 // curta — quanto, onde (objetivo/região/plataforma) e o resultado. Usa o
 // período escolhido na página e, com campanhas selecionadas, só elas entram.
-function WhatsAppReportModal({ accountId, accountName, currency, since, until, periodLabel, selectedCampaignIds, onClose }: {
+function WhatsAppReportModal({ accountId, accountName, currency, since, until, periodLabel, selectedCampaignIds, detail, onClose }: {
   accountId: string; accountName: string; currency?: string;
   since: string; until: string; periodLabel: string; selectedCampaignIds: string[];
+  /** O detalhe já carregado pela página — mesmo período, então nada de
+   *  refazer as ~18 chamadas à Meta ao abrir o resumo (era metade do rate
+   *  limit). Só o faturado (2 chamadas leves) ainda é buscado aqui. */
+  detail: Detail | null;
   onClose: () => void;
 }) {
-  const [data, setData] = useState<Detail | null>(null);
   const [revenue, setRevenue] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [editingNames, setEditingNames] = useState(false);
   // Apelidos: o resumo troca o nome original pelo apelido editado (resolve
@@ -868,23 +869,10 @@ function WhatsAppReportModal({ accountId, accountName, currency, since, until, p
 
   const days = Math.max(1, Math.round((Date.parse(until) - Date.parse(since)) / 86400000) + 1);
 
+  // Valor faturado: vendas informadas por cliente, no MÊS do período
+  // escolhido (a conta pertence a um cliente via client_ad_accounts).
   useEffect(() => {
     let alive = true;
-    setLoading(true); setError(null); setRevenue(null);
-    const platform = accountId.startsWith("google:") ? "google" : "meta";
-    fetch(`/api/account/detail?account_id=${encodeURIComponent(accountId)}&platform=${platform}&since=${since}&until=${until}`, { cache: "no-store" })
-      .then(async (r) => {
-        const text = await r.text();
-        const d = text ? JSON.parse(text) : {};
-        if (!r.ok || d.error) throw new Error(d.error || `Falha (HTTP ${r.status}).`);
-        return d as Detail;
-      })
-      .then((d) => alive && setData(d))
-      .catch((e) => alive && setError(e?.message ?? "Erro ao carregar."))
-      .finally(() => alive && setLoading(false));
-
-    // Valor faturado: vendas informadas por cliente, no MÊS do período
-    // escolhido (a conta pertence a um cliente via client_ad_accounts).
     (async () => {
       try {
         const [salesRes, clientsRes] = await Promise.all([
@@ -902,28 +890,27 @@ function WhatsAppReportModal({ accountId, accountName, currency, since, until, p
         // sem faturado no resumo é aceitável
       }
     })();
-
     return () => { alive = false; };
-  }, [accountId, since, until]);
+  }, [accountId, until]);
 
   // Escopo: só as campanhas marcadas (e conjuntos/anúncios delas), ou a
   // conta toda quando nada foi selecionado.
   const scoped = useMemo(() => {
-    if (!data) return null;
+    if (!detail) return null;
     const selected = new Set(selectedCampaignIds);
     if (selected.size === 0) {
-      return { campaigns: data.campaigns, adsets: data.adsets, ads: data.ads, filtered: false };
+      return { campaigns: detail.campaigns, adsets: detail.adsets, ads: detail.ads, filtered: false };
     }
-    const campaigns = data.campaigns.filter((row) => selected.has(row.id));
+    const campaigns = detail.campaigns.filter((row) => selected.has(row.id));
     const campaignIds = new Set(campaigns.map((row) => row.id));
-    const adsets = data.adsets.filter((row) => row.campaign_id && campaignIds.has(row.campaign_id));
+    const adsets = detail.adsets.filter((row) => row.campaign_id && campaignIds.has(row.campaign_id));
     const adsetIds = new Set(adsets.map((row) => row.id));
-    const ads = data.ads.filter((row) => row.adset_id && adsetIds.has(row.adset_id));
+    const ads = detail.ads.filter((row) => row.adset_id && adsetIds.has(row.adset_id));
     return { campaigns, adsets, ads, filtered: true };
-  }, [data, selectedCampaignIds]);
+  }, [detail, selectedCampaignIds]);
 
   const report = useMemo(() => {
-    if (!data || !scoped) return "";
+    if (!detail || !scoped) return "";
 
     // Resultado de uma campanha/anúncio segundo o objetivo dela, devolvendo
     // TAMBÉM a família que gerou o número (conversas, vendas, leads...) —
@@ -1059,7 +1046,7 @@ function WhatsAppReportModal({ accountId, accountName, currency, since, until, p
       creatives,
       // A quebra por região vem da API para a conta toda; com seleção de
       // campanhas não há região por campanha, então ela sai fora do resumo.
-      regions: scoped.filtered ? [] : data.breakdowns?.region || [],
+      regions: scoped.filtered ? [] : detail.breakdowns?.region || [],
       creativeCount: { total: scoped.ads.length, active: activeCreatives },
       totalSpend: spend,
       results,
@@ -1068,7 +1055,7 @@ function WhatsAppReportModal({ accountId, accountName, currency, since, until, p
       cpr,
       revenue,
     });
-  }, [data, scoped, accountName, currency, periodLabel, since, until, days, aliases, revenue]);
+  }, [detail, scoped, accountName, currency, periodLabel, since, until, days, aliases, revenue]);
 
   async function copy() {
     if (!report) return;
@@ -1121,16 +1108,15 @@ function WhatsAppReportModal({ accountId, accountName, currency, since, until, p
       )}
 
       <div className="mt-3">
-        {loading && <div className="grid place-items-center rounded-lg border border-border/50 bg-muted/20 py-10 text-xs text-muted-foreground">Gerando resumo…</div>}
-        {error && <div className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-600 dark:text-red-400">{error}</div>}
-        {!loading && !error && report && (
+        {!detail && <div className="grid place-items-center rounded-lg border border-border/50 bg-muted/20 py-10 text-xs text-muted-foreground">Carregando…</div>}
+        {detail && report && (
           <pre onClick={(e) => { const range = document.createRange(); range.selectNodeContents(e.currentTarget); const sel = window.getSelection(); sel?.removeAllRanges(); sel?.addRange(range); }} className="max-h-72 overflow-y-auto whitespace-pre-wrap rounded-lg border border-border/50 bg-muted/20 p-3 text-xs leading-5 text-foreground select-text cursor-text">{report}</pre>
         )}
       </div>
 
       <div className="mt-3 flex justify-end gap-2">
         <Button variant="ghost" size="sm" onClick={onClose}>Fechar</Button>
-        <Button size="sm" onClick={copy} disabled={!report || loading} className="min-w-32">
+        <Button size="sm" onClick={copy} disabled={!report} className="min-w-32">
           {copied ? <><Check className="h-3.5 w-3.5 mr-1" /> Copiado!</> : <><Copy className="h-3.5 w-3.5 mr-1" /> Copiar para o WhatsApp</>}
         </Button>
       </div>

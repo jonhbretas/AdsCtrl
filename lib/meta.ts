@@ -57,11 +57,40 @@ function metaErrorMessage(status: number, body: string): string {
   return `Meta API ${status}: ${body.slice(0, 200)}`;
 }
 
+// Códigos de erro da Meta que significam limite de chamadas (a conta de
+// anúncios rejeita a requisição). Nessas horas o detalhe inteiro falha em
+// lote — era o que deixava campanhas "sem conjuntos" quando o mapa de pais
+// morria por rate limit. Aqui espera-se um pouco e tenta de novo (GETs só;
+// POST nunca é repetido para não duplicar efeito).
+const RATE_LIMIT_CODES = new Set([4, 17, 613, 80004]);
+const RATE_LIMIT_HINT = /request limit|rate limit|too many (requests|api calls)/i;
+
+async function metaFetch(url: string, init?: RequestInit): Promise<Response> {
+  let last: Response | null = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    last = await fetch(url, init);
+    if (last.ok) return last;
+    let retryable = last.status === 429 || last.status === 503;
+    if (!retryable) {
+      try {
+        const json: any = await last.clone().json();
+        retryable = !!json?.error && (RATE_LIMIT_CODES.has(Number(json.error.code)) || RATE_LIMIT_HINT.test(String(json.error.message || "")));
+      } catch {
+        // corpo não-JSON: não é erro de limite, segue com o status original
+      }
+    }
+    if (!retryable) return last;
+    const waitMs = 10000 * (attempt + 1) + Math.floor(Math.random() * 5000);
+    await new Promise((resolve) => setTimeout(resolve, waitMs));
+  }
+  return last!;
+}
+
 async function fbGetAll<T>(url: string): Promise<T[]> {
   const out: T[] = [];
   let next: string | undefined = url;
   while (next) {
-    const res = await fetch(next);
+    const res = await metaFetch(next);
     if (!res.ok) {
       throw new Error(metaErrorMessage(res.status, await res.text()));
     }
@@ -887,7 +916,7 @@ export interface CampaignStructure {
 // fbGetAll segue paginação e devolve lista; para UM objeto (uma campanha, por
 // exemplo) a resposta não tem `data` e aquele helper não serve.
 async function fbGetOne<T>(url: string): Promise<T> {
-  const res = await fetch(url, { cache: "no-store" });
+  const res = await metaFetch(url, { cache: "no-store" });
   const text = await res.text();
   let json: any = {};
   try { json = text ? JSON.parse(text) : {}; } catch { json = {}; }
@@ -1432,7 +1461,7 @@ export async function getAccountRaw(actId: string, token: string = TOKEN): Promi
     "min_daily_budget",
   ].join(",");
   const url = `${GRAPH}/${actId}?fields=${fields}&access_token=${token}`;
-  const res = await fetch(url);
+  const res = await metaFetch(url, { cache: "no-store" });
   const body = await res.text();
   if (!res.ok) throw new Error(`Meta API ${res.status}: ${body}`);
   return JSON.parse(body);
