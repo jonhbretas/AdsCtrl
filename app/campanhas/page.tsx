@@ -10,7 +10,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowLeft, Check, ChevronDown, ChevronRight, Copy, MessageCircle, Plus, RefreshCw, Sparkles } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, ChevronDown, ChevronRight, Copy, Loader2, MessageCircle, Plus, RefreshCw, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -128,6 +128,7 @@ export default function CampaignsPage() {
   const [customSince, setCustomSince] = useState(isoDaysAgo(14));
   const [customUntil, setCustomUntil] = useState(isoDaysAgo(1));
   const [showCustom, setShowCustom] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [selectedCampaigns, setSelectedCampaigns] = useState<Set<string>>(new Set());
   // Rótulo do resultado escolhido na página ("Cliques no Link", "Conversas
   // iniciadas"...) — o resumo segue a MESMA métrica da árvore.
@@ -392,7 +393,9 @@ export default function CampaignsPage() {
           <p className="text-sm text-muted-foreground mt-2">Estrutura e veiculação · {periodRangeText} · {account ? (account.platform === "google" ? "Google Ads" : "Meta Ads") : "—"}{counts ? ` · ${rowCount}` : ""}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={async () => { try { await reload(); flash("Dados atualizados."); } catch (e: any) { flash(e.message, true); } }}><RefreshCw className="h-3.5 w-3.5 mr-1" /> Atualizar</Button>
+          <Button variant="ghost" size="sm" onClick={async () => { setRefreshing(true); try { await reload(); flash("Dados atualizados."); } catch (e: any) { flash(e.message, true); } finally { setRefreshing(false); } }} disabled={refreshing}>
+            {refreshing ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5 mr-1" />} {refreshing ? "Atualizando…" : "Atualizar"}
+          </Button>
           <Button variant="ghost" size="sm" onClick={() => setReportOpen(true)} disabled={!accountId || !detail} title={someSelected ? `Resumo com as ${selectedCampaigns.size} campanha(s) selecionada(s), no período da página` : "Resumo curto para colar no WhatsApp (fechamento mensal)"}><MessageCircle className="h-3.5 w-3.5 mr-1" /> Resumo{someSelected ? ` (${selectedCampaigns.size})` : ""}</Button>
           <Button variant="ghost" size="sm" onClick={() => setStructureOpen(true)} disabled={!isMeta} title={isMeta ? "Gerar funil de campanhas a partir da estratégia (pausado)" : "Gerar estrutura só na Meta"}><Sparkles className="h-3.5 w-3.5 mr-1" /> Sugerir estrutura</Button>
           <Button size="sm" onClick={() => setNewCampaign(true)} disabled={!isMeta} title={isMeta ? "Criar campanha" : "Criar campanha só na Meta"}>
@@ -1269,7 +1272,7 @@ function NewCampaignModal({ onClose, onSubmit }: { onClose: () => void; onSubmit
         <div className="flex justify-end gap-2 pt-1">
           <Button variant="ghost" size="sm" onClick={onClose} disabled={busy}>Cancelar</Button>
           <Button size="sm" disabled={busy || !name.trim()} onClick={async () => { setBusy(true); setError(null); const ok = await onSubmit(name.trim(), objective, status); if (!ok) { setBusy(false); setError("Não foi possível criar. Veja a mensagem acima."); } }}>
-            {busy ? "Criando…" : "Criar campanha"}
+            {busy ? <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> Criando…</> : "Criar campanha"}
           </Button>
         </div>
       </div>
@@ -1295,7 +1298,7 @@ function DuplicateSameModal({ noun, name, onClose, onSubmit }: { noun: string; n
         <div className="flex justify-end gap-2 pt-1">
           <Button variant="ghost" size="sm" onClick={onClose} disabled={busy}>Cancelar</Button>
           <Button size="sm" disabled={busy} onClick={async () => { setBusy(true); setError(null); const ok = await onSubmit(suffix.trim()); if (!ok) { setBusy(false); setError("Não foi possível duplicar. Veja a mensagem acima."); } }}>
-            {busy ? "Duplicando…" : "Duplicar"}
+            {busy ? <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> Duplicando…</> : "Duplicar"}
           </Button>
         </div>
       </div>
@@ -1340,7 +1343,7 @@ function BudgetModal({ accountId, level, id, name, currency, onClose, onDone }: 
             setBusy(false);
           }
         }}>
-          {busy ? "Ajustando…" : `Confirmar ${dir === "up" ? "aumento" : "redução"}`}
+          {busy ? <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> Ajustando…</> : `Confirmar ${dir === "up" ? "aumento" : "redução"}`}
         </Button>
       </div>
     </Overlay>

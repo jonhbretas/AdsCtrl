@@ -284,7 +284,7 @@ export default function AccountChanges({
                 cursor: loading ? "default" : "pointer",
               }}
             >
-              {loading ? "Buscando…" : "Atualizar"}
+              {loading ? <><span className="mr-1 inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent align-middle" /> Buscando…</> : "Atualizar"}
             </button>
           </div>
 

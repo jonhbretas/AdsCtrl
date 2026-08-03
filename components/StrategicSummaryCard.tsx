@@ -8,7 +8,7 @@
 // prazo, a Central de Alertas avisa.
 
 import { useCallback, useEffect, useState } from "react";
-import { CalendarClock, Check, ChevronDown, ChevronRight, NotebookPen, Pencil, X } from "lucide-react";
+import { CalendarClock, Check, ChevronDown, ChevronRight, Loader2, NotebookPen, Pencil, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn, readJson } from "@/lib/utils";
 
@@ -165,7 +165,7 @@ export default function StrategicSummaryCard({ accountId }: { accountId: string 
               <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
                 <Button variant="ghost" size="sm" onClick={() => { setEditing(false); load(); }} disabled={saving}>Cancelar</Button>
                 <Button size="sm" onClick={save} disabled={saving}>
-                  {saving ? "Salvando…" : "Salvar resumo"}
+                  {saving ? <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> Salvando…</> : "Salvar resumo"}
                 </Button>
               </div>
             </div>
