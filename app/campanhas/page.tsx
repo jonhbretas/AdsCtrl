@@ -929,6 +929,16 @@ function WhatsAppReportModal({ accountId, accountName, currency, since, until, p
     return { campaigns, adsets, ads, filtered: true };
   }, [detail, selectedCampaignIds]);
 
+  // Investimento exibido no resumo: por padrão o real. Se editar (ex.: mostrar
+  // um valor menor), o total é repartido proporcionalmente entre campanhas e
+  // criativos para a soma bater no novo valor.
+  const [overrideSpend, setOverrideSpend] = useState("");
+  const realSpend = useMemo(() => scoped ? scoped.campaigns.reduce((acc, row) => acc + row.spend, 0) : 0, [scoped]);
+  const overrideParsed = Number.parseFloat(overrideSpend.replace(",", "."));
+  const effectiveSpend = Number.isFinite(overrideParsed) && overrideParsed > 0 ? overrideParsed : realSpend;
+  const spendFactor = realSpend > 0 ? effectiveSpend / realSpend : 1;
+  const spendEdited = realSpend > 0 && effectiveSpend !== realSpend;
+
   const report = useMemo(() => {
     if (!detail || !scoped) return "";
 
@@ -1081,7 +1091,21 @@ function WhatsAppReportModal({ accountId, accountName, currency, since, until, p
     }
     const creatives = [...creativeAgg.values()].sort((a, b) => b.spend - a.spend);
 
-    const spend = scoped.campaigns.reduce((acc, row) => acc + row.spend, 0);
+    // Investimento exibido (real ou editado) com os valores diluídos.
+    const spend = effectiveSpend;
+    // Campanhas escaladas pelo fator; a maior absorve a sobra do
+    // arredondamento para a soma bater EXATAMENTE no valor exibido.
+    const scaledCampaigns = scoped.campaigns.map((row) => {
+      const r = rowResult(row, row.objective);
+      return { name: aliases[row.name] || row.name, objective: row.objective, spend: row.spend * spendFactor, results: r.value, resultNoun: nounFor(r.family, true) };
+    });
+    if (scaledCampaigns.length > 0) {
+      const sum = scaledCampaigns.reduce((acc, c) => acc + c.spend, 0);
+      const diff = spend - sum;
+      const biggest = scaledCampaigns.reduce((a, b) => (b.spend >= a.spend ? b : a));
+      biggest.spend = Math.max(0, biggest.spend + diff);
+    }
+    const scaledCreatives = creatives.map((c) => ({ ...c, spend: c.spend * spendFactor }));
     // Total honesto: a soma dos resultados de cada campanha pelo próprio
     // objetivo — nunca a soma bruta de todas as ações da Meta, que infla o
     // número e zera o CPR.
@@ -1095,12 +1119,9 @@ function WhatsAppReportModal({ accountId, accountName, currency, since, until, p
       periodLabel,
       periodRange: { since, until },
       days,
-      campaigns: scoped.campaigns.map((row) => {
-        const r = rowResult(row, row.objective);
-        return { name: aliases[row.name] || row.name, objective: row.objective, spend: row.spend, results: r.value, resultNoun: nounFor(r.family, true) };
-      }),
+      campaigns: scaledCampaigns,
       campaignTypes,
-      creatives,
+      creatives: scaledCreatives,
       // A quebra por região vem da API para a conta toda; com seleção de
       // campanhas não há região por campanha, então ela sai fora do resumo.
       regions: scoped.filtered ? [] : detail.breakdowns?.region || [],
@@ -1112,7 +1133,7 @@ function WhatsAppReportModal({ accountId, accountName, currency, since, until, p
       cpr,
       revenue,
     });
-  }, [detail, scoped, accountName, currency, periodLabel, since, until, days, aliases, resultSelection, resultSelectionLabel, revenue]);
+  }, [detail, scoped, accountName, currency, periodLabel, since, until, days, aliases, resultSelection, resultSelectionLabel, effectiveSpend, spendFactor, revenue]);
 
   async function copy() {
     if (!report) return;
@@ -1143,6 +1164,28 @@ function WhatsAppReportModal({ accountId, accountName, currency, since, until, p
         <button type="button" onClick={() => setEditingNames((v) => !v)} className={cn("rounded-md border px-2 py-1 text-[10.5px] font-semibold transition-colors", editingNames ? "border-primary/30 bg-primary/10 text-primary" : "border-border/50 bg-muted/30 text-muted-foreground hover:text-foreground")}>
           ✏️ {editingNames ? "Fechar nomes" : "Ajustar nomes"}
         </button>
+      </div>
+
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-[10.5px]">
+        <label htmlFor="override-spend" className="font-semibold text-muted-foreground">💵 Investimento exibido:</label>
+        <input
+          id="override-spend"
+          type="text"
+          inputMode="decimal"
+          value={overrideSpend}
+          onChange={(e) => setOverrideSpend(e.target.value)}
+          placeholder={money(realSpend, currency || "BRL")}
+          disabled={!realSpend}
+          title="Deixe vazio para usar o investimento real"
+          className="h-7 w-28 rounded-md border border-border/50 bg-background px-2 text-xs outline-none focus:ring-1 focus:ring-ring disabled:opacity-40"
+        />
+        {spendEdited && (
+          <>
+            <span className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1 font-semibold text-amber-600 dark:text-amber-400">diluído nas campanhas para somar {money(effectiveSpend, currency || "BRL")}</span>
+            <button type="button" onClick={() => setOverrideSpend("")} className="rounded-md border border-border/50 bg-muted/30 px-2 py-1 font-semibold text-muted-foreground hover:text-foreground transition-colors">usar valor real</button>
+          </>
+        )}
+        <span className="text-muted-foreground">vazio = valor real ({money(realSpend, currency || "BRL")})</span>
       </div>
 
       {editingNames && scoped && (
