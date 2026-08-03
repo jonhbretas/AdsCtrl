@@ -25,6 +25,7 @@ import AccountChanges from "@/components/AccountChanges";
 import StrategicSummaryCard from "@/components/StrategicSummaryCard";
 import StructureWizard from "@/components/StructureWizard";
 import { BrDateInput } from "@/components/BrDateInput";
+import QuickAccess from "@/components/QuickAccess";
 import { buildWhatsAppReport, monthPeriodLabel } from "@/lib/whatsapp-report";
 
 interface Row {
@@ -66,7 +67,7 @@ const PRESETS: { key: Period; label: string }[] = [
   { key: "14d", label: "14D" },
   { key: "30d", label: "30D" },
   { key: "mtd", label: "Mês atual" },
-  { key: "lastMonth", label: "Mês Antigo" },
+  { key: "lastMonth", label: "Mês Anterior" },
 ];
 
 function firstOfMonthIso() {
@@ -348,13 +349,14 @@ export default function CampaignsPage() {
             <Link href="/" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground no-underline"><ArrowLeft className="h-3 w-3" /> Visão Geral</Link>
           </div>
           {/* O nome da conta É o seletor: trocar de conta fica ao lado do
-              título, sem procurar no canto direito. */}
-          <div className="mt-1 flex min-w-0 items-center gap-1.5">
+              título, sem procurar no canto direito. Borda + fundo indicam
+              que é um seletor (dropdown) e não só o título. */}
+          <div className="mt-1 inline-flex min-w-0 max-w-[min(90vw,600px)] items-center gap-1 rounded-lg border border-border/60 bg-card px-2.5 py-1 shadow-sm">
             <select
               value={accountId}
               onChange={(e) => selectAccount(e.target.value)}
               title="Trocar conta de anúncios"
-              className="block min-w-0 max-w-[min(70vw,520px)] cursor-pointer appearance-none truncate rounded-lg border-none bg-transparent p-0 text-2xl font-bold tracking-tight outline-none [&>option]:text-sm [&>option]:font-normal hover:text-primary/90"
+              className="block min-w-0 max-w-[min(70vw,520px)] cursor-pointer appearance-none truncate rounded-lg border-none bg-transparent p-0 text-xl font-bold tracking-tight outline-none [&>option]:text-sm [&>option]:font-normal hover:text-primary/90 md:text-2xl"
             >
               {accounts.map((item) => <option key={item.account_id} value={item.account_id}>{item.platform === "google" ? "Google" : "Meta"} · {item.name}</option>)}
             </select>
@@ -371,6 +373,10 @@ export default function CampaignsPage() {
           </Button>
         </div>
       </div>
+
+      {accountId && account && (
+        <QuickAccess accountId={accountId} accountName={account.name} platform={account.platform} balance={null} currency={account.currency || "BRL"} compact />
+      )}
 
       {!isMeta && account && (
         <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-sm text-amber-600 dark:text-amber-400">
