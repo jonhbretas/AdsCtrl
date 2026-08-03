@@ -389,7 +389,7 @@ export default function CampaignsPage() {
             </select>
             <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
           </div>
-          <p className="text-sm text-muted-foreground mt-0.5">Estrutura e veiculação · {periodRangeText} · {account ? (account.platform === "google" ? "Google Ads" : "Meta Ads") : "—"}{counts ? ` · ${rowCount}` : ""}</p>
+          <p className="text-sm text-muted-foreground mt-2">Estrutura e veiculação · {periodRangeText} · {account ? (account.platform === "google" ? "Google Ads" : "Meta Ads") : "—"}{counts ? ` · ${rowCount}` : ""}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="ghost" size="sm" onClick={async () => { try { await reload(); flash("Dados atualizados."); } catch (e: any) { flash(e.message, true); } }}><RefreshCw className="h-3.5 w-3.5 mr-1" /> Atualizar</Button>
