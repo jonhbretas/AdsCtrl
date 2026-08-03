@@ -64,26 +64,30 @@ function metaErrorMessage(status: number, body: string): string {
 // POST nunca é repetido para não duplicar efeito).
 const RATE_LIMIT_CODES = new Set([4, 17, 613, 80004]);
 const RATE_LIMIT_HINT = /request limit|rate limit|too many (requests|api calls)/i;
+// Quando o limite dispara, os OUTROS pedidos do mesmo lote (até ~18 chamadas
+// em paralelo no detalhe) não devem ficar tentando: espera de 60s sem retry.
+// Sem isso a função estoura o timeout do Vercel e devolve página de erro em
+// texto — o "An error occurred…" que vira "Unexpected token" no front.
+let rateLimitedUntil = 0;
 
 async function metaFetch(url: string, init?: RequestInit): Promise<Response> {
-  let last: Response | null = null;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    last = await fetch(url, init);
-    if (last.ok) return last;
-    let retryable = last.status === 429 || last.status === 503;
-    if (!retryable) {
-      try {
-        const json: any = await last.clone().json();
-        retryable = !!json?.error && (RATE_LIMIT_CODES.has(Number(json.error.code)) || RATE_LIMIT_HINT.test(String(json.error.message || "")));
-      } catch {
-        // corpo não-JSON: não é erro de limite, segue com o status original
-      }
+  const res = await fetch(url, init);
+  if (res.ok) return res;
+  if (rateLimitedUntil > Date.now()) return res;
+  let retryable = res.status === 429 || res.status === 503;
+  if (!retryable) {
+    try {
+      const json: any = await res.clone().json();
+      retryable = !!json?.error && (RATE_LIMIT_CODES.has(Number(json.error.code)) || RATE_LIMIT_HINT.test(String(json.error.message || "")));
+    } catch {
+      // corpo não-JSON: não é erro de limite, segue com o status original
     }
-    if (!retryable) return last;
-    const waitMs = 10000 * (attempt + 1) + Math.floor(Math.random() * 5000);
-    await new Promise((resolve) => setTimeout(resolve, waitMs));
   }
-  return last!;
+  if (!retryable) return res;
+  rateLimitedUntil = Date.now() + 60000;
+  const waitMs = 4000 + Math.floor(Math.random() * 2000);
+  await new Promise((resolve) => setTimeout(resolve, waitMs));
+  return fetch(url, init);
 }
 
 async function fbGetAll<T>(url: string): Promise<T[]> {
