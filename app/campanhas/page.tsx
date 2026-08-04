@@ -1064,22 +1064,22 @@ function WhatsAppReportModal({ accountId, accountName, currency, since, until, p
     // Criativos: o anúncio herda o objetivo da campanha mãe (o insight de
     // anúncio não traz o objetivo) e entra com nome, gasto, resultado e link.
     // IMPORTANTE: no nível de anúncio a Meta conta a MESMA conversa em vários
-    // anúncios (atribuição sobreposta) — a soma das linhas estoura o total da
-    // campanha (já vimos "559 conversas" num criativo de R$ 86). Por isso o
-    // resultado exibido é o total CONFIAVEL da campanha repartido pela
-    // participação bruta de cada anúncio: bate com o fechamento e mantém a
-    // ordem de performance. O apelido é aplicado antes de agregar.
+    // anúncios (atribuição sobreposta) — o dado cru é inflado e nem sempre
+    // acompanha o gasto (vimos "559 conversas" num criativo de R$ 86). Para o
+    // resumo fechar redondo, o resultado do criativo é o total CONFIAVEL da
+    // campanha repartido pela participação de GASTO do anúncio: quem tem 16%
+    // da verba mostra ~16% dos resultados. O apelido é aplicado antes de
+    // agregar nomes repetidos.
     const adsetToCampaign = new Map(scoped.adsets.map((s) => [s.id, s.campaign_id]));
     const campaignObjective = new Map(scoped.campaigns.map((c) => [c.id, c.objective]));
     const campaignResult = new Map<string, { value: number; family: string }>();
     for (const row of scoped.campaigns) campaignResult.set(row.id, rowResult(row, row.objective));
-    const rawByCampaign = new Map<string, number>();
+    const campaignSpend = new Map<string, number>();
     for (const row of scoped.ads) {
       if (row.spend <= 0) continue;
       const campaignId = row.adset_id ? adsetToCampaign.get(row.adset_id) : undefined;
       if (!campaignId) continue;
-      const raw = rowResult(row, campaignObjective.get(campaignId)).value;
-      rawByCampaign.set(campaignId, (rawByCampaign.get(campaignId) || 0) + raw);
+      campaignSpend.set(campaignId, (campaignSpend.get(campaignId) || 0) + row.spend);
     }
     const creativeAgg = new Map<string, { name: string; spend: number; results: number; resultNoun: string; permalink?: string }>();
     for (const row of scoped.ads) {
@@ -1088,11 +1088,11 @@ function WhatsAppReportModal({ accountId, accountName, currency, since, until, p
       const objective = campaignId ? campaignObjective.get(campaignId) : undefined;
       const r = rowResult(row, objective);
       const parent = campaignId ? campaignResult.get(campaignId) : undefined;
-      const rawSum = campaignId ? rawByCampaign.get(campaignId) || 0 : 0;
       let results = r.value;
       let resultNoun = nounFor(r.family, true);
-      if (parent && parent.value > 0 && rawSum > 0 && r.value > 0) {
-        results = Math.max(1, Math.round(parent.value * (r.value / rawSum)));
+      const campSpend = campaignId ? campaignSpend.get(campaignId) || 0 : 0;
+      if (parent && parent.value > 0 && campSpend > 0) {
+        results = Math.round(parent.value * (row.spend / campSpend));
         resultNoun = nounFor(parent.family, true);
       }
       const name = aliases[row.name] || row.name;
