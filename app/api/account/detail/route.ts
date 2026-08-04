@@ -105,13 +105,20 @@ export async function GET(req: Request) {
       detail = { ...metaDetail, result_family };
     }
 
-    // Só cacheia sucesso. Escrita é rara (uma vez por janela) — a limpeza de
-    // linhas velhas paga o preço nela, não na leitura quente.
-    await supabase
-      .from("account_detail_cache")
-      .upsert({ ...cacheKey, payload: detail, fetched_at: new Date().toISOString(), hits: 0 })
-      .then(() => undefined, () => undefined);
-    await purgeStale(supabase);
+    // Só cacheia sucesso e dados SANOS: se a soma das regiões não bate com o
+    // KPI (diferença > 5%), o lote veio parcial (rate limit no meio) — um
+    // payload desses gravado viraria "região 251%" para sempre. Não cacheia;
+    // a próxima leitura tenta de novo.
+    const regionSum = (detail?.breakdowns?.region || []).reduce((acc: number, r: any) => acc + Number(r?.spend || 0), 0);
+    const kpiSpend = Number(detail?.kpis?.spend || 0);
+    const sane = regionSum === 0 || kpiSpend === 0 || Math.abs(regionSum - kpiSpend) / Math.max(regionSum, kpiSpend) < 0.05;
+    if (sane) {
+      await supabase
+        .from("account_detail_cache")
+        .upsert({ ...cacheKey, payload: detail, fetched_at: new Date().toISOString(), hits: 0 })
+        .then(() => undefined, () => undefined);
+      await purgeStale(supabase);
+    }
     return NextResponse.json({ ...detail, cached: false });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message ?? "Erro ao buscar detalhe." }, { status: 500 });

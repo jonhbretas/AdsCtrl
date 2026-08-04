@@ -1122,6 +1122,14 @@ function WhatsAppReportModal({ accountId, accountName, currency, since, until, p
       biggest.spend = Math.max(0, biggest.spend + diff);
     }
     const scaledCreatives = creatives.map((c) => ({ ...c, spend: c.spend * spendFactor }));
+    // Regiões: a quebra vem da API para a conta toda; com seleção de
+    // campanhas ela sai fora do resumo. "Rio de Janeiro (state)" vira
+    // "Rio de Janeiro". O gasto é normalizado para o total exibido — a soma
+    // das regiões TEM que ser o total (se o payload vier inconsistente por
+    // falha parcial, reparte proporcionalmente e fecha em 100%).
+    const rawRegions = scoped.filtered ? [] : (detail.breakdowns?.region || []).map((r) => ({ ...r, key: r.key.replace(/\s*\(state\)$/i, "") }));
+    const regionSum = rawRegions.reduce((acc, r) => acc + (r.spend || 0), 0);
+    const regions = regionSum > 0 ? rawRegions.map((r) => ({ ...r, spend: r.spend * (effectiveSpend / regionSum) })) : rawRegions;
     // Total honesto: a soma dos resultados de cada campanha pelo próprio
     // objetivo — nunca a soma bruta de todas as ações da Meta, que infla o
     // número e zera o CPR.
@@ -1138,10 +1146,7 @@ function WhatsAppReportModal({ accountId, accountName, currency, since, until, p
       campaigns: scaledCampaigns,
       campaignTypes,
       creatives: scaledCreatives,
-      // A quebra por região vem da API para a conta toda; com seleção de
-      // campanhas não há região por campanha, então ela sai fora do resumo.
-      // "Rio de Janeiro (state)" vira "Rio de Janeiro".
-      regions: scoped.filtered ? [] : (detail.breakdowns?.region || []).map((r) => ({ ...r, key: r.key.replace(/\s*\(state\)$/i, "") })),
+      regions,
       targetCities: scoped.filtered ? [] : detail.targetedCities || [],
       creativeCount: { total: scoped.ads.length, active: activeCreatives },
       totalSpend: spend,
