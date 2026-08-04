@@ -30,7 +30,7 @@ import { buildWhatsAppReport } from "@/lib/whatsapp-report";
 
 interface Row {
   id: string; name: string; spend: number; impressions: number; clicks: number;
-  ctr: number; cpm: number; objective?: string; thumbnail?: string; permalink?: string;
+  ctr: number; cpm: number; reach?: number; objective?: string; thumbnail?: string; permalink?: string;
   status?: string; effective_status?: string;
   results: Record<string, number>; values: Record<string, number>;
   campaign_id?: string; adset_id?: string;
@@ -1000,6 +1000,9 @@ function WhatsAppReportModal({ accountId, accountName, currency, since, until, p
           break;
         }
         case "OUTCOME_AWARENESS": {
+          // A métrica raiz de reconhecimento é o ALCANCE (vem no campo
+          // `reach` do insight, não nas actions).
+          if ((row.reach || 0) > 0) return { value: row.reach || 0, family: "alcance" };
           const v = tryFam("lpv");
           if (v > 0) return { value: v, family: "lpv" };
           break;
@@ -1018,11 +1021,11 @@ function WhatsAppReportModal({ accountId, accountName, currency, since, until, p
     // "custo por conversa/venda/lead").
     const FAMILY_SHORT: Record<string, string> = {
       vendas: "vendas", mensagens: "conversas", leads: "leads", cadastros: "cadastros",
-      cliques: "cliques", engajamento: "engajamentos", lpv: "views de LP",
+      cliques: "cliques", engajamento: "engajamentos", lpv: "views de LP", alcance: "pessoas alcançadas",
     };
     const FAMILY_NOUN: Record<string, string> = {
       vendas: "venda", mensagens: "conversa", leads: "lead", cadastros: "cadastro",
-      cliques: "clique", engajamento: "engajamento", lpv: "view de LP",
+      cliques: "clique", engajamento: "engajamento", lpv: "view de LP", alcance: "pessoa alcançada",
     };
     const nounFor = (family: string, short: boolean): string => {
       if (family === "selected") return short ? selectionShort || "resultados" : selectionNoun || "resultado";
@@ -1040,25 +1043,27 @@ function WhatsAppReportModal({ accountId, accountName, currency, since, until, p
 
     // Resultado somado por tipo de campanha, com o rótulo do resultado real.
     const byType = new Map<string, { label: string; family: string; results: number }>();
-    const familyTotals = new Map<string, number>();
+    const familySpend = new Map<string, number>();
     for (const row of scoped.campaigns) {
       const r = rowResult(row, row.objective);
       if (r.value <= 0) continue;
-      familyTotals.set(r.family, (familyTotals.get(r.family) || 0) + r.value);
+      familySpend.set(r.family, (familySpend.get(r.family) || 0) + row.spend);
       const label = TYPE_LABELS[row.objective || ""] || objectiveLabel(row.objective) || "Outros";
       const key = `${label}||${r.family}`;
       const entry = byType.get(key) || { label, family: r.family, results: 0 };
       entry.results += r.value;
       byType.set(key, entry);
     }
+    const familyLabel = (family: string) => (family === "alcance" ? "Alcance" : fam(family)?.label || "Resultados");
     const campaignTypes = [...byType.values()]
-      .map((entry) => ({ label: entry.label, results: entry.results, familyLabel: resultSelectionLabel || fam(entry.family).label }))
+      .map((entry) => ({ label: entry.label, results: entry.results, familyLabel: resultSelectionLabel || familyLabel(entry.family) }))
       .sort((a, b) => b.results - a.results);
 
-    // A família dominante da conta define o rótulo do total ("Conversas
-    // iniciadas: 35 · custo por conversa R$ 25") — quando não há seleção.
-    const dominant = [...familyTotals.entries()].sort((a, b) => b[1] - a[1])[0];
-    const resultsLabel = resultSelectionLabel || (dominant && dominant[0] !== "conversoes" ? fam(dominant[0]).label : "Resultados");
+    // A família DOMINANTE POR GASTO define o rótulo do total ("Cliques no
+    // link: 11.703 · custo por clique R$ 0,13"). Contagem não serve: numa
+    // conta mista, 340 mil de alcance engoliriam 11 mil cliques.
+    const dominant = [...familySpend.entries()].sort((a, b) => b[1] - a[1])[0];
+    const resultsLabel = resultSelectionLabel || (dominant ? familyLabel(dominant[0]) : "Resultados");
     const resultsNoun = selectionNoun || (dominant ? FAMILY_NOUN[dominant[0]] || "resultado" : "resultado");
 
     // Criativos: o anúncio herda o objetivo da campanha mãe (o insight de
@@ -1130,10 +1135,15 @@ function WhatsAppReportModal({ accountId, accountName, currency, since, until, p
     const rawRegions = scoped.filtered ? [] : (detail.breakdowns?.region || []).map((r) => ({ ...r, key: r.key.replace(/\s*\(state\)$/i, "") }));
     const regionSum = rawRegions.reduce((acc, r) => acc + (r.spend || 0), 0);
     const regions = regionSum > 0 ? rawRegions.map((r) => ({ ...r, spend: r.spend * (effectiveSpend / regionSum) })) : rawRegions;
-    // Total honesto: a soma dos resultados de cada campanha pelo próprio
-    // objetivo — nunca a soma bruta de todas as ações da Meta, que infla o
-    // número e zera o CPR.
-    const totalResults = [...familyTotals.values()].reduce((acc, v) => acc + v, 0);
+    // Total honesto: a soma dos resultados da família DOMINANTE (a do rótulo
+    // do total). Numa conta mista, o total não pode misturar cliques com
+    // alcance — cada família aparece completa em "Resultado por tipo".
+    const familyResults = new Map<string, number>();
+    for (const row of scoped.campaigns) {
+      const r = rowResult(row, row.objective);
+      if (r.value > 0) familyResults.set(r.family, (familyResults.get(r.family) || 0) + r.value);
+    }
+    const totalResults = dominant ? familyResults.get(dominant[0]) || 0 : 0;
     const results = totalResults > 0 ? totalResults : null;
     const cpr = results ? spend / results : null;
     const activeCreatives = scoped.ads.filter((row) => row.status === "ACTIVE" || row.effective_status === "ACTIVE").length;
