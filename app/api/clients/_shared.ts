@@ -55,6 +55,21 @@ function nullableText(value: unknown, field: string, maxLength: number): string 
   return normalized;
 }
 
+// Lista de e-mails separada por vírgula ou ponto e vírgula. Devolve a lista
+// normalizada (vírgula + espaço) ou null. Qualquer item inválido recusa tudo.
+function reportEmailList(value: unknown, field: string): string | null {
+  const raw = nullableText(value, field, 500);
+  if (!raw) return null;
+  const parts = raw.split(/[,;]/).map((part) => part.trim()).filter(Boolean);
+  if (!parts.length) return null;
+  for (const part of parts) {
+    if (!/^[^@\s]+@[^@\s.]+\.[^@\s]+$/.test(part)) {
+      throw new ClientInputError(`${field} deve conter apenas e-mails válidos separados por vírgula.`);
+    }
+  }
+  return parts.join(", ");
+}
+
 function nullableNonNegativeNumber(value: unknown, field: string): number | null {
   if (value === null || value === "") return null;
   const normalized = typeof value === "number" ? value : Number(value);
@@ -236,12 +251,16 @@ export function clientPatchFromBody(body: unknown, creating = false): Record<str
     patch.contract_notice_days = days;
   }
 
+  // Destinatários do relatório: um ou vários, separados por vírgula (ex.: os
+  // sócios do cliente). A lista inteira é aceita ou recusada — um endereço
+  // inválido não pode derrubar um envio que passa o endereço como um texto.
   if (Object.prototype.hasOwnProperty.call(input, "report_email")) {
-    const email = nullableText(input.report_email, "report_email", 180);
-    if (email && !/^[^@\s]+@[^@\s.]+\.[^@\s]+$/.test(email)) {
-      throw new ClientInputError("report_email deve ser um endereço de e-mail válido.");
-    }
-    patch.report_email = email;
+    patch.report_email = reportEmailList(input.report_email, "report_email");
+  }
+
+  // Cópia (CC) do relatório: opcional, também aceita lista separada por vírgula.
+  if (Object.prototype.hasOwnProperty.call(input, "report_cc")) {
+    patch.report_cc = reportEmailList(input.report_cc, "report_cc");
   }
 
   if (Object.prototype.hasOwnProperty.call(input, "report_enabled")) {

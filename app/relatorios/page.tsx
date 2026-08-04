@@ -6,8 +6,9 @@
 // relatório semanal, com que marca, em que dia e hora, o botão de teste que
 // nunca vai para o cliente, e o link permanente do painel.
 //
-// Duas travas de propósito: só dá para ativar o envio depois de cadastrar o
-// e-mail, e o teste sempre vai para o endereço de teste da Config.
+// Duas travas de propósito: só dá para ativar o envio depois de cadastrar ao
+// menos um e-mail (a lista separada por vírgula vale como um destino só), e o
+// teste sempre vai para o endereço de teste da Config.
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -23,7 +24,7 @@ interface Account { account_id: string; name: string; platform: "meta" | "google
 interface ClientRecord {
   id: string; name: string; status: string; timezone: string;
   result_family: string | null; brand_name?: string | null;
-  report_email?: string | null; report_enabled?: boolean;
+  report_email?: string | null; report_cc?: string | null; report_enabled?: boolean;
   report_weekday?: number | null;
   report_last_sent_at?: string | null;
   accounts: Account[];
@@ -32,6 +33,12 @@ interface ClientRecord {
 const WEEKDAYS = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
 const DEFAULT_WEEKDAY = 1;
 const compactInput: React.CSSProperties = { width: "100%", height: 32, fontSize: 12.5, borderRadius: 8, border: "1px solid var(--color-border)", background: "transparent", padding: "0 8px" };
+
+// O campo guarda um ou vários e-mails separados por vírgula (ex.: os sócios).
+// "Tem e-mail" só vale se pelo menos um endereço da lista for válido.
+function listHasEmail(value?: string | null): boolean {
+  return Boolean((value || "").split(/[,;]/).some((part) => /^[^@\s]+@[^@\s.]+\.[^@\s]+$/.test(part.trim())));
+}
 
 export default function RelatoriosPage() {
   const [clients, setClients] = useState<ClientRecord[]>([]);
@@ -172,7 +179,7 @@ function DeliveryCard({
   const [sending, setSending] = useState<"test" | "now" | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [dashboardUrl, setDashboardUrl] = useState<string | null>(null);
-  const hasEmail = Boolean((client.report_email || "").trim());
+  const hasEmail = listHasEmail(client.report_email);
   const weekday = client.report_weekday ?? DEFAULT_WEEKDAY;
   const hourLabel = globalHour != null ? `${String(globalHour).padStart(2, "0")}:00` : "—";
 
@@ -224,11 +231,13 @@ function DeliveryCard({
   }
 
   // Disparo avulso, quando o cliente pede o relatório fora da agenda. Vai
-  // direto para o e-mail dele e não tem desfazer — daí a confirmação com o
-  // endereço escrito por extenso.
+  // direto para os e-mails cadastrados (com cópia, se houver) e não tem
+  // desfazer — daí a confirmação com o destino escrito por extenso.
   async function sendNow() {
     const recipient = (client.report_email || "").trim();
-    if (!window.confirm(`Enviar agora o relatório da última semana fechada para ${recipient}?\n\nO e-mail vai direto para o cliente e não há como cancelar.`)) return;
+    const cc = (client.report_cc || "").trim();
+    const destino = cc ? `para ${recipient}\ncom cópia para ${cc}` : `para ${recipient}`;
+    if (!window.confirm(`Enviar agora o relatório da última semana fechada ${destino}?\n\nO e-mail vai direto para o cliente e não há como cancelar.`)) return;
     setSending("now");
     try {
       const r = await fetch(`/api/reports/send?client=${encodeURIComponent(client.id)}&force=1`, { method: "POST" });
@@ -269,7 +278,7 @@ function DeliveryCard({
         <button
           onClick={() => hasEmail && onUpdate(client.id, { report_enabled: !client.report_enabled })}
           disabled={!hasEmail}
-          title={hasEmail ? "Liga e desliga o envio automático" : "Cadastre o e-mail antes de ativar"}
+          title={hasEmail ? "Liga e desliga o envio automático" : "Cadastre ao menos um e-mail antes de ativar"}
           className={cn("h-8 px-3 rounded-lg text-xs font-semibold border cursor-pointer transition-colors disabled:cursor-not-allowed disabled:opacity-50",
             client.report_enabled ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "border-border text-muted-foreground hover:text-foreground")}
         >
@@ -278,17 +287,31 @@ function DeliveryCard({
       </div>
 
       <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
-        <Field label="E-mail do cliente">
+        <Field label="E-mails (para)" hint="Separe por vírgula para enviar a vários (ex.: os sócios).">
           <input
             key={`${client.id}-email-${loadRevision}`}
-            type="email"
+            type="text"
             defaultValue={client.report_email ?? ""}
-            placeholder="cliente@empresa.com"
+            placeholder="cliente@empresa.com, socio@empresa.com"
             onBlur={(e) => {
               const value = e.target.value.trim();
               if (value === (client.report_email ?? "")) return;
               // Sem e-mail não existe envio: desligar junto evita cliente "ativo" sem destino.
               onUpdate(client.id, { report_email: value || null, ...(value ? {} : { report_enabled: false }) });
+            }}
+            style={compactInput}
+          />
+        </Field>
+        <Field label="Cópia (CC)" hint="Opcional — quem fica sabendo sem ser destinatário.">
+          <input
+            key={`${client.id}-cc-${loadRevision}`}
+            type="text"
+            defaultValue={client.report_cc ?? ""}
+            placeholder="contador@empresa.com"
+            onBlur={(e) => {
+              const value = e.target.value.trim();
+              if (value === (client.report_cc ?? "")) return;
+              onUpdate(client.id, { report_cc: value || null });
             }}
             style={compactInput}
           />
@@ -330,8 +353,8 @@ function DeliveryCard({
           onClick={sendNow}
           disabled={sending !== null || !hasEmail}
           title={hasEmail
-            ? "Envia agora o relatório da última semana fechada direto para o cliente, fora da agenda"
-            : "Cadastre o e-mail do cliente antes de enviar"}
+            ? "Envia agora o relatório da última semana fechada direto para os e-mails do cliente, fora da agenda"
+            : "Cadastre ao menos um e-mail antes de enviar"}
         >
           <Zap className="h-3.5 w-3.5 mr-1" /> {sending === "now" ? "Enviando…" : "Enviar agora ao cliente"}
         </Button>

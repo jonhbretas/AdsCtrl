@@ -22,7 +22,8 @@ export async function resendIssues(): Promise<string[]> {
 }
 
 export interface SendEmailInput {
-  to: string;
+  to: string | string[];
+  cc?: string[];
   subject: string;
   html: string;
   text?: string;
@@ -43,7 +44,8 @@ export async function sendEmail(input: SendEmailInput): Promise<{ id: string }> 
     },
     body: JSON.stringify({
       from: settings.report_from_email,
-      to: [input.to],
+      to: Array.isArray(input.to) ? input.to : [input.to],
+      ...(input.cc?.length ? { cc: input.cc } : {}),
       subject: input.subject,
       html: input.html,
       ...(input.text ? { text: input.text } : {}),
@@ -68,4 +70,20 @@ export async function sendEmail(input: SendEmailInput): Promise<{ id: string }> 
 // Validação simples de endereço — evita chamar a API com lixo vindo do banco.
 export function looksLikeEmail(value: string | null | undefined): boolean {
   return Boolean(value && /^[^@\s]+@[^@\s.]+\.[^@\s]+$/.test(value.trim()));
+}
+
+// Divide uma lista separada por vírgula (ou ponto e vírgula) em endereços
+// válidos e sem repetição — o relatório vai para os sócios, um de cada vez.
+export function parseEmailList(value: string | null | undefined): string[] {
+  if (!value) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of value.split(/[,;]/)) {
+    const email = raw.trim();
+    if (email && looksLikeEmail(email) && !seen.has(email)) {
+      seen.add(email);
+      out.push(email);
+    }
+  }
+  return out;
 }

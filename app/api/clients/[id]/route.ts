@@ -60,6 +60,12 @@ export async function PATCH(req: Request, { params }: RouteContext) {
         { status: 503 }
       );
     }
+    if (error && /report_cc/.test(error.message || "")) {
+      return NextResponse.json(
+        { error: "Rode supabase-migration-report-cc.sql no SQL Editor do Supabase para usar cópia (CC) no relatório." },
+        { status: 503 }
+      );
+    }
     if (error && /facebook_page_id|instagram_business_id/.test(error.message || "")) {
       return NextResponse.json(
         { error: "Rode supabase-migration-social.sql no SQL Editor do Supabase para cadastrar Página/Instagram." },

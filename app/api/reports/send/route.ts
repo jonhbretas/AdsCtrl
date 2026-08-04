@@ -22,7 +22,7 @@ import { NextResponse } from "next/server";
 import { buildReport, lastFullWeek } from "@/lib/report-data";
 import { renderReportEmail } from "@/lib/report-email";
 import { dashboardLink, reportLink, reportLinkConfigured } from "@/lib/report-token";
-import { looksLikeEmail, resendIssues, sendEmail } from "@/lib/resend";
+import { looksLikeEmail, parseEmailList, resendIssues, sendEmail } from "@/lib/resend";
 import { getServiceClient, supabaseEnvMissing } from "@/lib/supabase";
 import { getSettings, reportHourOf } from "@/lib/settings";
 import { AUTH_COOKIE_NAME, constantTimeEqual, verifySessionToken } from "@/lib/auth";
@@ -148,7 +148,7 @@ async function handle(req: Request) {
     // a migração correspondente não rodou, o retry abaixo repete sem elas e o
     // envio segue com o comportamento antigo — segunda-feira, 11h.
     const BASE_COLUMNS = "id,name,timezone,report_email,report_enabled,source_meta_account_id,status";
-    const EXTRA_COLUMNS = "brand_name,report_weekday";
+    const EXTRA_COLUMNS = "brand_name,report_weekday,report_cc";
     let query = supabase
       .from("clients")
       .select(`${BASE_COLUMNS},${EXTRA_COLUMNS}`)
@@ -160,7 +160,7 @@ async function handle(req: Request) {
       query,
       supabase.from("client_ad_accounts").select("client_id,account_id,is_primary"),
     ]);
-    if (clientsError && /brand_name|report_weekday/.test(clientsError.message || "")) {
+    if (clientsError && /brand_name|report_weekday|report_cc/.test(clientsError.message || "")) {
       let retry = supabase.from("clients").select(BASE_COLUMNS).neq("status", "archived");
       retry = onlyClient ? retry.eq("id", onlyClient) : retry.eq("report_enabled", true);
       const again = await retry;
@@ -197,7 +197,11 @@ async function handle(req: Request) {
         continue;
       }
       const range = lastFullWeek(client.timezone);
-      const recipient = dryRun ? testAddress : (client.report_email || "").trim();
+      // Um ou vários destinatários, separados por vírgula no cadastro. No modo
+      // de teste tudo vai para o endereço da Config, com cópia silenciada.
+      const recipients = dryRun ? [testAddress] : parseEmailList(client.report_email);
+      const cc = dryRun ? [] : parseEmailList((client as any).report_cc);
+      const recipient = recipients.join(", ");
 
       const log = async (status: SendOutcome["status"], reason?: string, messageId?: string, accountId?: string) => {
         results.push({ client: client.name, status, reason, recipient: status === "sent" ? recipient : undefined });
@@ -220,7 +224,7 @@ async function handle(req: Request) {
         results.push({ client: client.name, status: "skipped", reason: "envio desativado para este cliente" });
         continue;
       }
-      if (!looksLikeEmail(recipient)) {
+      if (!recipients.length) {
         results.push({ client: client.name, status: "skipped", reason: "sem e-mail de destino válido" });
         continue;
       }
@@ -277,7 +281,8 @@ async function handle(req: Request) {
           brand: (client as any).brand_name || settings.brand_name,
         });
         const sent = await sendEmail({
-          to: recipient,
+          to: recipients,
+          cc,
           subject: email.subject,
           html: email.html,
           text: email.text,
