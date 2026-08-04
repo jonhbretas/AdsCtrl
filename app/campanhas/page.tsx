@@ -937,15 +937,20 @@ function WhatsAppReportModal({ accountId, accountName, currency, since, until, p
     return { campaigns, adsets, ads, filtered: true };
   }, [detail, selectedCampaignIds]);
 
-  // Investimento exibido no resumo: por padrão o real. Se editar (ex.: mostrar
-  // um valor menor), o total é repartido proporcionalmente entre campanhas e
-  // criativos para a soma bater no novo valor.
+  // Investimento exibido no resumo: por padrão o real. Sem seleção de
+  // campanhas, o total é o KPI da conta (autoritativo — casa com as regiões
+  // e com o que a Meta reporta; a soma das linhas pode sair defasada quando
+  // alguma campanha é removida). Com seleção, é a soma das selecionadas.
+  // Se editar (ex.: mostrar um valor menor), o total é repartido
+  // proporcionalmente entre campanhas e criativos para a soma bater.
   const [overrideSpend, setOverrideSpend] = useState("");
-  const realSpend = useMemo(() => scoped ? scoped.campaigns.reduce((acc, row) => acc + row.spend, 0) : 0, [scoped]);
+  const sumCampaigns = useMemo(() => scoped ? scoped.campaigns.reduce((acc, row) => acc + row.spend, 0) : 0, [scoped]);
+  const baseSpend = scoped?.filtered ? sumCampaigns : (detail?.kpis?.spend || sumCampaigns);
   const overrideParsed = Number.parseFloat(overrideSpend.replace(",", "."));
-  const effectiveSpend = Number.isFinite(overrideParsed) && overrideParsed > 0 ? overrideParsed : realSpend;
-  const spendFactor = realSpend > 0 ? effectiveSpend / realSpend : 1;
-  const spendEdited = realSpend > 0 && effectiveSpend !== realSpend;
+  const effectiveSpend = Number.isFinite(overrideParsed) && overrideParsed > 0 ? overrideParsed : baseSpend;
+  const spendFactor = baseSpend > 0 ? effectiveSpend / baseSpend : 1;
+  const spendEdited = baseSpend > 0 && effectiveSpend !== baseSpend;
+  const [includeRevenue, setIncludeRevenue] = useState(false);
 
   const report = useMemo(() => {
     if (!detail || !scoped) return "";
@@ -955,7 +960,9 @@ function WhatsAppReportModal({ accountId, accountName, currency, since, until, p
     // Substantivos do rótulo selecionado na página: linha usa minúsculas
     // ("cliques no link"); total usa singular ("Clique no Link").
     const selectionShort = resultSelectionLabel ? resultSelectionLabel.toLowerCase() : null;
-    const selectionNoun = resultSelectionLabel ? (resultSelectionLabel.endsWith("s") ? resultSelectionLabel.slice(0, -1) : resultSelectionLabel) : null;
+    const selectionNoun = resultSelectionLabel
+      ? resultSelectionLabel.replace(/\s?ões$/, "ão").replace(/\s?s$/, "")
+      : null;
 
     // Resultado de uma campanha/anúncio. Com resultado selecionado na página,
     // usa EXATAMENTE ele — o resumo segue a mesma métrica da árvore (foi o
@@ -1132,7 +1139,8 @@ function WhatsAppReportModal({ accountId, accountName, currency, since, until, p
       creatives: scaledCreatives,
       // A quebra por região vem da API para a conta toda; com seleção de
       // campanhas não há região por campanha, então ela sai fora do resumo.
-      regions: scoped.filtered ? [] : detail.breakdowns?.region || [],
+      // "Rio de Janeiro (state)" vira "Rio de Janeiro".
+      regions: scoped.filtered ? [] : (detail.breakdowns?.region || []).map((r) => ({ ...r, key: r.key.replace(/\s*\(state\)$/i, "") })),
       creativeCount: { total: scoped.ads.length, active: activeCreatives },
       totalSpend: spend,
       results,
@@ -1140,8 +1148,9 @@ function WhatsAppReportModal({ accountId, accountName, currency, since, until, p
       resultsNoun,
       cpr,
       revenue,
+      includeRevenue,
     });
-  }, [detail, scoped, accountName, currency, periodLabel, since, until, days, aliases, resultSelection, resultSelectionLabel, effectiveSpend, spendFactor, revenue]);
+  }, [detail, scoped, accountName, currency, periodLabel, since, until, days, aliases, resultSelection, resultSelectionLabel, effectiveSpend, spendFactor, includeRevenue, revenue]);
 
   async function copy() {
     if (!report) return;
@@ -1182,8 +1191,8 @@ function WhatsAppReportModal({ accountId, accountName, currency, since, until, p
           inputMode="decimal"
           value={overrideSpend}
           onChange={(e) => setOverrideSpend(e.target.value)}
-          placeholder={money(realSpend, currency || "BRL")}
-          disabled={!realSpend}
+          placeholder={money(baseSpend, currency || "BRL")}
+          disabled={!baseSpend}
           title="Deixe vazio para usar o investimento real"
           className="h-7 w-28 rounded-md border border-border/50 bg-background px-2 text-xs outline-none focus:ring-1 focus:ring-ring disabled:opacity-40"
         />
@@ -1193,7 +1202,11 @@ function WhatsAppReportModal({ accountId, accountName, currency, since, until, p
             <button type="button" onClick={() => setOverrideSpend("")} className="rounded-md border border-border/50 bg-muted/30 px-2 py-1 font-semibold text-muted-foreground hover:text-foreground transition-colors">usar valor real</button>
           </>
         )}
-        <span className="text-muted-foreground">vazio = valor real ({money(realSpend, currency || "BRL")})</span>
+        <span className="text-muted-foreground">vazio = valor real ({money(baseSpend, currency || "BRL")})</span>
+        <label className="ml-1 flex items-center gap-1.5 font-semibold text-muted-foreground cursor-pointer">
+          <input type="checkbox" checked={includeRevenue} onChange={(e) => setIncludeRevenue(e.target.checked)} className="h-3.5 w-3.5 accent-primary" />
+          incluir faturamento/ROI
+        </label>
       </div>
 
       {editingNames && scoped && (

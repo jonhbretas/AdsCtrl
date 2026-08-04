@@ -64,8 +64,10 @@ export function buildWhatsAppReport(input: {
   cpr: number | null;
   /** Valor faturado no período (vendas informadas), quando houver. */
   revenue: number | null;
+  /** Só inclui faturamento/ROI quando o usuário pede — não por padrão. */
+  includeRevenue?: boolean;
 }): string {
-  const { accountName, currency, periodLabel, periodRange, days, campaigns, campaignTypes, creatives, regions, creativeCount, totalSpend, results, resultsLabel, resultsNoun, cpr, revenue } = input;
+  const { accountName, currency, periodLabel, periodRange, days, campaigns, campaignTypes, creatives, regions, creativeCount, totalSpend, results, resultsLabel, resultsNoun, cpr, revenue, includeRevenue = false } = input;
   const lines: string[] = [];
   const fmtDate = (iso: string) => new Date(iso + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
 
@@ -128,8 +130,8 @@ export function buildWhatsAppReport(input: {
   lines.push("");
   lines.push(`🎬 *Criativos:* ${num(creativeCount.active)} ativo(s) · ${num(creativeCount.total)} no total`);
 
-  // Faturado e ROI (vendas informadas ÷ investimento).
-  if (revenue != null && revenue > 0) {
+  // Faturado e ROI (vendas informadas ÷ investimento) — só quando pedido.
+  if (includeRevenue && revenue != null && revenue > 0) {
     lines.push("");
     lines.push(`💰 *Valor faturado:* ${money(revenue, currency)}`);
     lines.push(`📈 *ROI:* ${totalSpend > 0 ? (revenue / totalSpend).toFixed(2).replace(".", ",") : "—"}x (faturamento ÷ investimento)`);
