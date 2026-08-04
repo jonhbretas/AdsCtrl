@@ -553,6 +553,10 @@ export interface AccountDetail {
     gender?: BreakdownRow[];
   };
   availableResults: string[]; // action_types presentes no período
+  // Cidades/bairros do público alvo (geo_locations dos conjuntos). A Meta não
+  // entrega gasto por cidade — só o alvo configurado; serve de contexto no
+  // resumo ("onde anunciamos").
+  targetedCities?: string[];
 }
 
 // Série diária de uma conta.
@@ -659,6 +663,26 @@ async function fetchAdThumbnails(
     return { thumbs, permalinks };
   } catch {
     return { thumbs: {}, permalinks: {} };
+  }
+}
+
+// Cidades/bairros do público alvo dos conjuntos (geo_locations do targeting).
+// A Meta não entrega gasto por cidade nos insights (só estado) — esta é a
+// lista do que foi configurado, para o resumo dizer "onde anunciamos".
+async function fetchTargetedCities(actId: string, token: string): Promise<string[]> {
+  try {
+    const url = `${GRAPH}/${actId}/adsets?fields=targeting{geo_locations}&limit=500&access_token=${token}`;
+    const adsets = await fbGetAll<any>(url);
+    const names = new Set<string>();
+    for (const adset of adsets) {
+      const geo = adset.targeting?.geo_locations;
+      if (!geo) continue;
+      for (const city of geo.cities || []) if (city?.name) names.add(city.name);
+      for (const loc of geo.custom_locations || []) if (loc?.name) names.add(loc.name);
+    }
+    return [...names].slice(0, 12);
+  } catch {
+    return [];
   }
 }
 
@@ -1501,6 +1525,7 @@ export async function getAccountDetail(
     broadLocation,
     adsetParents,
     adParents,
+    targetedCities,
   ] = await Promise.all([
     fetchAccountKpis(actId, since, until, token),
     fetchAccountKpis(actId, prev.since, prev.until, token).catch(() => EMPTY_KPIS),
@@ -1543,6 +1568,7 @@ export async function getAccountDetail(
     // conjunto). Falhar aqui só perde o agrupamento; as linhas continuam.
     fetchParentMap(actId, "adset", token).catch(() => ({}) as Record<string, string>),
     fetchParentMap(actId, "ad", token).catch(() => ({}) as Record<string, string>),
+    fetchTargetedCities(actId, token).catch(() => []),
   ]);
 
   // Anexa thumbnails e o link da peça aos anúncios.
@@ -1609,5 +1635,6 @@ export async function getAccountDetail(
       gender: gender?.sort((a, b) => b.impressions - a.impressions),
     },
     availableResults: [...resultSet],
+    targetedCities,
   };
 }

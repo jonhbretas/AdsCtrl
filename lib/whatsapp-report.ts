@@ -54,6 +54,8 @@ export function buildWhatsAppReport(input: {
   /** Criativos que rodaram: nome, gasto, resultado do objetivo e link do conteúdo. */
   creatives: { name: string; spend: number; results?: number; resultNoun?: string; permalink?: string }[];
   regions: ReportRow[];
+  /** Cidades/bairros do público alvo (targeting dos conjuntos) — contexto de "onde anunciamos". */
+  targetCities?: string[];
   creativeCount: { total: number; active: number };
   totalSpend: number;
   /** Total de resultados e o rótulo real do que eles são (detectado por
@@ -67,7 +69,7 @@ export function buildWhatsAppReport(input: {
   /** Só inclui faturamento/ROI quando o usuário pede — não por padrão. */
   includeRevenue?: boolean;
 }): string {
-  const { accountName, currency, periodLabel, periodRange, days, campaigns, campaignTypes, creatives, regions, creativeCount, totalSpend, results, resultsLabel, resultsNoun, cpr, revenue, includeRevenue = false } = input;
+  const { accountName, currency, periodLabel, periodRange, days, campaigns, campaignTypes, creatives, regions, targetCities, creativeCount, totalSpend, results, resultsLabel, resultsNoun, cpr, revenue, includeRevenue = false } = input;
   const lines: string[] = [];
   const fmtDate = (iso: string) => new Date(iso + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
 
@@ -124,6 +126,13 @@ export function buildWhatsAppReport(input: {
     for (const item of visibleRegions) {
       lines.push(`• ${item.key} — ${money(item.spend, currency)} (${pct(item.spend, totalSpend)})`);
     }
+  }
+
+  // Público alvo (cidades/bairros configurados nos conjuntos). A Meta não
+  // entrega gasto por cidade; esta linha diz onde anunciamos.
+  if (targetCities && targetCities.length > 0) {
+    lines.push("");
+    lines.push(`📍 *Público alvo:* ${targetCities.join(", ")}`);
   }
 
   // Criativos em veiculação.

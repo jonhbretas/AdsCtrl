@@ -42,6 +42,7 @@ interface Detail {
   error?: string;
   kpis?: { spend: number; results: Record<string, number>; values?: Record<string, number> };
   breakdowns?: { region?: { key: string; spend: number }[]; platform?: { key: string; spend: number }[]; age_gender?: { key: string; spend: number }[] };
+  targetedCities?: string[];
 }
 interface AccountInfo { account_id: string; name: string; platform: "meta" | "google"; hidden?: boolean; currency?: string }
 
@@ -1141,6 +1142,7 @@ function WhatsAppReportModal({ accountId, accountName, currency, since, until, p
       // campanhas não há região por campanha, então ela sai fora do resumo.
       // "Rio de Janeiro (state)" vira "Rio de Janeiro".
       regions: scoped.filtered ? [] : (detail.breakdowns?.region || []).map((r) => ({ ...r, key: r.key.replace(/\s*\(state\)$/i, "") })),
+      targetCities: scoped.filtered ? [] : detail.targetedCities || [],
       creativeCount: { total: scoped.ads.length, active: activeCreatives },
       totalSpend: spend,
       results,
