@@ -58,7 +58,10 @@ const ALL_ITEMS = NAV_GROUPS.flatMap((group) => group.items);
 const MOBILE_PRIMARY = NAV_GROUPS[0].items.slice(0, 3);
 const CHROMELESS_PREFIXES = ["/login", "/report/", "/r/", "/c/"];
 
-function isActivePath(pathname: string, href: string) { return href === "/" ? pathname === "/" : pathname.startsWith(href); }
+function isActivePath(pathname: string, href: string) {
+  if (href === "/") return pathname === "/";
+  return pathname === href || pathname.startsWith(href + "/") || pathname.startsWith(href + "?");
+}
 
 export default function AppNav({ brand }: { brand?: string }) {
   const brandName = (brand || "").trim() || appBrandName();
