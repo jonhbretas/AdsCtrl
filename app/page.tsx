@@ -14,6 +14,8 @@ import {
   Minus,
   Eye,
   EyeOff,
+  ChevronDown,
+  ChevronUp,
   Search,
   DollarSign,
   Target,
@@ -32,6 +34,8 @@ import {
   usePersistentSort,
 } from "@/components/SortableHeader";
 import QuickAccess from "@/components/QuickAccess";
+import AccountDetail from "@/components/AccountDetail";
+import AccountChanges from "@/components/AccountChanges";
 import { money, num, delta, brDate, accountStatusInfo, RESULT_FAMILIES, RESULT_FAMILY_BY_SLUG } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -182,6 +186,7 @@ export default function Dashboard() {
   const [showCustom, setShowCustom] = useState(false);
   const [showHidden, setShowHidden] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [expanded, setExpanded] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -204,8 +209,8 @@ export default function Dashboard() {
 
   const router = useRouter();
 
-  // Clicar no cliente/conta leva à tela de campanhas dela — o painel fica
-  // leve, e a ação (pausar, orçamento, duplicar) vive num lugar próprio.
+  // Clicar na linha expande as campanhas (Meta + Google vinculado) dentro da
+  // conta; a seta no fim da linha abre a tela completa de campanhas.
   function openCampaigns(accountId: string) {
     window.localStorage.setItem("adsctrl:selected-account", accountId);
     window.dispatchEvent(new CustomEvent("adsctrl:account-selected", { detail: accountId }));
@@ -216,16 +221,29 @@ export default function Dashboard() {
     if (window.location.hash === "#alerts") window.location.replace("/alerts");
   }, []);
 
-  // Chegou com ?account= na URL (ex.: voltando de um link direto): redireciona
-  // para a tela de campanhas daquela conta e limpa o parâmetro daqui.
+  // Chegou com ?account= na URL (ex.: link direto de outra tela): abre a
+  // visão geral já com a linha da conta expandida e rola até ela.
   useEffect(() => {
     const requested = new URLSearchParams(window.location.search).get("account");
     if (!requested) return;
     const url = new URL(window.location.href);
     url.searchParams.delete("account");
     window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
-    router.replace(`/campanhas?account=${encodeURIComponent(requested)}`);
-  }, [router]);
+    const found = accounts.find((acc) => acc.account_id === requested);
+    const isGoogle = requested.startsWith("google:") || found?.platform === "google";
+    if (isGoogle) setFocus("conversoes");
+    setPlatformFilter(isGoogle ? "google" : "meta");
+    if (found?.status !== "ACTIVE") setOnlyActive(false);
+    if (found?.hidden) setShowHidden(true);
+    setExpanded(requested);
+    let tries = 0;
+    const scroll = () => {
+      const el = document.getElementById(`account-${requested}`);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+      else if (tries++ < 10) setTimeout(scroll, 200);
+    };
+    scroll();
+  }, [accounts]);
 
   const range = useMemo(() => rangeForPeriod(period, customSince, customUntil), [period, customSince, customUntil]);
   const isLive = true;
@@ -257,11 +275,13 @@ export default function Dashboard() {
   // Conta Google vinculada a um cliente Meta, por id da conta Meta. Em "Todas"
   // a linha do cliente precisa somar as duas plataformas — sem isto, o
   // Investimento da linha ficava igual ao de "Meta", porque cada linha só
-  // lia os próprios números, nunca os da conta vinculada.
+  // lia os próprios números, nunca os da conta vinculada. Contas vinculadas
+  // entram mesmo ocultas: o vínculo é declaração de que o Google faz parte
+  // do cliente, e "Todas" é a visão por cliente.
   const linkedGoogleByMeta = useMemo(() => {
     const map = new Map<string, Account[]>();
     for (const g of accounts) {
-      if (g.platform === "google" && g.linked_meta_account_id && !g.hidden) {
+      if (g.platform === "google" && g.linked_meta_account_id) {
         const list = map.get(g.linked_meta_account_id) || [];
         list.push(g);
         map.set(g.linked_meta_account_id, list);
@@ -272,7 +292,8 @@ export default function Dashboard() {
 
   // Métricas da linha, combinadas com a conta Google vinculada quando "Todas"
   // está selecionado. Fora de "Todas", a linha mostra só a própria conta —
-  // clicar em Meta continua mostrando só Meta, como já era.
+  // clicar em Meta continua mostrando só Meta, como já era. Quando o dado ao
+  // vivo da conta Google faltar (erro de API), cai no snapshot do período.
   function combine(own: M, a: Account): M {
     if (platformFilter !== "all" || a.platform !== "meta") return own;
     const linked = linkedGoogleByMeta.get(a.account_id) || [];
@@ -280,8 +301,9 @@ export default function Dashboard() {
     let spend = own.spend, conversions = own.conversions, value = own.value;
     const results = { ...own.results };
     for (const g of linked) {
-      const gm = isLive ? norm(live?.metrics?.[g.account_id]) : null;
-      if (!gm) continue;
+      const gm = isLive
+        ? norm(live?.metrics?.[g.account_id] || linkedLive[g.account_id] || (periodKey && g.metricsByPeriod?.[periodKey]) || g.metrics)
+        : norm((periodKey && g.metricsByPeriod?.[periodKey]) || g.metrics);
       spend += gm.spend; conversions += gm.conversions; value += gm.value;
       for (const [k, v] of Object.entries(gm.results)) results[k] = (results[k] || 0) + v;
     }
@@ -297,8 +319,9 @@ export default function Dashboard() {
     let spend = own.spend, conversions = own.conversions, value = own.value;
     const results = { ...own.results };
     for (const g of linked) {
-      const gp = isLive ? norm(live?.prev?.[g.account_id]) : null;
-      if (!gp) continue;
+      const gp = isLive
+        ? norm(live?.prev?.[g.account_id] || (periodKey && g.prevByPeriod?.[periodKey]) || g.prevMetrics)
+        : norm((periodKey && g.prevByPeriod?.[periodKey]) || g.prevMetrics);
       spend += gp.spend; conversions += gp.conversions; value += gp.value;
       for (const [k, v] of Object.entries(gp.results)) results[k] = (results[k] || 0) + v;
     }
@@ -364,6 +387,28 @@ export default function Dashboard() {
   }, [period, range.since, range.until, platformFilter]);
 
   useEffect(() => { setLinkedLive({}); }, [range.since, range.until]);
+
+  // Métricas ao vivo das contas Google vinculadas à conta Meta expandida.
+  // No filtro Meta a busca ao vivo só traz contas Meta; sem esta busca o
+  // cabeçalho do bloco Google (dentro da conta) ficaria zerado. Em "Todas"
+  // a busca ao vivo já inclui o Google e nada é buscado de novo aqui.
+  useEffect(() => {
+    if (!expanded) return;
+    const aberta = accounts.find((a) => a.account_id === expanded);
+    if (!aberta || aberta.platform !== "meta") return;
+    const ids = accounts
+      .filter((g) => g.platform === "google" && g.linked_meta_account_id === expanded)
+      .map((g) => g.account_id)
+      .filter((id) => !live?.metrics?.[id] && !linkedLive[id]);
+    if (!ids.length) return;
+    let alive = true;
+    const params = new URLSearchParams({ since: range.since, until: range.until, accounts: ids.join(",") });
+    fetch(`/api/accounts/overview?${params}`)
+      .then((r) => r.json())
+      .then((d) => { if (alive && d?.metrics) setLinkedLive((prev) => ({ ...prev, ...d.metrics })); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [expanded, accounts, range.since, range.until, live]);
 
   async function refresh() {
     setRefreshing(true);
@@ -491,7 +536,7 @@ export default function Dashboard() {
       const unavailable = isLive && Boolean(live?.errors?.some((item) => item.account_id === account.account_id));
       switch (tableSort.key) {
         case "name": return account.name;
-        case "channels": return account.platform === "meta" ? 1 + Number(accounts.some((candidate) => candidate.platform === "google" && candidate.linked_meta_account_id === account.account_id && !candidate.hidden)) : 1;
+        case "channels": return account.platform === "meta" ? 1 + Number(accounts.some((candidate) => candidate.platform === "google" && candidate.linked_meta_account_id === account.account_id)) : 1;
         case "trend": return !unavailable && previous.spend > 0 ? ((metrics.spend - previous.spend) / previous.spend) * 100 : null;
         case "spend": return unavailable ? null : metrics.spend;
         case "result": return unavailable ? null : metrics.result;
@@ -509,7 +554,7 @@ export default function Dashboard() {
       }
       return compareSortValues(leftValue, rightValue, tableSort.direction) || compareSortValues(left.name, right.name, "asc");
     });
-  }, [accounts, groupFilter, platformFilter, onlyActive, search, showHidden, period, live, tableSort, focus, linkedGoogleByMeta]);
+  }, [accounts, groupFilter, platformFilter, onlyActive, search, showHidden, period, live, tableSort, focus, linkedGoogleByMeta, linkedLive]);
 
   const totals = useMemo(() => {
     let spend = 0, res = 0, val = 0;
@@ -535,7 +580,7 @@ export default function Dashboard() {
       currencyTotals,
       mixedCurrencies: currencyTotals.length > 1,
     };
-  }, [filtered, period, live, focus, platformFilter, linkedGoogleByMeta]);
+  }, [filtered, period, live, focus, platformFilter, linkedGoogleByMeta, linkedLive]);
 
   const visibleAlerts = useMemo(() => {
     const names = new Set(filtered.map((a) => a.name));
@@ -848,15 +893,18 @@ export default function Dashboard() {
                 const liveError = isLive ? live?.errors?.find((item) => item.account_id === a.account_id) : undefined;
                 const spendTrend = !liveError && previous.spend > 0 ? ((m.spend - previous.spend) / previous.spend) * 100 : null;
                 const linkedMeta = a.platform === "google" && a.linked_meta_account_id ? accounts.find((meta) => meta.account_id === a.linked_meta_account_id) : null;
-                const linkedGoogle = a.platform === "meta" ? accounts.filter((google) => google.platform === "google" && google.linked_meta_account_id === a.account_id && !google.hidden) : [];
+                const linkedGoogle = a.platform === "meta" ? accounts.filter((google) => google.platform === "google" && google.linked_meta_account_id === a.account_id) : [];
+                const open = !a.hidden && expanded === a.account_id;
+                const dimmed = expanded !== null && !open && !a.hidden;
 
                 return (
-                  <div id={`account-${a.account_id}`} key={a.account_id} className={cn("border-b border-border/30 last:border-b-0 transition-all duration-300", a.hidden && "opacity-55")}>
+                  <div id={`account-${a.account_id}`} key={a.account_id} className={cn("border-b border-border/30 last:border-b-0 transition-all duration-300", a.hidden && "opacity-55", dimmed && "opacity-40")}>
                     <div
-                      onClick={() => { if (!a.hidden) openCampaigns(a.account_id); }}
+                      onClick={() => { if (!a.hidden) setExpanded(open ? null : a.account_id); }}
                       className={cn(
                         "grid grid-cols-[1.7fr_0.5fr_0.8fr_1fr_0.9fr_0.7fr_0.9fr_28px_28px] gap-2 px-4 py-3 items-center transition-colors",
-                        a.hidden ? "cursor-default" : "cursor-pointer hover:bg-accent/30"
+                        a.hidden ? "cursor-default" : "cursor-pointer hover:bg-accent/30",
+                        open && "bg-accent/20"
                       )}
                     >
                       {/* Client */}
@@ -867,7 +915,10 @@ export default function Dashboard() {
                           </AvatarFallback>
                         </Avatar>
                         <div className="min-w-0">
-                          <div className="text-sm font-medium truncate" title={a.name}>{a.name}</div>
+                          <div className="text-sm font-medium truncate flex items-center gap-1.5" title={a.name}>
+                            {!a.hidden && (open ? <ChevronUp className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />)}
+                            <span className="truncate">{a.name}</span>
+                          </div>
                           <div className="flex items-center gap-1.5 mt-0.5">
                             {g && <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium" style={{ backgroundColor: g.color + "20", color: `color-mix(in srgb, ${g.color} 62%, var(--color-foreground))` }}>{g.name}</span>}
                             {linkedMeta && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-sky-500/10 text-sky-600 dark:text-sky-400 font-medium">Cliente</span>}
@@ -956,9 +1007,17 @@ export default function Dashboard() {
                         {a.hidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                       </button>
 
-                      {/* Ir para campanhas */}
+                      {/* Tela completa de campanhas da conta */}
                       <div className="text-center text-muted-foreground">
-                        {a.hidden ? "—" : <ArrowRight className="h-3.5 w-3.5 inline" />}
+                        {a.hidden ? "—" : (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); openCampaigns(a.account_id); }}
+                            title="Abrir tela de campanhas"
+                            className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                          >
+                            <ArrowRight className="h-3.5 w-3.5 inline" />
+                          </button>
+                        )}
                       </div>
                     </div>
 
@@ -966,6 +1025,47 @@ export default function Dashboard() {
                     {!a.hidden && (
                       <div className="border-t border-border/10 px-4" onClick={(e) => e.stopPropagation()}>
                         <QuickAccess accountId={a.account_id} accountName={a.name} platform={a.platform} balance={a.balance} currency={a.currency} compact />
+                      </div>
+                    )}
+
+                    {/* Campanhas do Meta e do Google vinculado, dentro da conta.
+                        Mesma ordem para as duas plataformas: últimas edições e
+                        só então o bloco recolhível com a árvore de campanhas. */}
+                    {open && (
+                      <div className="border-t border-border/30 px-4 py-4 space-y-4 bg-muted/10">
+                        <AccountChanges accountId={a.account_id} platform={a.platform} since={range.since} until={range.until} />
+                        <CollapsibleSection
+                          icon={a.platform === "google" ? <GoogleIcon /> : <MetaIcon />}
+                          title={a.platform === "google" ? `Google Ads (${a.name})` : `Meta Ads (${a.name})`}
+                          subtitle="campanhas, conjuntos e anúncios"
+                          meta={liveError ? "indisponível" : money(accMetrics(a).spend, a.currency)}
+                        >
+                          <AccountDetail accountId={a.account_id} platform={a.platform} since={range.since} until={range.until}
+                            status={a.status} balance={a.balance} currency={a.currency} />
+                        </CollapsibleSection>
+
+                        {a.platform === "meta" && linkedGoogle.map((google) => {
+                          const gm = accMetrics(google);
+                          return (
+                            <div key={google.account_id} className="space-y-1.5">
+                              {google.hidden && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-muted text-muted-foreground">
+                                  Google oculta — vinculada e incluída na soma do cliente
+                                </span>
+                              )}
+                              <AccountChanges accountId={google.account_id} platform="google" since={range.since} until={range.until} />
+                              <CollapsibleSection
+                                icon={<GoogleIcon />}
+                                title={`Google Ads (${google.name})`}
+                                subtitle="campanhas, termos de busca, segmentações"
+                                meta={money(gm.spend, google.currency)}
+                              >
+                                <AccountDetail accountId={google.account_id} platform="google" since={range.since} until={range.until}
+                                  status={google.status} balance={null} currency={google.currency} />
+                              </CollapsibleSection>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -1124,6 +1224,53 @@ function GridSortHeader({ children, sortKey, sort, onSort, align = "right", init
     <SortButton column={sortKey} sort={sort} onSort={onSort} align={align} initialDirection={initialDirection}>
       {children}
     </SortButton>
+  );
+}
+
+function CollapsibleSection({ icon, title, subtitle, meta, children }: {
+  icon: React.ReactNode;
+  title: string;
+  subtitle: string;
+  meta: string;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded-lg border border-border/50 overflow-hidden">
+      <button onClick={() => setOpen(!open)}
+        className="flex items-center gap-3 w-full px-4 py-3 text-left bg-muted/10 hover:bg-accent/20 transition-colors cursor-pointer border-none">
+        <span className="w-6 h-6 rounded grid place-items-center shrink-0">
+          {icon}
+        </span>
+        <span className="flex-1 min-w-0">
+          <span className="text-sm font-semibold text-foreground">{title}</span>
+          <span className="text-xs text-muted-foreground ml-2">{meta}</span>
+        </span>
+        <span className="text-[11px] text-muted-foreground hidden sm:inline">{subtitle}</span>
+        {open ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
+      </button>
+      {open && <div className="px-4 py-3 border-t border-border/30 space-y-3">{children}</div>}
+    </div>
+  );
+}
+
+function MetaIcon() {
+  return (
+    <svg viewBox="0 0 32 32" className="w-5 h-5" fill="#0532b8">
+      <path d="M5,19.5c0-4.6,2.3-9.4,5-9.4c1.5,0,2.7,0.9,4.6,3.6c-1.8,2.8-2.9,4.5-2.9,4.5c-2.4,3.8-3.2,4.6-4.5,4.6 C5.9,22.9,5,21.7,5,19.5 M20.7,17.8L19,15c-0.4-0.7-0.9-1.4-1.3-2c1.5-2.3,2.7-3.5,4.2-3.5c3,0,5.4,4.5,5.4,10.1 c0,2.1-0.7,3.3-2.1,3.3S23.3,22,20.7,17.8 M16.4,11c-2.2-2.9-4.1-4-6.3-4C5.5,7,2,13.1,2,19.5c0,4,1.9,6.5,5.1,6.5 c2.3,0,3.9-1.1,6.9-6.3c0,0,1.2-2.2,2.1-3.7c0.3,0.5,0.6,1,0.9,1.6l1.4,2.4c2.7,4.6,4.2,6.1,6.9,6.1c3.1,0,4.8-2.6,4.8-6.7 C30,12.6,26.4,7,22.1,7C19.8,7,18,8.8,16.4,11" />
+    </svg>
+  );
+}
+
+function GoogleIcon() {
+  return (
+    <svg viewBox="0 -1.5 24 24" className="w-5 h-5">
+      <g transform="scale(0.09)">
+        <path d="M5.888,166.405103 L90.88,20.9 C101.676138,27.2558621 156.115862,57.3844138 164.908138,63.1135172 L79.9161379,208.627448 C70.6206897,220.906621 -5.888,185.040138 5.888,166.396276 L5.888,166.405103 Z" fill="#FBBC04" />
+        <path d="M250.084224,166.401789 L165.092224,20.9055131 C153.210293,1.13172 127.619121,-6.05393517 106.600638,5.62496138 C85.582155,17.3038579 79.182155,42.4624786 91.0640861,63.1190303 L176.056086,208.632961 C187.938017,228.397927 213.52919,235.583582 234.547672,223.904686 C254.648086,212.225789 261.966155,186.175582 250.084224,166.419444 L250.084224,166.401789 Z" fill="#4285F4" />
+        <ellipse fill="#34A853" cx="42.6637241" cy="187.924414" rx="42.6637241" ry="41.6044138" />
+      </g>
+    </svg>
   );
 }
 
