@@ -1,9 +1,10 @@
 "use client";
 
-import { createContext, useContext } from "react";
+import { createContext, useContext, useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, ComposedChart, Line, Tooltip, XAxis, YAxis, Area, AreaChart, Pie, PieChart, Cell, Legend } from "recharts";
 import { money, moneyShort, num, pct, dayLabel, resultLabel, pickVal, delta, PURCHASE_KEYS, ATC_KEYS, CHECKOUT_KEYS, LINKCLICK_KEYS, RESULT_FAMILY_BY_SLUG } from "@/lib/format";
 import { appBrandName } from "@/lib/brand";
+import { cn } from "@/lib/utils";
 
 const PAGE_W = 700;
 const HALF = (PAGE_W - 14) / 2;
@@ -40,7 +41,60 @@ interface GoogleBlock { account_id: string; name: string; currency: string; deta
 interface PageReport { page_id: string; name: string | null; fan_count: number | null; followers_count: number | null; impressions_unique: number; post_engagements: number; page_views: number; notes: string[]; }
 interface InstagramReport { ig_user_id: string; username: string | null; followers_count: number | null; media_count: number | null; reach: number; profile_views: number; website_clicks: number; notes: string[]; }
 interface SocialReport { facebook: PageReport | null; instagram: InstagramReport | null; }
-export interface ReportPayload { generated_at: string; account: { account_id: string; name: string; platform: string; currency: string; status: string; }; range: { since: string; until: string; }; prevRange: { since: string; until: string; }; meta: MetaDetail | null; google: GoogleBlock[]; social?: SocialReport | null; organic_note?: string; result_family?: string | null; brand?: string | null; error?: string; }
+export interface ReportCreativeVideo {
+  plays: number;
+  threeSecondViews: number;
+  thruPlays: number;
+  avgWatchTimeSeconds: number | null;
+  playRate: number | null;
+  hookRate: number | null;
+  holdRate: number | null;
+  completionRate: number | null;
+}
+export interface ReportCreative {
+  adId: string;
+  adName: string;
+  campaignName: string | null;
+  format: "video" | "static";
+  thumbnail: string | null;
+  spend: number;
+  impressions: number;
+  reach: number;
+  clicks: number;
+  linkClicks: number;
+  linkCtr: number | null;
+  cpm: number | null;
+  frequency: number | null;
+  conversions: number;
+  conversionValue: number;
+  costPerConversion: number | null;
+  roas: number | null;
+  messageConversations: number;
+  costPerMessage: number | null;
+  landingPageViews: number;
+  engagements: number;
+  video: ReportCreativeVideo | null;
+}
+export interface ReportCreativesBlock {
+  summary: {
+    creatives: number;
+    withDelivery: number;
+    videoCreatives: number;
+    staticCreatives: number;
+    spend: number;
+    impressions: number;
+    reach: number;
+    videoSpend: number;
+    videoImpressions: number;
+    staticSpend: number;
+    staticImpressions: number;
+    videoShare: number | null;
+  };
+  creatives: ReportCreative[];
+}
+export interface ReportPayload { generated_at: string; account: { account_id: string; name: string; platform: string; currency: string; status: string; }; range: { since: string; until: string; }; prevRange: { since: string; until: string; }; meta: MetaDetail | null; google: GoogleBlock[]; creatives?: ReportCreativesBlock | null; social?: SocialReport | null; organic_note?: string; result_family?: string | null; brand?: string | null; error?: string; }
+
+export type ReportTab = "resumo" | "criativos";
 
 const br = (iso: string) => { const [y, m, d] = iso.split("-"); return `${d}/${m}/${y}`; };
 const ratio = (a: number, b: number) => (b ? (a / b) * 100 : 0);
@@ -73,7 +127,7 @@ function primaryRowResult(row: Row, focus: Focus | null): { label: string; value
   return null;
 }
 
-export default function ReportDocument({ data, compact = false, width }: { data: ReportPayload; compact?: boolean; width?: number; }) {
+export default function ReportDocument({ data, compact = false, width, activeTab = "resumo" }: { data: ReportPayload; compact?: boolean; width?: number; activeTab?: ReportTab; }) {
   const w = compact ? Math.max(280, width ?? 340) : PAGE_W;
   const { meta, google, range, prevRange, account } = data;
   const brand = (data.brand || "").trim() || appBrandName();
@@ -107,29 +161,35 @@ export default function ReportDocument({ data, compact = false, width }: { data:
           </div>
         </section>
 
-        {/* Consolidated Summary */}
-        {(metaOk || google.length > 0) && (
-          <Block>
-            <SectionTitle kicker="Visão geral">Resumo consolidado</SectionTitle>
-            <Grid cols={4}>
-              <Kpi label="Investimento total" value={m(totalSpend)} />
-              <Kpi label="Impressões" value={num(totalImpressions)} />
-              <Kpi label="Cliques" value={num(totalClicks)} />
-              <Kpi label="CTR médio" value={pct(ratio(totalClicks, totalImpressions))} />
-            </Grid>
-            {totalSpend > 0 && (
-              <Card title="Divisão do investimento">
-                <SplitBar parts={[...(metaOk ? [{ label: "Meta Ads", value: k!.spend, color: C.meta }] : []), ...google.map((g) => ({ label: `Google · ${g.name}`, value: g.detail?.kpis?.spend || 0, color: C.google }))]} total={totalSpend} format={(v) => m(v)} />
-              </Card>
+        {activeTab === "criativos" && data.creatives ? (
+          <CreativesSection data={data} />
+        ) : (
+          <>
+            {/* Consolidated Summary */}
+            {(metaOk || google.length > 0) && (
+              <Block>
+                <SectionTitle kicker="Visão geral">Resumo consolidado</SectionTitle>
+                <Grid cols={4}>
+                  <Kpi label="Investimento total" value={m(totalSpend)} />
+                  <Kpi label="Impressões" value={num(totalImpressions)} />
+                  <Kpi label="Cliques" value={num(totalClicks)} />
+                  <Kpi label="CTR médio" value={pct(ratio(totalClicks, totalImpressions))} />
+                </Grid>
+                {totalSpend > 0 && (
+                  <Card title="Divisão do investimento">
+                    <SplitBar parts={[...(metaOk ? [{ label: "Meta Ads", value: k!.spend, color: C.meta }] : []), ...google.map((g) => ({ label: `Google · ${g.name}`, value: g.detail?.kpis?.spend || 0, color: C.google }))]} total={totalSpend} format={(v) => m(v)} />
+                  </Card>
+                )}
+                {metaOk && <InsightBox title="Resumo em linguagem simples" lines={generateInsights(meta!.kpis, meta!.prevKpis, cur, "Meta Ads", resolveFocus(data.result_family))} />}
+              </Block>
             )}
-            {metaOk && <InsightBox title="Resumo em linguagem simples" lines={generateInsights(meta!.kpis, meta!.prevKpis, cur, "Meta Ads", resolveFocus(data.result_family))} />}
-          </Block>
-        )}
 
-        {meta?.error && <Block><SectionTitle kicker="Meta Ads" color={C.meta}>{account.name}</SectionTitle><Warn>{meta.error}</Warn></Block>}
-        {metaOk && <MetaSection detail={meta!} currency={cur} accountName={account.name} focus={resolveFocus(data.result_family)} />}
-        {google.map((g) => <GoogleSection key={g.account_id} block={g} />)}
-        {data.social && (data.social.facebook || data.social.instagram) && <SocialSection social={data.social} />}
+            {meta?.error && <Block><SectionTitle kicker="Meta Ads" color={C.meta}>{account.name}</SectionTitle><Warn>{meta.error}</Warn></Block>}
+            {metaOk && <MetaSection detail={meta!} currency={cur} accountName={account.name} focus={resolveFocus(data.result_family)} />}
+            {google.map((g) => <GoogleSection key={g.account_id} block={g} />)}
+            {data.social && (data.social.facebook || data.social.instagram) && <SocialSection social={data.social} />}
+          </>
+        )}
 
         {/* Footer */}
         <footer style={{ marginTop: 24, paddingTop: 12, borderTop: `1px solid ${C.line}`, fontSize: 10, color: C.muted, lineHeight: 1.6 }}>
@@ -139,6 +199,24 @@ export default function ReportDocument({ data, compact = false, width }: { data:
         </footer>
       </div>
     </LayoutCtx.Provider>
+  );
+}
+
+// Seletor de abas do relatório (Resumo / Criativos). Vive fora do documento
+// impresso (.no-print) — o PDF sai com a aba ativa, e cada aba é um documento.
+export function ReportTabs({ active, onChange, creativesAvailable }: { active: ReportTab; onChange: (tab: ReportTab) => void; creativesAvailable: boolean }) {
+  const options: { key: ReportTab; label: string }[] = [{ key: "resumo", label: "Resumo" }];
+  if (creativesAvailable) options.push({ key: "criativos", label: "Criativos" });
+  return (
+    <div className="no-print inline-flex gap-0.5 p-0.5 rounded-lg bg-muted border border-border/50">
+      {options.map((option) => (
+        <button key={option.key} onClick={() => onChange(option.key)}
+          className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-semibold transition-colors border-none cursor-pointer",
+            active === option.key ? "bg-background text-foreground shadow-sm" : "bg-transparent text-muted-foreground hover:text-foreground")}>
+          {option.label}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -305,8 +383,272 @@ function MetaSection({ detail, currency, accountName, focus }: { detail: MetaDet
   </>);
 }
 
-function GoogleSection({ block }: { block: GoogleBlock }) {
-  const d = block.detail; const e = block.extras; const m = (v: number, d = 2) => money(v, block.currency, d); const cur = block.currency || "BRL";
+// Aba de Criativos — ranking do cliente com métricas pertinentes por formato
+// (vídeo: hook/hold/views 3s/tempo médio; estático: CTR link/CPM) e controles
+// de filtro e ordenação. Só monta quando o payload traz data.creatives.
+type CreativeSortKey = "spend" | "impressions" | "linkCtr" | "cpm" | "frequency" | "result" | "cost" | "roas" | "hook" | "hold" | "views3s" | "avgWatch";
+
+const CREATIVE_SORT_OPTIONS: { key: CreativeSortKey; label: string }[] = [
+  { key: "spend", label: "Investimento" },
+  { key: "impressions", label: "Impressões" },
+  { key: "linkCtr", label: "CTR (link)" },
+  { key: "cpm", label: "CPM" },
+  { key: "frequency", label: "Frequência" },
+  { key: "result", label: "Resultado" },
+  { key: "cost", label: "Custo por resultado" },
+  { key: "roas", label: "ROAS" },
+  { key: "hook", label: "Hook (vídeo)" },
+  { key: "hold", label: "Hold (vídeo)" },
+  { key: "views3s", label: "Views de 3s" },
+  { key: "avgWatch", label: "Tempo médio" },
+];
+
+// Resultado principal de uma peça, ancorado no foco do negócio (result_family).
+// Sem foco, hierarquia: conversões ≥ 3, conversas ≥ 3, cliques no link ≥ 50.
+function creativeResult(c: ReportCreative, focus: Focus | null): { label: string; value: number; cost: number | null } | null {
+  const conversions = c.conversions;
+  if (focus) {
+    switch (focus.slug) {
+      case "mensagens":
+        if (c.messageConversations > 0) return { label: "Conversas", value: c.messageConversations, cost: c.costPerMessage };
+        break;
+      case "cliques":
+        if (c.linkClicks > 0) return { label: "Cliques no link", value: c.linkClicks, cost: c.spend / c.linkClicks };
+        break;
+      case "lpv":
+        if (c.landingPageViews > 0) return { label: "Views de LP", value: c.landingPageViews, cost: c.spend / c.landingPageViews };
+        break;
+      case "engajamento":
+        if (c.engagements > 0) return { label: "Engajamentos", value: c.engagements, cost: c.spend / c.engagements };
+        break;
+      default:
+        if (conversions > 0) return { label: focus.short, value: conversions, cost: c.costPerConversion };
+    }
+  }
+  if (conversions >= 3) return { label: "Conversões", value: conversions, cost: c.costPerConversion };
+  if (c.messageConversations >= 3) return { label: "Conversas", value: c.messageConversations, cost: c.costPerMessage };
+  if (c.linkClicks >= 50) return { label: "Cliques no link", value: c.linkClicks, cost: c.spend / c.linkClicks };
+  return null;
+}
+
+const fmtWatch = (seconds: number) => {
+  const total = Math.round(seconds);
+  return total < 60 ? `${total}s` : `${Math.floor(total / 60)}m${(total % 60).toString().padStart(2, "0")}s`;
+};
+
+const fmtFilterChip = (active: boolean) => ({
+  fontSize: 11, fontWeight: active ? 700 : 500, padding: "5px 10px", borderRadius: 8, cursor: "pointer",
+  border: `1px solid ${active ? C.ink : C.line}`, background: active ? C.ink : "#ffffff", color: active ? "#ffffff" : C.muted,
+});
+
+function MiniStat({ label, value }: { label: string; value: string }) {
+  return <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, padding: "3px 0", borderBottom: `1px solid ${C.line}80`, fontSize: 11 }}>
+    <span style={{ color: C.muted }}>{label}</span>
+    <span style={{ fontWeight: 700, color: C.ink, fontVariantNumeric: "tabular-nums" }}>{value}</span>
+  </div>;
+}
+
+function CreativesSection({ data }: { data: ReportPayload }) {
+  const { compact } = useLayout();
+  const block = data.creatives!;
+  const cur = data.account.currency || "BRL";
+  const m = (v: number, d = 2) => money(v, cur, d);
+  const focus = resolveFocus(data.result_family);
+  const [filter, setFilter] = useState<"all" | "video" | "static">("all");
+  const [sortKey, setSortKey] = useState<CreativeSortKey>("spend");
+  const [desc, setDesc] = useState(true);
+  const [showAll, setShowAll] = useState(false);
+
+  const s = block.summary;
+  const showRoas = focus?.slug === "vendas" || block.creatives.some((c) => c.conversionValue > 0);
+  const avg = (list: ReportCreative[], pick: (c: ReportCreative) => number | null | undefined) => {
+    const values = list.map(pick).filter((v): v is number => v != null && Number.isFinite(v));
+    if (!values.length) return null;
+    return values.reduce((a, b) => a + b, 0) / values.length;
+  };
+
+  const videoList = block.creatives.filter((c) => c.format === "video");
+  const staticList = block.creatives.filter((c) => c.format === "static");
+  const video = {
+    n: videoList.length,
+    spend: videoList.reduce((a, c) => a + c.spend, 0),
+    views3s: videoList.reduce((a, c) => a + (c.video?.threeSecondViews || 0), 0),
+    hook: avg(videoList, (c) => c.video?.hookRate),
+    hold: avg(videoList, (c) => c.video?.holdRate),
+    watch: avg(videoList, (c) => c.video?.avgWatchTimeSeconds),
+  };
+  const stat = {
+    n: staticList.length,
+    spend: staticList.reduce((a, c) => a + c.spend, 0),
+    linkCtr: avg(staticList, (c) => c.linkCtr),
+    cpm: avg(staticList, (c) => c.cpm),
+    result: staticList.reduce((a, c) => a + (creativeResult(c, focus)?.value || 0), 0),
+  };
+
+  const rows = useMemo(() => {
+    const list = block.creatives.filter((c) => filter === "all" || c.format === filter);
+    const value = (c: ReportCreative): number | null => {
+      switch (sortKey) {
+        case "spend": return c.spend;
+        case "impressions": return c.impressions;
+        case "linkCtr": return c.linkCtr;
+        case "cpm": return c.cpm;
+        case "frequency": return c.frequency;
+        case "result": return creativeResult(c, focus)?.value ?? null;
+        case "cost": return creativeResult(c, focus)?.cost ?? null;
+        case "roas": return c.conversions >= 3 && c.conversionValue > 0 ? c.roas : null;
+        case "hook": return c.video?.hookRate ?? null;
+        case "hold": return c.video?.holdRate ?? null;
+        case "views3s": return c.video?.threeSecondViews ?? null;
+        case "avgWatch": return c.video?.avgWatchTimeSeconds ?? null;
+      }
+    };
+    // Nulos vão para o fim, independente da direção: peça sem a métrica não
+    // pode roubar posição no ranking de quem tem dado.
+    return [...list].sort((a, b) => {
+      const va = value(a); const vb = value(b);
+      const na = va == null; const nb = vb == null;
+      if (na && nb) return 0;
+      if (na) return 1;
+      if (nb) return -1;
+      return desc ? vb! - va! : va! - vb!;
+    });
+  }, [block, filter, sortKey, desc, focus]);
+
+  const shown = showAll ? rows : rows.slice(0, 12);
+  const showVideoCols = filter !== "static";
+  const costHead = focus ? focus.costLabel : "Custo/resultado";
+  const th = (align?: "right") => ({ paddingBottom: 4, fontWeight: 700, color: C.muted, textTransform: "uppercase" as const, letterSpacing: 0.3, textAlign: align || ("left" as const) });
+  const td = (align?: "right", strong = false) => ({ padding: "5px 0", textAlign: align || ("left" as const), fontVariantNumeric: "tabular-nums" as const, fontWeight: strong ? 700 : 400, color: C.ink });
+
+  return (
+    <Block>
+      <SectionTitle kicker="Meta Ads · Desempenho por peça" color={C.meta}>Criativos</SectionTitle>
+
+      <Grid cols={4}>
+        <Kpi label="Peças com entrega" value={`${num(s.withDelivery)}`} />
+        <Kpi label="Investimento total" value={m(s.spend)} />
+        <Kpi label="Impressões" value={num(s.impressions)} />
+        <Kpi label="Alcance" value={num(s.reach)} />
+      </Grid>
+      {s.spend > 0 && (
+        <Card title="Investimento: vídeo × estático">
+          <SplitBar
+            parts={[
+              { label: `Vídeo (${s.videoCreatives} peças)`, value: s.videoSpend, color: C.meta },
+              { label: `Estático (${s.staticCreatives} peças)`, value: s.staticSpend, color: C.teal },
+            ]}
+            total={s.spend}
+            format={(v) => m(v)}
+          />
+        </Card>
+      )}
+
+      <div style={{ display: "flex", gap: 12, flexDirection: compact ? "column" : "row" }}>
+        <Card title={`Vídeo · ${video.n} peças`}>
+          <MiniStat label="Investimento" value={m(video.spend)} />
+          <MiniStat label="Views de 3 segundos" value={num(video.views3s)} />
+          <MiniStat label="Hook médio (views 3s / impr.)" value={video.hook != null ? pct(video.hook) : "—"} />
+          <MiniStat label="Hold médio (thruplay / 3s)" value={video.hold != null ? pct(video.hold) : "—"} />
+          <MiniStat label="Tempo médio assistido" value={video.watch != null ? fmtWatch(video.watch) : "—"} />
+        </Card>
+        <Card title={`Estático · ${stat.n} peças`}>
+          <MiniStat label="Investimento" value={m(stat.spend)} />
+          <MiniStat label="CTR no link médio" value={stat.linkCtr != null ? pct(stat.linkCtr) : "—"} />
+          <MiniStat label="CPM médio" value={stat.cpm != null ? m(stat.cpm) : "—"} />
+          <MiniStat label={`Resultado total · ${focus ? focus.short : "conversões"}`} value={num(stat.result)} />
+        </Card>
+      </div>
+
+      <div style={{ marginTop: 16, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: 0.5 }}>Ranking</span>
+        <div style={{ display: "inline-flex", gap: 4 }}>
+          {([["all", "Todos"], ["video", "Vídeo"], ["static", "Estático"]] as const).map(([key, label]) => (
+            <button key={key} onClick={() => setFilter(key)} style={fmtFilterChip(filter === key)}>{label}</button>
+          ))}
+        </div>
+        <div style={{ flex: 1 }} />
+        <select value={sortKey} onChange={(e) => setSortKey(e.target.value as CreativeSortKey)} aria-label="Ordenar por"
+          style={{ fontSize: 11, padding: "5px 8px", borderRadius: 8, border: `1px solid ${C.line}`, background: "#ffffff", color: C.ink, cursor: "pointer" }}>
+          {CREATIVE_SORT_OPTIONS.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+        </select>
+        <button onClick={() => setDesc(!desc)} style={fmtFilterChip(true)} title={desc ? "Ordem decrescente" : "Ordem crescente"}>
+          {desc ? "Maior → menor" : "Menor → maior"}
+        </button>
+      </div>
+
+      {rows.length === 0 ? (
+        <p style={{ fontSize: 12, color: C.muted, padding: "14px 0" }}>Nenhum criativo com entrega no período.</p>
+      ) : (
+        <>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", fontSize: compact ? 9.5 : 10.5, borderCollapse: "collapse", marginTop: 8 }}>
+              <thead>
+                <tr style={{ borderBottom: `1px solid ${C.line}` }}>
+                  <th style={th()}>#</th>
+                  <th style={th()}>Criativo</th>
+                  <th style={th()}>Tipo</th>
+                  <th style={th("right")}>Invest.</th>
+                  <th style={th("right")}>Impr.</th>
+                  <th style={th("right")}>CTR link</th>
+                  <th style={th("right")}>CPM</th>
+                  <th style={th("right")}>Resultado</th>
+                  <th style={th("right")}>{costHead}</th>
+                  {showRoas && <th style={th("right")}>ROAS</th>}
+                  {showVideoCols && (<><th style={th("right")}>Hook</th><th style={th("right")}>Hold</th><th style={th("right")}>Views 3s</th><th style={th("right")}>T. médio</th></>)}
+                </tr>
+              </thead>
+              <tbody>
+                {shown.map((c, i) => {
+                  const r = creativeResult(c, focus);
+                  const roasVal = c.conversions >= 3 && c.conversionValue > 0 ? c.roas : null;
+                  return (
+                    <tr key={c.adId} style={{ borderBottom: `1px solid ${C.line}80` }}>
+                      <td style={{ ...td(), width: 18, color: C.faint, fontWeight: 600 }}>{i + 1}</td>
+                      <td style={{ ...td(), maxWidth: 170 }}>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                          {c.thumbnail ? <img src={c.thumbnail} alt="" style={{ width: 22, height: 22, borderRadius: 4, objectFit: "cover", flexShrink: 0 }} /> : <div style={{ width: 22, height: 22, borderRadius: 4, background: C.accent, flexShrink: 0 }} />}
+                          <span title={c.adName} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 600, color: C.ink }}>{c.adName}</span>
+                        </span>
+                      </td>
+                      <td style={{ ...td(), whiteSpace: "nowrap" }}>
+                        <span style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.3, padding: "2px 6px", borderRadius: 999, background: c.format === "video" ? "#e0f2fe" : "#f1f5f9", color: c.format === "video" ? "#0369a1" : "#475569" }}>{c.format === "video" ? "Vídeo" : "Estático"}</span>
+                      </td>
+                      <td style={{ ...td("right", true) }}>{m(c.spend)}</td>
+                      <td style={td("right")}>{num(c.impressions)}</td>
+                      <td style={td("right")}>{c.linkCtr != null ? pct(c.linkCtr) : "—"}</td>
+                      <td style={td("right")}>{c.cpm != null ? m(c.cpm) : "—"}</td>
+                      <td style={{ ...td("right", true) }}>{r ? num(r.value) : "—"}</td>
+                      <td style={td("right")}>{r?.cost != null ? m(r.cost) : "—"}</td>
+                      {showRoas && <td style={td("right")}>{roasVal != null ? mult(roasVal) : "—"}</td>}
+                      {showVideoCols && (<>
+                        <td style={td("right")}>{c.video?.hookRate != null ? pct(c.video.hookRate) : "—"}</td>
+                        <td style={td("right")}>{c.video?.holdRate != null ? pct(c.video.holdRate) : "—"}</td>
+                        <td style={td("right")}>{c.video?.threeSecondViews ? num(c.video.threeSecondViews) : "—"}</td>
+                        <td style={td("right")}>{c.video?.avgWatchTimeSeconds != null ? fmtWatch(c.video.avgWatchTimeSeconds) : "—"}</td>
+                      </>)}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p style={{ fontSize: 9.5, color: C.faint, marginTop: 6, lineHeight: 1.5 }}>
+            Hook = views de 3s ÷ impressões · Hold = thruplays ÷ views de 3s · Views 3s = visualizações de pelo menos 3 segundos · T. médio = tempo médio assistido por reprodução.
+            {showRoas && " ROAS só considera peças com 3+ conversões."}
+          </p>
+          {rows.length > 12 && (
+            <button onClick={() => setShowAll(!showAll)} style={{ marginTop: 8, ...fmtFilterChip(false) }}>
+              {showAll ? "Mostrar menos" : `Mostrar todos (${rows.length})`}
+            </button>
+          )}
+        </>
+      )}
+    </Block>
+  );
+}
+
+function GoogleSection({ block }: { block: GoogleBlock }) {  const d = block.detail; const e = block.extras; const m = (v: number, d = 2) => money(v, block.currency, d); const cur = block.currency || "BRL";
   const { w: pageW, compact } = useLayout(); const fullChart = pageW - 34; const halfChart = compact ? pageW - 34 : HALF - 34;
   if (!d || d.error) return <Block><SectionTitle kicker="Google Ads" color={C.google}>{block.name}</SectionTitle><Warn>{d?.error || "Dados indisponíveis."}</Warn></Block>;
   const k = d.kpis; const p = d.prevKpis;

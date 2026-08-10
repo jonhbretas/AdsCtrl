@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Download, ArrowLeft, RefreshCw } from "lucide-react";
-import ReportDocument, { ReportPayload } from "@/components/ReportDocument";
+import ReportDocument, { ReportPayload, ReportTab, ReportTabs } from "@/components/ReportDocument";
 
 function safeDecode(value: string): string {
   try { return decodeURIComponent(value); } catch { return value; }
@@ -23,6 +23,7 @@ export default function ReportPage() {
   const [data, setData] = useState<ReportPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<ReportTab>("resumo");
 
   useEffect(() => {
     const q = new URLSearchParams(window.location.search);
@@ -49,6 +50,7 @@ export default function ReportPage() {
           <ArrowLeft className="h-3.5 w-3.5" /> Voltar
         </Link>
         <div className="flex-1" />
+        {data?.creatives && <ReportTabs active={tab} onChange={setTab} creativesAvailable={true} />}
         <button onClick={() => window.print()} disabled={loading || !!error}
           className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold border-none cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-default"
           style={{ backgroundColor: "var(--color-foreground)", color: "var(--color-background)" }}>
@@ -69,7 +71,7 @@ export default function ReportPage() {
             <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-red-500/20 bg-red-500/10 text-sm text-red-500">{error}</div>
           </div>
         )}
-        {data && <ReportDocument data={data} />}
+        {data && <ReportDocument data={data} activeTab={tab} />}
       </div>
     </div>
   );

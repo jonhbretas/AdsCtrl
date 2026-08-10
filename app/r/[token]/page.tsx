@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { Download, RefreshCw } from "lucide-react";
-import ReportDocument, { ReportPayload } from "@/components/ReportDocument";
+import ReportDocument, { ReportPayload, ReportTab, ReportTabs } from "@/components/ReportDocument";
 import { ModeToggle, useReadingMode } from "@/components/ReadingMode";
 
 export default function PublicReportPage() {
@@ -12,6 +12,7 @@ export default function PublicReportPage() {
   const [data, setData] = useState<ReportPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<ReportTab>("resumo");
   const { compact, choose, docWidth, shellRef, printDocument } = useReadingMode();
 
   useEffect(() => {
@@ -42,6 +43,7 @@ export default function PublicReportPage() {
           Relatório de mídia paga · {(data?.brand || "").trim() || data?.account?.name || "Cliente"}
         </span>
         <div className="flex-1" />
+        {data?.creatives && <ReportTabs active={tab} onChange={setTab} creativesAvailable={true} />}
         <ModeToggle compact={compact} onChange={choose} />
         <button onClick={printDocument} disabled={loading || !!error}
           className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold border-none cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-default"
@@ -63,7 +65,7 @@ export default function PublicReportPage() {
             <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-red-500/20 bg-red-500/10 text-sm text-red-500">{error}</div>
           </div>
         )}
-        {data && <ReportDocument data={data} compact={compact} width={docWidth} />}
+        {data && <ReportDocument data={data} compact={compact} width={docWidth} activeTab={tab} />}
       </div>
     </div>
   );

@@ -11,6 +11,7 @@ import {
   googleCustomerId,
 } from "@/lib/google-ads";
 import { fetchSocialReport, SocialReport } from "@/lib/meta-social";
+import { getMetaCreativeLab, MetaCreativeLabResult } from "@/lib/meta-creatives";
 import { getServiceClient, supabaseEnvMissing } from "@/lib/supabase";
 
 export class ReportError extends Error {
@@ -39,21 +40,23 @@ export interface ClientReportSettings {
   /** Orgânico (Facebook/Instagram). Nulo até a migration + cadastro em /clientes. */
   facebook_page_id: string | null;
   instagram_business_id: string | null;
+  /** Objetivo configurado do cliente (para inferir o goal dos criativos). */
+  objective: string | null;
 }
 
 // Resolve o cliente de uma conta e devolve o que o relatório precisa saber
 // sobre ele. Uma consulta serve todas essas leituras.
 export async function clientReportSettings(accountId: string): Promise<ClientReportSettings> {
   const empty: ClientReportSettings = {
-    result_family: null, brand: null, facebook_page_id: null, instagram_business_id: null,
+    result_family: null, brand: null, facebook_page_id: null, instagram_business_id: null, objective: null,
   };
   if (supabaseEnvMissing()) return empty;
 
-  // brand_name e as colunas de orgânico podem não existir ainda (migrações
-  // próprias). Tenta com tudo e vai reduzindo: nenhuma delas pode derrubar o
-  // relatório por não terem sido rodadas.
+  // brand_name, colunas de orgânico e objective podem não existir ainda
+  // (migrações próprias). Tenta com tudo e vai reduzindo: nenhuma delas pode
+  // derrubar o relatório por não terem sido rodadas.
   const COLUMN_SETS = [
-    "result_family,brand_name,facebook_page_id,instagram_business_id",
+    "result_family,brand_name,facebook_page_id,instagram_business_id,objective",
     "result_family,brand_name",
     "result_family",
   ];
@@ -90,7 +93,7 @@ export async function clientReportSettings(accountId: string): Promise<ClientRep
         break;
       } catch (error: any) {
         if (columns === COLUMN_SETS[COLUMN_SETS.length - 1]) throw error;
-        if (!/brand_name|facebook_page_id|instagram_business_id/.test(error?.message || "")) throw error;
+        if (!/brand_name|facebook_page_id|instagram_business_id|objective/.test(error?.message || "")) throw error;
       }
     }
     if (!row) return empty;
@@ -99,6 +102,7 @@ export async function clientReportSettings(accountId: string): Promise<ClientRep
       brand: (row.brand_name ?? null) || null,
       facebook_page_id: row.facebook_page_id ?? null,
       instagram_business_id: row.instagram_business_id ?? null,
+      objective: row.objective ?? null,
     };
   } catch {
     // Foco, marca e orgânico são refinamentos de leitura; nunca derrubam o relatório.
@@ -151,6 +155,134 @@ export function lastFullWeek(timezone = "America/Sao_Paulo"): { since: string; u
   return { since: fmt(previousMonday), until: fmt(previousSunday) };
 }
 
+// ---------- criativos para o relatório ----------
+// O relatório completo (página pública + preview) ganhou uma aba de criativos.
+// Ela reaproveita o laboratório (lib/meta-creatives.ts) — formato detectado no
+// objeto do criativo, thumbnail e métricas de vídeo (hook, hold, views 3s) —
+// e serializa aqui uma versão enxuta, só com o que a aba exibe. Criativos sem
+// impressão não entram (poluem o ranking do cliente e incham o cache).
+
+export interface ReportCreativeVideo {
+  plays: number;
+  threeSecondViews: number;
+  thruPlays: number;
+  avgWatchTimeSeconds: number | null;
+  playRate: number | null;
+  hookRate: number | null;
+  holdRate: number | null;
+  completionRate: number | null;
+}
+
+export interface ReportCreative {
+  adId: string;
+  adName: string;
+  campaignName: string | null;
+  format: "video" | "static";
+  thumbnail: string | null;
+  spend: number;
+  impressions: number;
+  reach: number;
+  clicks: number;
+  linkClicks: number;
+  linkCtr: number | null;
+  cpm: number | null;
+  frequency: number | null;
+  conversions: number;
+  conversionValue: number;
+  costPerConversion: number | null;
+  roas: number | null;
+  messageConversations: number;
+  costPerMessage: number | null;
+  landingPageViews: number;
+  engagements: number;
+  video: ReportCreativeVideo | null;
+}
+
+export interface ReportCreativesBlock {
+  summary: {
+    creatives: number;
+    withDelivery: number;
+    videoCreatives: number;
+    staticCreatives: number;
+    spend: number;
+    impressions: number;
+    reach: number;
+    videoSpend: number;
+    videoImpressions: number;
+    staticSpend: number;
+    staticImpressions: number;
+    videoShare: number | null;
+  };
+  creatives: ReportCreative[];
+}
+
+function toReportCreatives(result: MetaCreativeLabResult): ReportCreativesBlock {
+  const creatives: ReportCreative[] = [];
+  for (const c of result.creatives) {
+    if (c.metrics.impressions <= 0) continue;
+    const isVideo = c.mediaType === "VIDEO";
+    creatives.push({
+      adId: c.adId,
+      adName: c.adName,
+      campaignName: c.campaignName,
+      format: isVideo ? "video" : "static",
+      thumbnail: c.asset.thumbnail,
+      spend: c.metrics.spend,
+      impressions: c.metrics.impressions,
+      reach: c.metrics.reach,
+      clicks: c.metrics.clicks,
+      linkClicks: c.metrics.linkClicks,
+      linkCtr: c.metrics.linkCtr,
+      cpm: c.metrics.cpm,
+      frequency: c.metrics.frequency,
+      conversions: c.metrics.conversions,
+      conversionValue: c.metrics.conversionValue,
+      costPerConversion: c.metrics.costPerConversion,
+      roas: c.metrics.roas,
+      messageConversations: c.metrics.messageConversations,
+      costPerMessage: c.metrics.costPerMessage,
+      landingPageViews: c.metrics.landingPageViews,
+      engagements: c.metrics.engagements,
+      video: isVideo
+        ? {
+            plays: c.metrics.video.plays,
+            threeSecondViews: c.metrics.video.threeSecondViews,
+            thruPlays: c.metrics.video.thruPlays,
+            avgWatchTimeSeconds: c.metrics.video.avgWatchTimeSeconds,
+            playRate: c.metrics.video.playRate,
+            hookRate: c.metrics.video.hookRate,
+            holdRate: c.metrics.video.holdRate,
+            completionRate: c.metrics.video.completionRate,
+          }
+        : null,
+    });
+  }
+  const sum = (pick: (c: ReportCreative) => number) =>
+    creatives.reduce((total, c) => total + pick(c), 0);
+  const videoSpend = sum((c) => (c.format === "video" ? c.spend : 0));
+  const staticSpend = sum((c) => (c.format === "static" ? c.spend : 0));
+  const videoImpressions = sum((c) => (c.format === "video" ? c.impressions : 0));
+  const staticImpressions = sum((c) => (c.format === "static" ? c.impressions : 0));
+  const totalSpend = videoSpend + staticSpend;
+  return {
+    summary: {
+      creatives: result.creatives.length,
+      withDelivery: creatives.length,
+      videoCreatives: creatives.filter((c) => c.format === "video").length,
+      staticCreatives: creatives.filter((c) => c.format === "static").length,
+      spend: totalSpend,
+      impressions: sum((c) => c.impressions),
+      reach: sum((c) => c.reach),
+      videoSpend,
+      videoImpressions,
+      staticSpend,
+      staticImpressions,
+      videoShare: totalSpend > 0 ? (videoSpend / totalSpend) * 100 : null,
+    },
+    creatives,
+  };
+}
+
 export async function buildReport(requestedAccountId: string, since: string, until: string) {
   if (supabaseEnvMissing()) throw new ReportError("Supabase não configurado.", 503);
 
@@ -196,35 +328,56 @@ export async function buildReport(requestedAccountId: string, since: string, unt
           currency: row.currency || "BRL",
         }));
 
-  const google = googleAdsConfigured()
-    ? await Promise.all(
-        googleTargets.map(async (target) => {
-          const customerId = googleCustomerId(target.account_id);
-          const [detail, extras] = await Promise.all([
-            getGoogleAccountDetail(customerId, since, until).catch((e: any) => ({
-              error: e?.message || "Falha ao buscar dados do Google Ads.",
-            })),
-            getGoogleReportExtras(customerId, since, until).catch(() => null),
-          ]);
-          return { ...target, detail, extras };
-        })
-      )
-    : [];
-
-  // Orgânico (Facebook/Instagram): só tenta quando o cliente tem os IDs
-  // cadastrados em /clientes. Sem Página atribuída ao usuário de sistema na
-  // BM, a chamada falha e cai no aviso de sempre — não derruba o relatório.
+  // Foco, marca, orgânico e objetivo do cliente — resolvidos ANTES das demais
+  // leituras: a aba de criativos usa o foco/objetivo para inferir o goal, e o
+  // orgânico define se a chamada social acontece. É uma única consulta.
   const settings = await clientReportSettings(account.account_id);
-  const socialToken = tokenByIndex(account.platform === "meta" && typeof account.token_ref === "number" ? account.token_ref : 0);
-  let social: SocialReport | null = null;
-  if (settings.facebook_page_id || settings.instagram_business_id) {
-    social = await fetchSocialReport(
-      { facebookPageId: settings.facebook_page_id, instagramBusinessId: settings.instagram_business_id },
-      socialToken,
-      since,
-      until
-    ).catch(() => null);
-  }
+  const token = tokenByIndex(typeof account.token_ref === "number" ? account.token_ref : 0);
+
+  // Google + Criativos + Orgânico em paralelo: nenhum derruba o relatório.
+  const [google, creatives, social] = await Promise.all([
+    googleAdsConfigured()
+      ? Promise.all(
+          googleTargets.map(async (target) => {
+            const customerId = googleCustomerId(target.account_id);
+            const [detail, extras] = await Promise.all([
+              getGoogleAccountDetail(customerId, since, until).catch((e: any) => ({
+                error: e?.message || "Falha ao buscar dados do Google Ads.",
+              })),
+              getGoogleReportExtras(customerId, since, until).catch(() => null),
+            ]);
+            return { ...target, detail, extras };
+          })
+        )
+      : [],
+    // Aba de criativos: reaproveita o laboratório (formato, thumbnail e
+    // métricas de vídeo) e serializa a versão enxuta para o relatório.
+    account.platform === "meta" && meta && !meta.error
+      ? getMetaCreativeLab({
+          accountId: account.account_id,
+          accountName: account.name,
+          currency: account.currency || "BRL",
+          since,
+          until,
+          token,
+          configuredObjective: settings.objective,
+          configuredResultFamily: settings.result_family,
+        })
+          .then(toReportCreatives)
+          .catch(() => null)
+      : null,
+    // Orgânico (Facebook/Instagram): só tenta quando o cliente tem os IDs
+    // cadastrados em /clientes. Sem Página atribuída ao usuário de sistema na
+    // BM, a chamada falha e cai no aviso de sempre — não derruba o relatório.
+    settings.facebook_page_id || settings.instagram_business_id
+      ? fetchSocialReport(
+          { facebookPageId: settings.facebook_page_id, instagramBusinessId: settings.instagram_business_id },
+          token,
+          since,
+          until
+        ).catch(() => null)
+      : null,
+  ]);
 
   return {
     generated_at: new Date().toISOString(),
@@ -239,6 +392,7 @@ export async function buildReport(requestedAccountId: string, since: string, unt
     prevRange: previousRange(since, until),
     meta,
     google,
+    creatives,
     social,
     organic_note: social
       ? undefined

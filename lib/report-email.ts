@@ -331,7 +331,7 @@ export function renderReportEmail(
           </td></tr>
         </table>
         <div style="font-size:11px;color:${MUTED};font-family:${FONT};padding-top:10px;">
-          Campanhas, conjuntos, anúncios, públicos e horários — com opção de salvar em PDF.
+          Campanhas, conjuntos, anúncios, criativos, públicos e horários — com opção de salvar em PDF.
         </div>
         ${options.dashboardLink
           ? `<div style="font-size:11.5px;font-family:${FONT};padding-top:14px;">
