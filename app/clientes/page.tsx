@@ -49,7 +49,7 @@ const TABS: { key: TabKey; label: string }[] = [
 
 export default function ClientesPage() {
   const router = useRouter();
-  const [view, setViewState] = useState<"clients" | "catalog">("clients");
+  const [view, setViewState] = useState<"clients" | "groups" | "catalog">("clients");
   const [selectedClientId, setSelectedClientId] = useState("");
   const [activeTab, setActiveTabState] = useState<TabKey>("metas");
   const [groups, setGroups] = useState<Group[]>([]);
@@ -88,7 +88,7 @@ export default function ClientesPage() {
   }
   function selectClient(id: string) { setSelectedClientId(id); setViewState("clients"); updateUrl({ client: id, view: null }); }
   function selectTab(tab: TabKey) { setActiveTabState(tab); updateUrl({ tab }); }
-  function selectView(next: "clients" | "catalog") { setViewState(next); updateUrl({ view: next === "catalog" ? "catalog" : null }); }
+  function selectView(next: "clients" | "groups" | "catalog") { setViewState(next); updateUrl({ view: next === "clients" ? null : next }); }
 
   useEffect(() => {
     if (!clients.length) return;
@@ -96,7 +96,7 @@ export default function ClientesPage() {
     const urlView = params.get("view");
     const urlTab = params.get("tab") as TabKey | null;
     const urlClient = params.get("client");
-    if (urlView === "catalog") setViewState("catalog");
+    if (urlView === "groups" || urlView === "catalog") setViewState(urlView);
     if (urlTab && TABS.some((tab) => tab.key === urlTab)) setActiveTabState(urlTab);
     if (urlClient && clients.some((client) => client.id === urlClient)) setSelectedClientId(urlClient);
     else if (!selectedClientId) setSelectedClientId(clients[0].id);
@@ -214,7 +214,7 @@ export default function ClientesPage() {
         title="Clientes"
         subtitle={`${clients.length} cliente${clients.length === 1 ? "" : "s"} ativo${clients.length === 1 ? "" : "s"} · ${accounts.length} contas no catálogo.`}
         actions={<div className="flex flex-wrap items-center gap-2">
-          <Segmented value={view} onChange={selectView} options={[{ value: "clients", label: "Clientes" }, { value: "catalog", label: "Catálogo" }]} />
+          <Segmented value={view} onChange={selectView} options={[{ value: "clients", label: "Clientes" }, { value: "groups", label: "Grupos" }, { value: "catalog", label: "Catálogo" }]} />
           <Link href="/relatorios"><Button variant="ghost" size="sm"><Mail className="h-3.5 w-3.5 mr-1" /> Relatórios e painéis</Button></Link>
         </div>}
       />
@@ -356,15 +356,8 @@ export default function ClientesPage() {
         </div>
       )}
 
-      {view === "catalog" && (
-        <div className="space-y-4">
-          <WideScreenHint>A tabela de contas é larga; no computador fica mais confortável.</WideScreenHint>
-
-          <section className="rounded-lg border border-border/50 bg-card p-4">
-            <div className="mb-3 flex items-center justify-between"><h2 className="text-sm font-semibold">ROI por Cliente — comparação geral</h2></div>
-            <RoiPorCliente />
-          </section>
-
+      {view === "groups" && (
+        <div className="space-y-3">
           <section className="rounded-lg border border-border/50 bg-card p-4">
             <div className="mb-3 flex items-center justify-between"><h2 className="text-sm font-semibold">Grupos</h2><span className="text-xs text-muted-foreground">{groups.length} grupo{groups.length === 1 ? "" : "s"}</span></div>
             <div className="space-y-3">
@@ -381,7 +374,19 @@ export default function ClientesPage() {
                   ))}</tbody>
                 </table>
               </div>
+              <p className="text-xs text-muted-foreground">Para encaixar contas num grupo, abra <button type="button" onClick={() => selectView("catalog")} className="cursor-pointer font-semibold text-primary hover:underline">Catálogo</button> e escolha o grupo na coluna “Grupo” de cada conta.</p>
             </div>
+          </section>
+        </div>
+      )}
+
+      {view === "catalog" && (
+        <div className="space-y-4">
+          <WideScreenHint>A tabela de contas é larga; no computador fica mais confortável.</WideScreenHint>
+
+          <section className="rounded-lg border border-border/50 bg-card p-4">
+            <div className="mb-3 flex items-center justify-between"><h2 className="text-sm font-semibold">ROI por Cliente — comparação geral</h2></div>
+            <RoiPorCliente />
           </section>
 
           <section className="rounded-lg border border-border/50 bg-card p-4">
