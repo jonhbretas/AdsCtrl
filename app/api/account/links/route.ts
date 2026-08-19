@@ -54,7 +54,7 @@ export async function GET(req: Request) {
       "account_id,name,account_status,currency,balance,funding_source_details,business{id,name}"
     );
     url.searchParams.set("access_token", token);
-    const [response, daily] = await Promise.all([
+    const [response, daily, pixelsRaw] = await Promise.all([
       fetch(url, { cache: "no-store" }),
       getDailySpend(
         `act_${accountId}`,
@@ -62,8 +62,17 @@ export async function GET(req: Request) {
         isoDaysAgo(1),
         token
       ).catch(() => []),
+      fetch(
+        `${GRAPH}/act_${accountId}/adspixels?fields=id,name&limit=1&access_token=${encodeURIComponent(token)}`,
+        { cache: "no-store" }
+      ).catch(() => null),
     ]);
     const payload = await response.json().catch(() => ({}));
+    const pixelsPayload = pixelsRaw ? await pixelsRaw.json().catch(() => ({})) : {};
+    const pixel =
+      response.ok && pixelsPayload?.data?.[0]
+        ? { id: String(pixelsPayload.data[0].id), name: pixelsPayload.data[0].name || null }
+        : null;
     const raw = response.ok ? (payload as AdAccountRaw) : null;
     const prepaid = raw ? isPrepaidAccount(raw) : false;
     const currentBalance = raw && prepaid ? availableBalance(raw) : null;
@@ -82,6 +91,7 @@ export async function GET(req: Request) {
       account_id: accountId,
       business_id: response.ok ? payload?.business?.id || null : null,
       business_name: response.ok ? payload?.business?.name || null : null,
+      pixel,
       finance: response.ok
         ? {
             is_prepaid: prepaid,

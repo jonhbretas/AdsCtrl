@@ -21,6 +21,7 @@ export default function QuickAccess({ accountId, accountName, platform, balance,
 }) {
   const [copied, setCopied] = useState<string | null>(null);
   const [business, setBusiness] = useState<{ id: string; name: string | null } | null>(null);
+  const [pixel, setPixel] = useState<{ id: string; name: string | null } | null>(null);
   const [finance, setFinance] = useState<{ is_prepaid: boolean; balance: number | null; spend_7d: number; average_daily_spend: number; runway_days: number | null; estimated_depletion_date: string | null } | null>(null);
   const bareId = accountId.replace(/^act_/, "").replace(/^google:/, "");
   const isMeta = platform === "meta";
@@ -32,6 +33,7 @@ export default function QuickAccess({ accountId, accountName, platform, balance,
       .then(readJson)
       .then((p) => {
         if (alive && p?.business_id) setBusiness({ id: p.business_id, name: p.business_name || null });
+        if (alive && p?.pixel) setPixel(p.pixel);
         if (alive && p?.finance) setFinance(p.finance);
       })
       .catch(() => {});
@@ -39,6 +41,10 @@ export default function QuickAccess({ accountId, accountName, platform, balance,
   }, [accountId, isMeta]);
 
   const businessParam = business?.id ? `&business_id=${encodeURIComponent(business.id)}` : "";
+  const bmQuery = business?.id ? `?business_id=${encodeURIComponent(business.id)}` : "";
+  const eventsUrl = isMeta && pixel
+    ? `https://business.facebook.com/events_manager/dataset/${encodeURIComponent(pixel.id)}/activity/events${bmQuery}`
+    : `https://business.facebook.com/events_manager/list${bmQuery}`;
   const billingUrl = isMeta
     ? `https://business.facebook.com/billing_hub/payment_settings?asset_id=${encodeURIComponent(bareId)}${businessParam}&placement=standalone`
     : `https://ads.google.com/aw/billing/summary?ocid=${encodeURIComponent(bareId)}`;
@@ -47,6 +53,7 @@ export default function QuickAccess({ accountId, accountName, platform, balance,
         { label: "Ads Manager", url: `https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=${encodeURIComponent(bareId)}`, accent: false },
         { label: "Saldo / pagamento", url: billingUrl, accent: true },
         { label: "Faturas", url: `https://business.facebook.com/billing_hub/accounts/details?asset_id=${encodeURIComponent(bareId)}${businessParam}&placement=standalone`, accent: false },
+        { label: "Eventos do pixel", url: eventsUrl, accent: false },
         { label: "Conta e acessos", url: `https://business.facebook.com/settings/ad-accounts/${encodeURIComponent(bareId)}${business?.id ? `?business_id=${encodeURIComponent(business.id)}` : ""}`, accent: false },
         { label: "Business Manager", url: business?.id ? `https://business.facebook.com/settings?business_id=${encodeURIComponent(business.id)}` : "https://business.facebook.com/settings", accent: false },
       ]
