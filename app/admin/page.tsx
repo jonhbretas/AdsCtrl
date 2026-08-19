@@ -35,7 +35,7 @@ const EMAIL_FIELDS: { key: SettingKey; label: string; placeholder: string; help:
   { key: "report_from_email", label: "Remetente", placeholder: "Agência <relatorios@seudominio.com>", help: "De onde saem os e-mails. O domínio precisa estar verificado no Resend." },
   { key: "report_reply_to", label: "Responder para", placeholder: "voce@seudominio.com", help: "Para onde vai a resposta do cliente. Útil quando o remetente é uma caixa sem entrada." },
   { key: "report_test_email", label: "E-mail de teste", placeholder: "voce@gmail.com", help: 'Destino do botão "Enviar teste para mim". Nunca vai para o cliente.' },
-  { key: "task_alert_email", label: "Lembretes internos", placeholder: "voce@gmail.com", help: "Recebe o resumo diário de tarefas atrasadas e projetos no prazo final." },
+  { key: "task_alert_email", label: "Lembretes internos", placeholder: "voce@gmail.com", help: "Recebe o resumo diário de tarefas atrasadas, projetos no prazo final e o relatório financeiro mensal." },
 ];
 
 const CONTRACTOR_FIELDS: { key: SettingKey; label: string; placeholder: string; help: string }[] = [
@@ -253,6 +253,11 @@ export default function ConfigPage() {
           summary={<SectionHead icon="🔔" title="Lembrete diário de pendências" hint="Sai junto da coleta, para você." meta="interno" />}>
           <TaskReminders onError={setError} recipient={settings?.effective.task_alert_email || ""} />
         </Collapsible>
+
+        <Collapsible id="finance-digest" storageKey="config:relatorio-financeiro"
+          summary={<SectionHead icon="💰" title="Relatório financeiro mensal" hint="Entradas, saídas e lucratividade no último dia do mês." meta="interno" />}>
+          <FinanceDigest onError={setError} recipient={settings?.effective.task_alert_email || ""} />
+        </Collapsible>
       </div>
 
       {/* Barra de salvar: fixa porque os campos ficam em seções que rolam. */}
@@ -334,6 +339,67 @@ function SectionHead({ icon, title, hint, meta }: { icon: string; title: string;
         <span className="text-xs text-muted-foreground ml-2">{hint}</span>
       </div>
       <span className="ml-auto text-xs font-semibold text-muted-foreground shrink-0 truncate max-w-[220px]">{meta}</span>
+    </div>
+  );
+}
+
+// O envio automático acontece no fim da coleta diária, no último dia do mês.
+// Aqui só se confere e se dispara na mão — o que faz falta ao mexer no texto.
+function FinanceDigest({ onError, recipient }: { onError: (message: string) => void; recipient: string }) {
+  const [busy, setBusy] = useState<"preview" | "send" | null>(null);
+  const [result, setResult] = useState<string | null>(null);
+
+  const money = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v || 0);
+
+  async function call(kind: "preview" | "send") {
+    setBusy(kind);
+    setResult(null);
+    try {
+      const response = await fetch(kind === "preview" ? "/api/finance/digest?preview=1" : "/api/finance/digest", {
+        method: kind === "preview" ? "GET" : "POST",
+        cache: "no-store",
+      });
+      const payload = await response.json();
+      if (!response.ok || payload.error) throw new Error(payload.error || "Falha no relatório financeiro.");
+      if (kind === "preview") {
+        const s = payload.summary || {};
+        const resumo = `resultado ${money(s.result)} · lucratividade ${(s.margin || 0).toFixed(1).replace(".", ",")}% · ${payload.entries} lançamentos`;
+        setResult(payload.recipient
+          ? `Sairia para ${payload.recipient}: “${payload.subject}” — ${resumo}.`
+          : `Prévia de ${payload.month}: ${resumo}. Destinatário não configurado.`);
+        return;
+      }
+      setResult(payload.status === "sent"
+        ? `Enviado para ${payload.recipient} — resultado ${money(payload.summary?.result)}.`
+        : `Não enviado: ${payload.reason || payload.status}.`);
+    } catch (e: any) {
+      onError(e?.message ?? "Falha ao acionar o relatório financeiro.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-muted-foreground leading-relaxed max-w-3xl">
+        No último dia do mês, junto da coleta, sai um e-mail com o resumo do Financeiro: receita prevista e
+        recebida, despesas previstas e pagas, valores a receber e a pagar, resultado e lucratividade do mês,
+        DRE por categoria e as maiores receitas e despesas. O automático só dispara no último dia; o botão
+        abaixo envia o mês corrente a qualquer momento.
+      </p>
+      <p className="text-[11px] text-muted-foreground">
+        Destinatário: {recipient ? <code>{recipient}</code> : <span className="text-amber-600 dark:text-amber-400">defina em Config › E-mail</span>}.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="secondary" size="sm" onClick={() => call("preview")} disabled={busy !== null}>
+          <RefreshCw className={cn("h-3.5 w-3.5 mr-1", busy === "preview" && "animate-spin")} />
+          {busy === "preview" ? "Conferindo…" : "Ver o que sairia agora"}
+        </Button>
+        <Button size="sm" onClick={() => call("send")} disabled={busy !== null}>
+          <Mail className="h-3.5 w-3.5 mr-1" /> {busy === "send" ? "Enviando…" : "Enviar agora"}
+        </Button>
+      </div>
+      {result && <div className="text-xs px-3 py-2 rounded-lg border border-border/50 bg-muted/30">{result}</div>}
     </div>
   );
 }

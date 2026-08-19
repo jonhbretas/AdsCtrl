@@ -11,6 +11,7 @@ import {
 } from "@/lib/google-ads";
 import { buildAlertsForAccount, buildStalledAlert, Alert } from "@/lib/alerts";
 import { sendTaskDigest } from "@/lib/task-digest";
+import { sendFinanceDigest } from "@/lib/finance-digest";
 import { getServiceClient } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
@@ -576,6 +577,13 @@ async function runCollect(triggerSource: "manual" | "cron", platform: CollectSco
     status: "error" as const,
     reason: error?.message || "falha ao enviar o lembrete",
   }));
+  // E no último dia do mês sai o relatório financeiro para o mesmo e-mail. A
+  // trava do mês fica no próprio envio (isLastDayOfMonth + registro em
+  // finance_digest_sends), então a coleta só chama e o resto dos dias cai fora.
+  const financeDigest = await sendFinanceDigest({ trigger: "auto" }).catch((error: any) => ({
+    status: "error" as const,
+    reason: error?.message || "falha ao enviar o relatório financeiro",
+  }));
   if (runId) await sb.from("collection_runs").update({
     finished_at: new Date().toISOString(),
     status: failed ? (processed ? "partial" : "error") : "success",
@@ -589,6 +597,7 @@ async function runCollect(triggerSource: "manual" | "cron", platform: CollectSco
     failed_account_ids: [...failedAccountIds],
     alerts: alerts.length,
     digest: { status: digest.status, reason: digest.reason },
+    finance_digest: { status: financeDigest.status, reason: financeDigest.reason },
     took_ms: Date.now() - started,
   };
   } catch (error: any) {
