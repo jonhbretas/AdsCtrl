@@ -24,7 +24,7 @@ import { brDate } from "@/lib/format";
 import { RefreshCw, AlertTriangle, Plus, X, Mail, Phone, FolderOpen, ExternalLink, CalendarClock, FileText, Wallet, KeyRound, ClipboardList, Palette, Target, Rocket, BarChart3, Link2, Check, Clock } from "lucide-react";
 
 interface Group { id: string; name: string; color: string; }
-interface Account { account_id: string; name: string; status: string; group_id: string | null; platform: "meta" | "google"; hidden?: boolean; linked_meta_account_id?: string | null; is_primary?: boolean; }
+interface Account { account_id: string; name: string; status: string; group_id: string | null; platform: "meta" | "google"; hidden?: boolean; on_hold?: boolean; linked_meta_account_id?: string | null; is_primary?: boolean; }
 interface ClientRecord { id: string; name: string; status: "active" | "paused" | "archived"; objective: string | null; result_family: string | null; brand_name?: string | null; primary_kpi: string | null; target_value: number | null; monthly_budget: number | null; monthly_conversion_goal: number | null; target_roas?: number | null; max_cpa?: number | null; max_daily_spend?: number | null; max_budget_change_percent?: number | null; automation_mode?: "observe" | "approval" | "autonomous" | null; currency: string; timezone: string; budget_start_day: number; track_sales?: boolean; facebook_page_id?: string | null; instagram_business_id?: string | null; legal_name?: string | null; cnpj?: string | null; person_type?: "fisica" | "juridica"; cpf?: string | null; address_street?: string | null; address_number?: string | null; address_complement?: string | null; address_neighborhood?: string | null; address_city?: string | null; address_state?: string | null; address_zip_code?: string | null; address_country?: string | null; state_registration?: string | null; municipal_registration?: string | null; legal_representative_name?: string | null; legal_representative_cpf?: string | null; legal_representative_role?: string | null; billing_email?: string | null; billing_phone?: string | null; contact_name?: string | null; contact_email?: string | null; contact_phone?: string | null; whatsapp_phone?: string | null; drive_folder_url?: string | null; contract_start_date?: string | null; contract_end_date?: string | null; contract_notice_days?: number; accounts: Account[]; }
 type GroupSortKey = "name" | "accounts";
 type AccountAdminSortKey = "platform" | "name" | "status" | "client" | "group" | "visibility";
@@ -118,6 +118,7 @@ export default function ClientesPage() {
   async function renameGroup(id: string, name: string) { try { await api("/api/groups", { method: "PATCH", body: JSON.stringify({ id, name }) }); await load(); } catch (e: any) { setError(e?.message); } }
   async function setGroup(accountId: string, groupId: string | null) { setAccounts((prev) => prev.map((a) => a.account_id === accountId ? { ...a, group_id: groupId } : a)); try { await api("/api/accounts/group", { method: "POST", body: JSON.stringify({ account_id: accountId, group_id: groupId }) }); } catch (e: any) { setError(e?.message); await load(); } }
   async function toggleHidden(accountId: string, hidden: boolean) { setAccounts((prev) => prev.map((a) => a.account_id === accountId ? { ...a, hidden } : a)); try { await api("/api/accounts/hidden", { method: "POST", body: JSON.stringify({ account_id: accountId, hidden }) }); } catch (e: any) { setError(e?.message); await load(); } }
+  async function toggleOnHold(accountId: string, onHold: boolean) { setAccounts((prev) => prev.map((a) => a.account_id === accountId ? { ...a, on_hold: onHold } : a)); try { await api("/api/accounts/on-hold", { method: "POST", body: JSON.stringify({ account_id: accountId, on_hold: onHold }) }); } catch (e: any) { setError(e?.message); await load(); } }
   async function linkGoogle(googleId: string, metaId: string) { setAccounts((prev) => prev.map((a) => a.account_id === googleId ? { ...a, linked_meta_account_id: metaId || null } : a)); try { await api("/api/accounts/link", { method: "POST", body: JSON.stringify({ google_account_id: googleId, meta_account_id: metaId || null }) }); await refreshClients(); } catch (e: any) { setError(e?.message); await load(); } }
   async function sync(platform: "meta" | "google") { try { const r = await api("/api/accounts/sync", { method: "POST", body: JSON.stringify({ platform }) }); await load(); setError(r.added ? `${r.added} conta(s) nova(s).` : `Sincronização ${platform} concluída.`); } catch (e: any) { setError(e?.message); } }
   async function createDrive(client: ClientRecord) {
@@ -403,17 +404,18 @@ export default function ClientesPage() {
             </div>
             <div className="overflow-x-auto">
               <div className="min-w-[800px] space-y-1">
-                <div className="grid gap-2 px-3 py-2 rounded-lg border border-border/50 bg-muted/30 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider items-center" style={{ gridTemplateColumns: "60px 1.5fr 80px 1fr 1.2fr 110px 130px" }}>
+                <div className="grid gap-2 px-3 py-2 rounded-lg border border-border/50 bg-muted/30 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider items-center" style={{ gridTemplateColumns: "60px 1.5fr 80px 1fr 1.2fr 90px 110px 130px" }}>
                   <SortButton column="platform" sort={accountSort} onSort={setAccountSort} align="left">Plat.</SortButton>
                   <SortButton column="name" sort={accountSort} onSort={setAccountSort} align="left">Nome</SortButton>
                   <SortButton column="status" sort={accountSort} onSort={setAccountSort} align="left">Status</SortButton>
                   <SortButton column="client" sort={accountSort} onSort={setAccountSort} align="left">Cliente</SortButton>
                   <SortButton column="group" sort={accountSort} onSort={setAccountSort} align="left">Grupo</SortButton>
                   <SortButton column="visibility" sort={accountSort} onSort={setAccountSort} align="center">Visível</SortButton>
+                  <span className="text-center">Em pausa</span>
                   <span>Vincular Google</span>
                 </div>
                 {sortedAccounts.map((a) => (
-                  <div key={a.account_id} className="grid gap-2 px-3 py-2 rounded-lg border border-border/30 bg-card text-xs items-center" style={{ gridTemplateColumns: "60px 1.5fr 80px 1fr 1.2fr 110px 130px" }}>
+                  <div key={a.account_id} className="grid gap-2 px-3 py-2 rounded-lg border border-border/30 bg-card text-xs items-center" style={{ gridTemplateColumns: "60px 1.5fr 80px 1fr 1.2fr 90px 110px 130px" }}>
                     <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded text-center", a.platform === "google" ? "bg-sky-500/10 text-sky-600 dark:text-sky-400" : "bg-blue-500/10 text-blue-600 dark:text-blue-400")}>{a.platform}</span>
                     <span className="font-medium truncate" title={a.name}>{a.name}</span>
                     <span className={cn("text-[10px] font-semibold", a.status === "ACTIVE" ? "text-emerald-500" : "text-muted-foreground")}>{a.status}</span>
@@ -423,6 +425,9 @@ export default function ClientesPage() {
                     </select>
                     <div className="flex justify-center">
                       <button onClick={() => toggleHidden(a.account_id, !a.hidden)} className={cn("px-2 py-0.5 rounded text-[10px] font-semibold border-none cursor-pointer transition-colors", a.hidden ? "bg-muted text-muted-foreground hover:text-foreground" : "bg-primary/10 text-primary hover:bg-primary/20")}>{a.hidden ? "oculto" : "ativo"}</button>
+                    </div>
+                    <div className="flex justify-center">
+                      <button onClick={() => toggleOnHold(a.account_id, !a.on_hold)} title={a.on_hold ? "Pausa combinada — volta a rodar" : "Parada combinada com o cliente — não dispara o alerta de 24h sem rodar"} className={cn("px-2 py-0.5 rounded text-[10px] font-semibold border-none cursor-pointer transition-colors", a.on_hold ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20" : "bg-muted text-muted-foreground hover:text-foreground")}>{a.on_hold ? "pausada" : "ativa"}</button>
                     </div>
                     <div className="flex justify-end">
                       {a.platform === "google" ? (

@@ -1,21 +1,63 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { compareSortValues, SortButton, usePersistentSort } from "@/components/SortableHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { Search, RefreshCw, AlertTriangle, CheckCircle2, RotateCcw } from "lucide-react";
+import { Search, RefreshCw, AlertTriangle, CheckCircle2, RotateCcw, ExternalLink, PauseCircle } from "lucide-react";
 import AccountAlertsPanel from "@/components/AccountAlertsPanel";
 
 type AlertLevel = "critical" | "warning" | "info";
-type AlertItem = { id: number; account_id: string; account_name: string; level: AlertLevel; type: string; title: string; detail: string; group?: { name: string; color: string } | null; acknowledged: boolean; acknowledged_at: string | null; resolved: boolean; resolved_at: string | null; first_seen_at: string | null; last_seen_at: string | null; };
+type AlertItem = { id: number; account_id: string; account_name: string; level: AlertLevel; type: string; title: string; detail: string; group?: { name: string; color: string } | null; acknowledged: boolean; acknowledged_at: string | null; resolved: boolean; resolved_at: string | null; first_seen_at: string | null; last_seen_at: string | null; context?: { ad_ids?: string[]; ad_names?: string[]; campaign_ids?: string[]; campaign_names?: string[] } | null; };
 type AlertSortKey = "level" | "account" | "alert" | "updated";
 const ALERT_SORT_KEYS: readonly AlertSortKey[] = ["level", "account", "alert", "updated"];
 const LEVEL: Record<AlertLevel, { label: string; variant: "destructive" | "warning" | "info" }> = { critical: { label: "Crítico", variant: "destructive" }, warning: { label: "Atenção", variant: "warning" }, info: { label: "Informativo", variant: "info" } };
-const TYPE_LABEL: Record<string, string> = { account_disabled: "Status da conta", payment_issue: "Pagamento", low_balance: "Saldo baixo", spend_drop: "Queda de gasto", spend_spike: "Pico de gasto", cpa_spike: "CPA em alta", roas_drop: "ROAS em queda", rejected_creative: "Criativo reprovado", creative_issue: "Erro de veiculação", no_spend: "Sem gasto", broad_location: "Localização ampla" };
+const TYPE_LABEL: Record<string, string> = { account_disabled: "Status da conta", payment_issue: "Pagamento", low_balance: "Saldo baixo", spend_drop: "Queda de gasto", spend_spike: "Pico de gasto", cpa_spike: "CPA em alta", roas_drop: "ROAS em queda", rejected_creative: "Criativo reprovado", creative_issue: "Erro de veiculação", no_spend: "Sem gasto", stalled: "Sem rodar 24h", broad_location: "Localização ampla" };
+
+// Para onde o botão "Solucionar" leva, por tipo de alerta: a tela certa já
+// aberta/filtrada no problema (campanha destacada, saldo da conta, criativos).
+function solveTarget(alert: AlertItem): { href: string; label: string; external?: boolean } | null {
+  const account = alert.account_id;
+  const accountParam = encodeURIComponent(account);
+  const accountHref = `/campanhas?account=${accountParam}`;
+  const campaignId = alert.context?.campaign_ids?.find(Boolean);
+  const adsetId = alert.context?.ad_ids?.find(Boolean);
+  switch (alert.type) {
+    case "broad_location": {
+      const params = new URLSearchParams({ account });
+      if (campaignId) params.set("campaign", campaignId);
+      if (adsetId) params.set("highlight", adsetId);
+      return { href: `/campanhas?${params.toString()}`, label: "Ver campanha" };
+    }
+    case "low_balance":
+      return { href: accountHref, label: "Ver saldo da conta" };
+    case "stalled":
+    case "no_spend":
+    case "spend_drop":
+    case "spend_spike":
+    case "cpa_spike":
+    case "roas_drop":
+      return { href: accountHref, label: "Ver conta" };
+    case "account_disabled":
+    case "payment_issue":
+      return account.startsWith("google:")
+        ? { href: accountHref, label: "Ver conta" }
+        : { href: `https://adsmanager.facebook.com/ads/manager/billing?act=${accountParam}`, label: "Cobrança na Meta", external: true };
+    case "rejected_creative":
+    case "creative_issue": {
+      const ids = (alert.context?.ad_ids || []).filter(Boolean);
+      const params = new URLSearchParams({ account, issue: alert.type === "rejected_creative" ? "rejected" : "issues" });
+      if (ids.length) params.set("ads", ids.join(","));
+      return { href: `/creatives?${params.toString()}`, label: "Ver criativos" };
+    }
+    default:
+      return null;
+  }
+}
 
 export default function AlertsPage() {
   const [active, setActive] = useState<AlertItem[]>([]);
@@ -36,6 +78,10 @@ export default function AlertsPage() {
 
   async function setAck(id: number, acknowledged: boolean) { setBusy(id); try { const r = await fetch("/api/alerts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, acknowledged }) }); if (!r.ok) return; if (acknowledged) setActive((p) => p.filter((a) => a.id !== id)); else { setHistory((p) => p.filter((a) => a.id !== id)); await load(); } } finally { setBusy(null); } }
 
+  // "Parada combinada": marca a conta como em pausa de propósito (o alerta de
+  // 24h não volta) e tira o cartão da lista ativa.
+  async function markOnHold(alert: AlertItem) { setBusy(alert.id); try { const r = await fetch("/api/accounts/on-hold", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ account_id: alert.account_id, on_hold: true }) }); const d = await r.json(); if (!r.ok || d.error) return; setActive((p) => p.filter((a) => a.id !== alert.id)); } finally { setBusy(null); } }
+
   const list = tab === "active" ? active : history;
   const allGroups = useMemo(() => { const seen = new Map<string, { name: string; color: string }>(); for (const a of [...active, ...history]) if (a.group) seen.set(a.group.name, a.group); return Array.from(seen.values()).sort((a, b) => a.name.localeCompare(b.name)); }, [active, history]);
   const allTypes = useMemo(() => Array.from(new Set([...active, ...history].map((a) => a.type).filter(Boolean))).sort((a, b) => (TYPE_LABEL[a] || a).localeCompare(TYPE_LABEL[b] || b)), [active, history]);
@@ -46,14 +92,15 @@ export default function AlertsPage() {
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3"><div><h1 className="text-2xl font-bold tracking-tight">Central de Alertas</h1><p className="text-sm text-muted-foreground mt-0.5">Alertas agrupados por tipo para priorizar o que exige ação.</p></div><Button variant="ghost" size="sm" onClick={load} disabled={loading}><RefreshCw className={cn("h-3.5 w-3.5 mr-1", loading && "animate-spin")} /> Atualizar</Button></div>
     {error && <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-red-500/20 bg-red-500/10 text-sm text-red-500"><AlertTriangle className="h-4 w-4 shrink-0" />{error}</div>}
     <div className="flex flex-wrap items-center gap-2"><div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-muted/50 border border-border/50">{(["active", "history"] as const).map((item) => <button key={item} onClick={() => setTab(item)} className={cn("px-3 py-1.5 text-xs font-medium rounded-md transition-colors border-none cursor-pointer", tab === item ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground bg-transparent")}>{item === "active" ? "Ativos" : "Histórico"}</button>)}</div><div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-muted/50 border border-border/50">{(["all", "critical", "warning", "info"] as const).map((item) => <button key={item} onClick={() => setLevel(item)} className={cn("px-3 py-1.5 text-xs font-medium rounded-md transition-colors border-none cursor-pointer", level === item ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground bg-transparent")}>{item === "all" ? "Todos" : LEVEL[item]?.label || item}</button>)}</div><select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="h-8 rounded-lg border border-border/50 bg-muted/30 px-2 text-xs"><option value="all">Todos os tipos</option>{allTypes.map((type) => <option key={type} value={type}>{TYPE_LABEL[type] || type}</option>)}</select><button onClick={() => setGroupedMode((value) => !value)} className={cn("h-8 rounded-lg border px-3 text-xs font-semibold transition-colors", groupedMode ? "border-primary/30 bg-primary/10 text-primary" : "border-border/50 text-muted-foreground hover:text-foreground")}>{groupedMode ? "Agrupado por tipo" : "Lista detalhada"}</button>{allGroups.length > 0 && <div className="flex flex-wrap gap-1.5">{["all", ...allGroups.map((group) => group.name)].map((name) => <button key={name} onClick={() => setGroupFilter(name)} className={cn("px-2.5 py-1.5 text-xs font-medium rounded-full border transition-colors", groupFilter === name ? "bg-primary/10 border-primary/30 text-primary" : "border-border/50 text-muted-foreground hover:text-foreground")}>{name === "all" ? "Todos os grupos" : name}</button>)}</div>}<div className="relative flex-1 min-w-[140px] max-w-[220px]"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar conta…" className="w-full h-8 pl-8 pr-3 text-xs rounded-lg border border-border/50 bg-muted/30 focus:outline-none focus:ring-2 focus:ring-ring/30" /></div></div>
-    {loading ? <div className="space-y-2">{[1, 2, 3].map((item) => <Skeleton key={item} className="h-20 rounded-lg" />)}</div> : !filtered.length ? <Card><CardContent className="p-8 text-center text-sm text-muted-foreground">{tab === "active" ? "Nenhum alerta ativo para este filtro." : "Nenhum histórico para este filtro."}</CardContent></Card> : groupedMode ? <div className="space-y-3">{grouped.map(([type, alerts]) => <details key={type} open={alerts.length <= 3 || typeFilter !== "all"} className="group space-y-2"><summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg border border-border/50 bg-card px-3 py-2"><span className="text-sm font-semibold">{TYPE_LABEL[type] || "Outros alertas"}</span><span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold text-muted-foreground">{alerts.length}</span><span className="ml-auto text-[11px] text-muted-foreground group-open:hidden">Clique para abrir</span></summary>{alerts.map((alert) => <AlertCard key={alert.id} alert={alert} tab={tab} busy={busy} onAck={setAck} />)}</details>)}</div> : <div className="space-y-2">{filtered.map((alert) => <AlertCard key={alert.id} alert={alert} tab={tab} busy={busy} onAck={setAck} />)}</div>}
+    {loading ? <div className="space-y-2">{[1, 2, 3].map((item) => <Skeleton key={item} className="h-20 rounded-lg" />)}</div> : !filtered.length ? <Card><CardContent className="p-8 text-center text-sm text-muted-foreground">{tab === "active" ? "Nenhum alerta ativo para este filtro." : "Nenhum histórico para este filtro."}</CardContent></Card> : groupedMode ? <div className="space-y-3">{grouped.map(([type, alerts]) => <details key={type} open={alerts.length <= 3 || typeFilter !== "all"} className="group space-y-2"><summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg border border-border/50 bg-card px-3 py-2"><span className="text-sm font-semibold">{TYPE_LABEL[type] || "Outros alertas"}</span><span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold text-muted-foreground">{alerts.length}</span><span className="ml-auto text-[11px] text-muted-foreground group-open:hidden">Clique para abrir</span></summary>{alerts.map((alert) => <AlertCard key={alert.id} alert={alert} tab={tab} busy={busy} onAck={setAck} onMarkOnHold={markOnHold} />)}</details>)}</div> : <div className="space-y-2">{filtered.map((alert) => <AlertCard key={alert.id} alert={alert} tab={tab} busy={busy} onAck={setAck} onMarkOnHold={markOnHold} />)}</div>}
 
     {/* Regras personalizadas por conta (CPL, regiões, criativos, estratégia) */}
     <AccountAlertsPanel />
   </div>;
 }
 
-function AlertCard({ alert, tab, busy, onAck }: { alert: AlertItem; tab: "active" | "history"; busy: number | null; onAck: (id: number, acknowledged: boolean) => void }) {
+function AlertCard({ alert, tab, busy, onAck, onMarkOnHold }: { alert: AlertItem; tab: "active" | "history"; busy: number | null; onAck: (id: number, acknowledged: boolean) => void; onMarkOnHold: (alert: AlertItem) => void }) {
   const colors = { critical: "border-l-red-500 bg-red-500/5", warning: "border-l-amber-500 bg-amber-500/5", info: "border-l-sky-500 bg-sky-500/5" };
-  return <div className={cn("border-l-2 rounded-lg p-4", colors[alert.level])}><div className="flex items-center gap-2 mb-1"><Badge variant={LEVEL[alert.level].variant} className="text-[10px]">{LEVEL[alert.level].label}</Badge>{alert.type && <Badge variant="outline" className="text-[10px]">{TYPE_LABEL[alert.type] || alert.type}</Badge>}{alert.resolved && <Badge variant="success" className="text-[10px] ml-auto"><CheckCircle2 className="h-3 w-3 mr-0.5" />Resolvido</Badge>}</div><div className="text-sm font-semibold">{alert.account_name || `Conta sem nome · ${alert.account_id}`}{alert.group && <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full font-medium" style={{ backgroundColor: alert.group.color + "20", color: alert.group.color }}>{alert.group.name}</span>}</div><div className="text-xs font-medium text-foreground/80 mt-0.5">{alert.title}</div><div className="text-[11px] text-muted-foreground mt-0.5">{alert.detail}</div><div className="flex items-center gap-3 mt-2 text-[11px] text-muted-foreground"><span>{new Date(alert.last_seen_at || alert.first_seen_at || "").toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>{tab === "active" && !alert.acknowledged && <button onClick={() => onAck(alert.id, true)} disabled={busy === alert.id} className="text-primary hover:underline bg-transparent border-none cursor-pointer font-semibold"><CheckCircle2 className="h-3 w-3 inline mr-0.5" />Ciente</button>}{tab === "history" && alert.acknowledged && !alert.resolved && <button onClick={() => onAck(alert.id, false)} disabled={busy === alert.id} className="text-primary hover:underline bg-transparent border-none cursor-pointer font-semibold"><RotateCcw className="h-3 w-3 inline mr-0.5" />Reabrir</button>}</div></div>;
+  const target = solveTarget(alert);
+  return <div className={cn("border-l-2 rounded-lg p-4", colors[alert.level])}><div className="flex items-center gap-2 mb-1"><Badge variant={LEVEL[alert.level].variant} className="text-[10px]">{LEVEL[alert.level].label}</Badge>{alert.type && <Badge variant="outline" className="text-[10px]">{TYPE_LABEL[alert.type] || alert.type}</Badge>}{alert.resolved && <Badge variant="success" className="text-[10px] ml-auto"><CheckCircle2 className="h-3 w-3 mr-0.5" />Resolvido</Badge>}</div><div className="text-sm font-semibold">{alert.account_name || `Conta sem nome · ${alert.account_id}`}{alert.group && <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full font-medium" style={{ backgroundColor: alert.group.color + "20", color: alert.group.color }}>{alert.group.name}</span>}</div><div className="text-xs font-medium text-foreground/80 mt-0.5">{alert.title}</div><div className="text-[11px] text-muted-foreground mt-0.5">{alert.detail}</div><div className="flex flex-wrap items-center gap-2 mt-2"><span className="text-[11px] text-muted-foreground">{new Date(alert.last_seen_at || alert.first_seen_at || "").toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>{target && tab === "active" && <Link href={target.href} target={target.external ? "_blank" : undefined} rel={target.external ? "noreferrer" : undefined} className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-[11px] font-semibold text-primary-foreground no-underline transition-opacity hover:opacity-85">{target.external ? <ExternalLink className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}{target.label}</Link>}{alert.type === "stalled" && tab === "active" && <button onClick={() => onMarkOnHold(alert)} disabled={busy === alert.id} title="A parada foi combinada com o cliente; o alerta de 24h para de soar até a conta voltar" className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground bg-transparent cursor-pointer"><PauseCircle className="h-3 w-3" />Pausado de propósito</button>}{tab === "active" && !alert.acknowledged && <button onClick={() => onAck(alert.id, true)} disabled={busy === alert.id} className="text-primary hover:underline bg-transparent border-none cursor-pointer font-semibold text-[11px]"><CheckCircle2 className="h-3 w-3 inline mr-0.5" />Ciente</button>}{tab === "history" && alert.acknowledged && !alert.resolved && <button onClick={() => onAck(alert.id, false)} disabled={busy === alert.id} className="text-primary hover:underline bg-transparent border-none cursor-pointer font-semibold text-[11px]"><RotateCcw className="h-3 w-3 inline mr-0.5" />Reabrir</button>}</div></div>;
 }

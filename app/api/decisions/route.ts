@@ -14,6 +14,7 @@ const ACTIONS: Record<string, { title: string; rationale: (alert: any) => string
   cpa_spike: { title: "Investigar aumento de CPA", rationale: (a) => a.detail || "O custo por conversão subiu em relação ao período anterior.", impact: "Proteger eficiência" },
   roas_drop: { title: "Investigar queda de ROAS", rationale: (a) => a.detail || "O retorno sobre investimento caiu em relação ao período anterior.", impact: "Proteger retorno" },
   no_spend: { title: "Investigar conta sem gasto", rationale: (a) => a.detail || "A conta está ativa, mas não teve investimento.", impact: "Evitar cliente sem entrega" },
+  stalled: { title: "Reativar anúncios urgentemente", rationale: (a) => a.detail || "A conta parou de entregar há mais de 24h.", impact: "Evitar cliente sem anúncio no ar" },
 };
 
 async function seedFromAlerts(sb: ReturnType<typeof getServiceClient>) {

@@ -131,6 +131,9 @@ export default function CampaignsPage() {
   const [showCustom, setShowCustom] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedCampaigns, setSelectedCampaigns] = useState<Set<string>>(new Set());
+  // Foco vindo dos alertas ("Solucionar"): ?campaign=<id>&highlight=<id> abre a
+  // árvore já expandida e destaca o problema, sem procurar na mão.
+  const [highlightId, setHighlightId] = useState<string | null>(null);
   // Rótulo do resultado escolhido na página ("Cliques no Link", "Conversas
   // iniciadas"...) — o resumo segue a MESMA métrica da árvore.
   const resultLabelText = useMemo(() => {
@@ -196,6 +199,7 @@ export default function CampaignsPage() {
         const focus = d.result_family && RESULT_FAMILY_BY_SLUG[d.result_family] ? d.result_family : null;
         const fallback = pickPrimaryResult(d.availableResults);
         setResult(focus ? `${FAMILY_PREFIX}${focus}` : fallback ? `${ACTION_PREFIX}${fallback}` : null);
+        applyFocus(d);
       })
       .catch((e) => alive && setError(e?.message ?? "Erro ao carregar."))
       .finally(() => alive && setLoading(false));
@@ -277,6 +281,45 @@ export default function CampaignsPage() {
     if (next.has(id)) next.delete(id); else next.add(id);
     setter(next);
   }
+
+  // Foco vindo dos alertas: ?campaign=<campaign_id>&highlight=<adset_id|campaign_id>
+  // expande a árvore até o alvo e deixa o anel de destaque no lugar do problema.
+  function applyFocus(d: Detail) {
+    const params = new URLSearchParams(window.location.search);
+    const campaignParam = params.get("campaign");
+    const highlightParam = params.get("highlight") || campaignParam;
+    if (!highlightParam) return;
+    let target: Row | undefined;
+    if (campaignParam) {
+      target = d.campaigns.find((c) => c.id === campaignParam);
+      if (target) {
+        setOpenCampaigns((prev) => new Set(prev).add(target!.id));
+        setHighlightId(highlightParam);
+        return;
+      }
+    }
+    const adset = d.adsets.find((a) => a.id === highlightParam);
+    if (adset) {
+      setOpenCampaigns((prev) => new Set(prev).add(adset.campaign_id || ""));
+      setOpenAdsets((prev) => new Set(prev).add(adset.id));
+      setHighlightId(adset.id);
+      return;
+    }
+    const camp = d.campaigns.find((c) => c.id === highlightParam);
+    if (camp) {
+      setOpenCampaigns((prev) => new Set(prev).add(camp.id));
+      setHighlightId(camp.id);
+    }
+  }
+
+  // Rola até o destaque depois que a árvore renderiza expandida.
+  useEffect(() => {
+    if (!highlightId) return;
+    const timer = window.setTimeout(() => {
+      document.getElementById(`row-${highlightId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [highlightId, detail]);
 
   async function toggleDelivery(level: RowLevel, row: Row) {
     if (!isMeta || !row.status) return;
@@ -515,6 +558,7 @@ export default function CampaignsPage() {
                     childCount={children.length}
                     childNoun="conjunto"
                     selected={selectedCampaigns.has(campaign.id)}
+                    highlighted={campaign.id === highlightId}
                     onToggleSelect={() => toggleSet(selectedCampaigns, setSelectedCampaigns, campaign.id)}
                     onToggleExpand={() => toggleSet(openCampaigns, setOpenCampaigns, campaign.id)}
                     onToggleDelivery={() => toggleDelivery("campaign", campaign)}
@@ -539,6 +583,7 @@ export default function CampaignsPage() {
                               expanded={adsetOpen}
                               childCount={ads.length}
                               childNoun="anúncio"
+                              highlighted={adset.id === highlightId}
                               onToggleExpand={() => toggleSet(openAdsets, setOpenAdsets, adset.id)}
                               onToggleDelivery={() => toggleDelivery("adset", adset)}
                               busy={changing === adset.id}
@@ -558,6 +603,7 @@ export default function CampaignsPage() {
                                     row={ad}
                                     level="ad"
                                     expanded={false}
+                                    highlighted={ad.id === highlightId}
                                     onToggleExpand={() => {}}
                                     onToggleDelivery={() => toggleDelivery("ad", ad)}
                                     busy={changing === ad.id}
@@ -623,12 +669,12 @@ const LEVEL_PILL: Record<RowLevel, { label: string; className: string }> = {
 };
 
 function CampaignRow({
-  row, level, expanded, childCount, childNoun, onToggleExpand, onToggleDelivery, busy, metaOnly, result, currency, onBudget, onDuplicate, depth = 0, selected = false, onToggleSelect,
+  row, level, expanded, childCount, childNoun, onToggleExpand, onToggleDelivery, busy, metaOnly, result, currency, onBudget, onDuplicate, depth = 0, selected = false, onToggleSelect, highlighted = false,
 }: {
   row: Row; level: RowLevel; expanded: boolean; childCount?: number; childNoun?: string;
   onToggleExpand: () => void; onToggleDelivery: () => void; busy: boolean; metaOnly: boolean;
   result: string | null; currency?: string; onBudget?: () => void; onDuplicate: () => void; depth?: number;
-  selected?: boolean; onToggleSelect?: () => void;
+  selected?: boolean; onToggleSelect?: () => void; highlighted?: boolean;
 }) {
   const res = resultValue(row.results, result);
   const rv = pickVal(row.values, PURCHASE_KEYS);
@@ -637,12 +683,14 @@ function CampaignRow({
 
   return (
     <div
+      id={row.id ? `row-${row.id}` : undefined}
       onClick={level === "ad" ? undefined : onToggleExpand}
       className={cn(
         "group grid grid-cols-[30px_26px_44px_1.8fr_1fr_0.9fr_0.9fr_0.8fr_0.7fr_0.9fr_0.8fr_0.8fr_180px] gap-2 px-4 py-2.5 items-center transition-colors",
         level === "ad" ? "cursor-default" : "cursor-pointer hover:bg-accent/20",
         expanded && "bg-accent/10",
-        selected && "bg-primary/5"
+        selected && "bg-primary/5",
+        highlighted && "bg-primary/10 ring-2 ring-inset ring-primary/40"
       )}
       style={{ paddingLeft: `calc(1rem + ${depth * 1.75}rem)` }}
     >

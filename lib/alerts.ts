@@ -28,13 +28,21 @@ export interface Alert {
     | "rejected_creative"
     | "creative_issue"
     | "no_spend"
+    | "stalled"
     | "broad_location";
   title: string;
   detail: string;
   // O que o alerta encontrou, quando isso é uma lista de entidades. Existe para
   // a tarefa automática poder abrir a tela certa já filtrada: sem os IDs, o
   // cartão "3 criativos reprovados" obriga a procurar quais são na mão.
-  entities?: { adIds: string[]; adNames: string[] };
+  entities?: {
+    adIds: string[];
+    adNames: string[];
+    // Campanhas envolvidas (localização ampla), para o cartão cair na tela de
+    // campanhas já com a campanha aberta/destacada.
+    campaignIds?: string[];
+    campaignNames?: string[];
+  };
 }
 
 interface BuildAlertsInput {
@@ -48,6 +56,13 @@ interface BuildAlertsInput {
   // limiar configurável de saldo baixo, na moeda da conta
   lowBalanceThreshold?: number;
   guardrails?: { target_roas?: number | null; max_cpa?: number | null; max_daily_spend?: number | null };
+  // Série diária do período coletado (até "ontem"), para detectar entrega
+  // parada há 24h+ mesmo quando os agregados de 7d ainda são > 0.
+  daily?: { date: string; spend: number }[];
+  // Última data esperada da série (a coleta olha até ontem, não hoje).
+  seriesUntil?: string;
+  // Conta pausada de propósito: o alerta de "sem rodar" não deve soar.
+  onHold?: boolean;
 }
 
 export function buildAlertsForAccount(input: BuildAlertsInput): Alert[] {
@@ -203,6 +218,7 @@ export function buildAlertsForAccount(input: BuildAlertsInput): Alert[] {
   // percebe tarde demais se não houver aviso.
   if (broadLocation.length > 0) {
     const campanhas = [...new Set(broadLocation.map((b) => b.campaign_name).filter(Boolean))];
+    const campaignIds = [...new Set(broadLocation.map((b) => b.campaign_id).filter(Boolean))];
     alerts.push({
       account_id: id,
       account_name: name,
@@ -215,9 +231,19 @@ export function buildAlertsForAccount(input: BuildAlertsInput): Alert[] {
       entities: {
         adIds: broadLocation.map((b) => b.adset_id),
         adNames: broadLocation.map((b) => b.adset_name),
+        campaignIds,
+        campaignNames: campanhas,
       },
     });
   }
+
+  // 8. Conta ativa que costuma gastar, mas parou de entregar há 24h+. O
+  // "no_spend" acima só olha a janela de 7 dias (e é informativo); este é o
+  // alerta MÁXIMO para quem parou ontem e não foi avisado — cliente não pode
+  // ficar sem anúncio no ar sem que alguém saiba. A conta marcada como
+  // "em pausa combinada" (onHold) não dispara: parou de propósito.
+  const stalled = buildStalledAlert(account, input.daily, input.seriesUntil, input.onHold);
+  if (stalled) alerts.push(stalled);
 
   const guardrails = input.guardrails;
   const guardedAverageDailySpend = (insight7d?.spend || 0) / 7;
@@ -252,4 +278,39 @@ export function buildAlertsForAccount(input: BuildAlertsInput): Alert[] {
 export function sortAlerts(alerts: Alert[]): Alert[] {
   const order: Record<AlertLevel, number> = { critical: 0, warning: 1, info: 2 };
   return [...alerts].sort((a, b) => order[a.level] - order[b.level]);
+}
+
+function daysBetween(aIso: string, bIso: string): number {
+  return Math.round((Date.parse(aIso) - Date.parse(bIso)) / 86400000);
+}
+
+// Alerta MÁXIMO de entrega parada: a conta está ativa, gastou no passado
+// recente, mas não teve NENHUM gasto no dia mais recente coberto pela série
+// (a coleta olha até "ontem") — ou seja, já se passaram mais de 24h sem
+// anúncio no ar. Requer histórico de gasto na janela: conta nova sem nenhum
+// gasto fica por conta do no_spend, não deste cartão.
+export function buildStalledAlert(
+  account: { account_id: string; name: string; currency: string },
+  daily: { date: string; spend: number }[] | undefined,
+  seriesUntil: string | undefined,
+  onHold: boolean | undefined
+): Alert | null {
+  if (onHold) return null;
+  if (!daily?.length || !seriesUntil) return null;
+  let lastSpendDay: string | null = null;
+  for (const row of daily) {
+    if (row.spend > 0 && (!lastSpendDay || row.date > lastSpendDay)) lastSpendDay = row.date;
+  }
+  if (!lastSpendDay) return null; // nunca gastou na janela — coberto pelo no_spend
+  if (daysBetween(seriesUntil, lastSpendDay) < 1) return null; // entregou até ontem
+  return {
+    account_id: account.account_id,
+    account_name: account.name,
+    level: "critical",
+    type: "stalled",
+    title: "Sem rodar há mais de 24h",
+    detail:
+      `Último gasto em ${lastSpendDay.split("-").reverse().join("-")}. A conta está ativa, mas sem entrega. ` +
+      "Verifique urgente: cliente não pode ficar sem anúncio no ar. Se a parada for combinada, marque a conta como em pausa.",
+  };
 }

@@ -9,7 +9,7 @@ import {
 import {
   getGoogleDailyMetrics, googleAdsConfigured, googleCustomerId, GoogleDailyMetric,
 } from "@/lib/google-ads";
-import { buildAlertsForAccount, Alert } from "@/lib/alerts";
+import { buildAlertsForAccount, buildStalledAlert, Alert } from "@/lib/alerts";
 import { sendTaskDigest } from "@/lib/task-digest";
 import { getServiceClient } from "@/lib/supabase";
 
@@ -125,7 +125,10 @@ function performanceAlerts(
   account: { account_id: string; name: string; currency: string; status: string },
   current: ReturnType<typeof aggregate>,
   previous: ReturnType<typeof aggregate>,
-  guardrails?: ClientGuardrails
+  guardrails?: ClientGuardrails,
+  daily?: { date: string; spend: number }[],
+  seriesUntil?: string,
+  onHold?: boolean
 ): Alert[] {
   const alerts: Alert[] = [];
   if (account.status !== "ACTIVE") {
@@ -194,23 +197,37 @@ function performanceAlerts(
     type: "no_spend", title: "Sem gasto nos últimos 7 dias",
     detail: "Conta ativa mas sem investimento no período.",
   });
+  const stalled = buildStalledAlert(account, daily, seriesUntil, onHold);
+  if (stalled) alerts.push(stalled);
   return alerts;
 }
 
 async function persistAlerts(allAlerts: Alert[], processedAccountIds: string[]) {
   const sb = getServiceClient();
   const now = new Date().toISOString();
-  const current = allAlerts.map((alert) => ({
+  const base = allAlerts.map((alert) => ({
     fingerprint: `${alert.account_id}:${alert.type}`,
     account_id: alert.account_id, account_name: alert.account_name,
     level: alert.level, type: alert.type, title: alert.title, detail: alert.detail,
     resolved: false, resolved_at: null, last_seen_at: now,
   }));
-  const fingerprints = current.map((item) => item.fingerprint);
+  // Contexto (campanha/conjunto/criativo) para o cartão abrir a tela certa já
+  // filtrada. A coluna é pós-migração: se o upsert falhar por causa dela,
+  // persiste sem o contexto em vez de perder o alerta inteiro.
+  const withContext = base.map((row, index) => {
+    const entities = allAlerts[index].entities;
+    return entities
+      ? { ...row, context: { ad_ids: entities.adIds, ad_names: entities.adNames, campaign_ids: entities.campaignIds || [], campaign_names: entities.campaignNames || [] } }
+      : row;
+  });
+  const fingerprints = base.map((item) => item.fingerprint);
   if (fingerprints.length) {
     await sb.from("alerts").update({ acknowledged: false, acknowledged_at: null })
       .eq("resolved", true).in("fingerprint", fingerprints);
-    await sb.from("alerts").upsert(current, { onConflict: "fingerprint" });
+    const { error: upsertError } = await sb.from("alerts").upsert(withContext, { onConflict: "fingerprint" });
+    if (upsertError && /context/.test(upsertError.message || "")) {
+      await sb.from("alerts").upsert(base, { onConflict: "fingerprint" });
+    }
   }
   if (!processedAccountIds.length) return;
   let query = sb.from("alerts").update({ resolved: true, resolved_at: now })
@@ -232,6 +249,7 @@ const ACTIONABLE_ALERTS: Alert["type"][] = [
   "account_disabled",
   "rejected_creative",
   "broad_location",
+  "stalled",
 ];
 
 // Abre tarefa para o que precisa de mão. Enquanto o problema durar, a coleta
@@ -282,7 +300,12 @@ async function openTasksForAlerts(allAlerts: Alert[]) {
         ...base,
         alert_type: alert.type,
         context: alert.entities
-          ? { ad_ids: alert.entities.adIds, ad_names: alert.entities.adNames }
+          ? {
+              ad_ids: alert.entities.adIds,
+              ad_names: alert.entities.adNames,
+              campaign_ids: alert.entities.campaignIds || [],
+              campaign_names: alert.entities.campaignNames || [],
+            }
           : null,
       };
       // Corrida com outra coleta: o índice único barra e está tudo bem. Se as
@@ -306,12 +329,31 @@ type CollectScope = "all" | "meta" | "google";
 async function runCollect(triggerSource: "manual" | "cron", platform: CollectScope = "all") {
   const sb = getServiceClient();
   const started = Date.now();
+  // on_hold ("em pausa combinada") suprime o alerta de 24h sem rodar. A coluna
+  // é pós-migração: se ainda não existir, a coleta segue sem ela.
+  let onHoldAvailable = true;
+  type SelectedAccount = { account_id: string; name: string; platform: "meta" | "google"; currency: string; status: string; token_ref: number | null; on_hold?: boolean };
+  let selected: SelectedAccount[] | null = null;
+  let error: { message?: string } | null = null;
   let accountQuery = sb
     .from("ad_accounts")
-    .select("account_id, name, platform, currency, status, token_ref")
+    .select("account_id, name, platform, currency, status, token_ref, on_hold")
     .eq("hidden", false);
   if (platform !== "all") accountQuery = accountQuery.eq("platform", platform);
-  const { data: selected, error } = await accountQuery;
+  const first = await accountQuery;
+  selected = first.data as SelectedAccount[] | null;
+  error = first.error;
+  if (error && /on_hold/.test(error.message || "")) {
+    onHoldAvailable = false;
+    let fallback = sb
+      .from("ad_accounts")
+      .select("account_id, name, platform, currency, status, token_ref")
+      .eq("hidden", false);
+    if (platform !== "all") fallback = fallback.eq("platform", platform);
+    const retry = await fallback;
+    selected = retry.data as SelectedAccount[] | null;
+    error = retry.error;
+  }
   if (error) throw error;
   const guardrailsByAccount = new Map<string, ClientGuardrails>();
   try {
@@ -428,6 +470,9 @@ async function runCollect(triggerSource: "manual" | "cron", platform: CollectSco
        rejected,
        broadLocation,
         guardrails: guardrailsByAccount.get(acc.account_id),
+        daily,
+        seriesUntil: windowUntil,
+        onHold: onHoldAvailable ? Boolean(local.on_hold) : false,
        }));
     } catch (e: any) {
       failed++;
@@ -481,7 +526,7 @@ async function runCollect(triggerSource: "manual" | "cron", platform: CollectSco
           conversions: d.conversions, purchaseValue: d.conversionValue, results: d.results,
         }));
         const periods = await saveSnapshots(local.account_id, "google", daily);
-       alerts.push(...performanceAlerts(local, periods.last_7d, periods.prev_7d, guardrailsByAccount.get(local.account_id)));
+       alerts.push(...performanceAlerts(local, periods.last_7d, periods.prev_7d, guardrailsByAccount.get(local.account_id), daily, windowUntil, onHoldAvailable ? Boolean(local.on_hold) : false));
         await sb.from("ad_accounts").update({ updated_at: new Date().toISOString() }).eq("account_id", local.account_id);
       } catch (e: any) {
         failed++;

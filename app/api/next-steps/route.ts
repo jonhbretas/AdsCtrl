@@ -14,6 +14,7 @@ const alertAction: Record<string, { title: string; detail: string; href: string 
   cpa_spike: { title: "Revisar eficiência da conversão", detail: "Procure anúncios, públicos ou etapas que elevaram o custo.", href: "/creatives" },
   roas_drop: { title: "Revisar retorno da campanha", detail: "Compare o valor gerado e priorize o próximo teste.", href: "/funil" },
   no_spend: { title: "Investigar conta sem gasto", detail: "Confirme se a ausência de investimento é intencional.", href: "/today" },
+  stalled: { title: "Reativar anúncios urgentemente", detail: "A conta parou de entregar há mais de 24h — verifique agora ou marque como pausa combinada.", href: "/alerts" },
 };
 
 export async function GET() {
