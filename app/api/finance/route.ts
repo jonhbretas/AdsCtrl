@@ -64,8 +64,12 @@ export async function POST(req: Request) {
 export async function PATCH(req: Request) {
   try {
     if (supabaseEnvMissing()) return NextResponse.json({ error: "Supabase não configurado." }, { status: 503 });
-    const body = await req.json().catch(() => null); if (!body?.id) return NextResponse.json({ error: "Lançamento não informado." }, { status: 400 });
+    const body = await req.json().catch(() => null);
+    const ids = Array.isArray(body?.ids) ? body.ids.map(String).filter(Boolean) : null;
+    if (!body || (!body.id && !ids)) return NextResponse.json({ error: "Lançamento não informado." }, { status: 400 });
+    if (ids && (!ids.length || ids.length > 500)) return NextResponse.json({ error: "Selecione entre 1 e 500 lançamentos." }, { status: 400 });
     const patch: Record<string, any> = { updated_at: new Date().toISOString() };
+    if (body.kind !== undefined) { if (body.kind !== "revenue" && body.kind !== "expense") return NextResponse.json({ error: "kind deve ser revenue ou expense." }, { status: 400 }); patch.kind = body.kind; }
     if (body.description !== undefined) { if (!String(body.description).trim()) return NextResponse.json({ error: "Informe uma descrição." }, { status: 400 }); patch.description = String(body.description).trim().slice(0, 180); }
     if (body.amount !== undefined) { const amount = Number(body.amount); if (!Number.isFinite(amount) || amount <= 0) return NextResponse.json({ error: "O valor deve ser maior que zero." }, { status: 400 }); patch.amount = amount; }
     if (body.due_date !== undefined) { if (!/^\d{4}-\d{2}-\d{2}$/.test(String(body.due_date))) return NextResponse.json({ error: "Data inválida." }, { status: 400 }); patch.due_date = String(body.due_date); }
@@ -74,7 +78,12 @@ export async function PATCH(req: Request) {
     if (body.status) patch.status = body.status;
     if (body.status === "confirmed") patch.paid_at = new Date().toISOString();
     if (body.status === "planned") patch.paid_at = null;
-    const { data, error } = await getServiceClient().from("financial_entries").update(patch).eq("id", body.id).select("*").single();
+    const sb = getServiceClient();
+    if (ids) {
+      const { data, error } = await sb.from("financial_entries").update(patch).in("id", ids).select("id");
+      if (error) throw error; return NextResponse.json({ entries: data || [], count: data?.length || 0 });
+    }
+    const { data, error } = await sb.from("financial_entries").update(patch).eq("id", body.id).select("*").single();
     if (error) throw error; return NextResponse.json({ entry: data });
   } catch (error: any) { return NextResponse.json({ error: error?.message || "Falha ao atualizar lançamento." }, { status: 500 }); }
 }
