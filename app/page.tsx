@@ -36,7 +36,7 @@ import {
 import QuickAccess from "@/components/QuickAccess";
 import AccountDetail from "@/components/AccountDetail";
 import AccountChanges from "@/components/AccountChanges";
-import { money, num, delta, brDate, accountStatusInfo, RESULT_FAMILIES, RESULT_FAMILY_BY_SLUG } from "@/lib/format";
+import { money, num, delta, brDate, accountStatusInfo, RESULT_FAMILIES, RESULT_FAMILY_BY_SLUG, pickVal } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -582,6 +582,21 @@ export default function Dashboard() {
     };
   }, [filtered, period, live, focus, platformFilter, linkedGoogleByMeta, linkedLive]);
 
+  const CONVERSION_FAMILY_SLUGS = ["vendas", "mensagens", "leads", "cadastros"];
+  const familyCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const f of RESULT_FAMILIES) counts[f.slug] = 0;
+    for (const a of filtered) {
+      const m = comboMetrics(a);
+      for (const f of RESULT_FAMILIES) {
+        if (f.slug === "conversoes") continue;
+        counts[f.slug] += pickVal(m.results, f.keys);
+      }
+    }
+    counts.conversoes = CONVERSION_FAMILY_SLUGS.reduce((s, slug) => s + (counts[slug] || 0), 0);
+    return counts;
+  }, [filtered, period, live, platformFilter, linkedGoogleByMeta, linkedLive]);
+
   const visibleAlerts = useMemo(() => {
     const names = new Set(filtered.map((a) => a.name));
     const order = { critical: 0, warning: 1, info: 2 } as Record<string, number>;
@@ -764,7 +779,9 @@ export default function Dashboard() {
           className="h-8 px-2.5 text-xs rounded-lg border border-border/50 bg-muted/30 focus:outline-none focus:ring-2 focus:ring-ring/30"
         >
           {RESULT_FAMILIES.map((f) => (
-            <option key={f.slug} value={f.slug}>{f.label}</option>
+            <option key={f.slug} value={f.slug}>
+              {f.label}{liveReady && familyCounts[f.slug] > 0 ? ` (${familyCounts[f.slug].toLocaleString("pt-BR")})` : ""}
+            </option>
           ))}
         </select>
 
